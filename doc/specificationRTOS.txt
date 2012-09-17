@@ -1,0 +1,157 @@
+There are nTask tasks, where nTask is a compile time constant.
+
+There are nPrio priority classes. Each task belongs to one of these
+classes. Many tasks may share the same class. nPrio is a compile time
+constant.
+
+The number of tasks which can share the same class is constant at run-time
+and may differ between priority classes.
+
+There will be a list of tasks for each priority class. Due tasks will be
+held in these lists. Because of the constant number of tasks per class a
+static, pre-initialized data structure can be applied.
+
+A task in these lists is represented by a reference to the task context.
+
+The tasks' stack areas are allocated by a malloc during initialization
+time. The stack sizes can be adjusted by the application initialization
+code at system startup time.
+
+A task can be suspended but will never end. Suspension is done only
+deliberately. Part of the suspension operation is a statement how to
+become due again. Supported are:
+  Timer tic. May be after an individual time span (a task delays itself)
+or the next regular timer interval (which implements a regular task).
+  An event or a combination of those. An event is posted by any other
+task. (Handy and imaginable are also hardware events, i.e. specific
+interrupts. This is however hard to specify in a generic way and can be
+considered an open TODO at the moment.)
+
+The idle task would be a task which has the lowest priority and which does
+never suspend itself. For implementation reasons, such a task is simply
+required if we don't want to introduce a processor sleep mode with timer
+awake.
+  Idea: There there is a hidden true idle task which just contains an
+empty, infinite loop. This behaves like a processor sleep but without the
+complexity of hardwrae and interrupt programming. Because of the same
+behavior, a later implementation could replace it with a true sleep mode.
+  Disadvantage: Making the idle loop manifest and useable to the
+application would save one task context area. The idle task would
+naturally use the "rest" of the memory as stack area - like normal
+applications without RTOS do.
+
+Event: Posting it is handled similar to a timer tic. The posting task is
+suspended, the event is braodcasted to all suspended tasks and all their
+event waiting conditions are checked. Any number of tasks may become due
+and is put at the end of their class list. The code returns to the first
+task entry in the highest none-empty task class list.
+
+Events can only release tasks. Posting an event will never make a due task
+undue or suspended.
+
+A task can be released by any event of interest set or all events of
+interest set. This requires a mask (which events to wait for) and a
+Boolean (any or all). It's sufficient to have a fixed number of possible
+events in order to pack them into an integer. For example 15 or 16 or 31
+or 32 events at maximum. (One bit could be reserved for the any/all
+distinction).
+
+The absoulte timer is an additional event. It is implemented as counter of
+tics. The counter value becoming the target value is the event. The
+counter and thus the event are local to a task. (In contrast to this, all
+none timer events are global: they are used to implement inter-task
+communication.)
+
+The absolute counter's target value is reloaded with the absolute-timer
+related suspend command. This command tells about the increment of the
+reload value. A task is regular if it suspends itself at its functional
+end with always the same timer reload value increment.
+
+The delay timer is an additional event. It is implemented as dwonwards
+counter of tics. The counter value becoming 0 is the event. The counter
+and thus the event are local to a task.
+
+The delay counter's start value is reloaded with the delay-timer related
+suspend command. This command tells about the the reload value. A task may
+use the this operation with an individual value (in the middle of the
+functional code) to implement a delay operation.
+
+Use case: A task is set up as a regular task by using absolute-timer
+suspend with fixed reload increment value at its functional end. The
+suspend command would only mask the timer event bit. Somewhere in the
+middle of the functional code execution the same task could wait for a
+combination of other, global events posted by other tasks. Here, it would
+not set the absolute-timer bit in the mask of the suspend command but
+possibly the delay-timer bit (using the delay timer as a timeout counter).
+If the other tasks are responsive enough, the regular regular character of
+the task would not be harmed: At the end of the functional code the
+formerly mentioned suspend command would re-synchronize the task with the
+next due time.
+
+The absolute counter is implemented in a cyclic manner. 8 or 16 Bit will
+suffice. Reloading the absolute timer with a new target value can cause a
+task overrun event, which is recorded individually for each task.
+
+Recognizing a task overrun requires a lower than operation of the timer
+value (targetValue < currentValue means overrun). This operation can be
+defined for a cyclic counter only by limiting the maximum increment to
+half the counter's maximum value. An 8 Bit counter could thus allow a
+maximum factor of 128 between the fastest and the slowest regular task.
+
+A task with invalid target due time (i.e. a due time in the past) is
+immediately due.
+
+Suspending a task related to the absolute timer can't be AND combined with
+the global events. This is not technically infeasible but useless and
+should be inhibited by not offering a related API call. An OR combination
+could be useful for regular tasks, which want to specify the timeout time
+for waiting for a global event to be the remaining time until their next
+regular due time.
+
+All events broadcasted to a task are reset in the instance of making a
+task due. No events are broadcasted to due tasks. The return code of the
+suspend commands is a bit vector of the very combination of events which
+made the task due. Additional events a task may have waited for and which
+may have been posted after the task became due (but before it was
+activated) will not be reported to the task by the suspend command's
+return code; in this sense those events are lost.
+
+The suspend command may have signatures like:
+
+/* Suspend until an absolute time. No combination with other events is
+   possible.
+     deltaTimeTillRelease refers to the last recent absolute time event.
+   In the very first call of the function it refers to the point in time
+   the task was started. */
+suspendTaskTillTime(taskTime_t deltaTimeTillRelease);
+
+/* Suspend task until a combination of events appears. Set a timeout by
+   referring to the delay timer. The timer is however regarded only if the
+   delay-timer bit is set in the event mask. Otherwise timeout doesn't
+   matter. */
+waitForEvent(eventMask_t eventMask, bool all, taskTime_t timeout);
+
+/* Delay a task without looking at other events. delay(n) would be
+   identical to waitForEvent(eventMask, false, n), where eventMask's only
+   set bit is the delay timer event. */
+delay(taskTime_t delayTime);
+
+/* Suspend task until a combination of events appears but no longer than
+   until an absolute time, which is most typically the next due time of a
+   regular task.
+     deltaTimeTillRelease refers to the last recent absolute time event.
+   In the very first call of the function it refers to the point in time
+   the task was started.
+     The timer is however regarded only if the absolute-timer bit is set
+   in the event mask. Otherwise timeout doesn't matter.
+     The flag "all" is missing: This call implicitly assumes an OR
+   combination of all events (including the elapsed timer). */
+waitForEventTillTime(eventMask_t eventMask, taskTime_t deltaTimeTillRelease);
+
+All tasks are initially due. If this is undesired, the task code itself will
+immediately invoke the appropriate suspend command.
+
+Inside the application code arbitrary interrupts in the system can be
+bound to one of the global events so that a task can wait for the
+interrupt. Documented template code for the implementation of such an ISR
+will be provided.

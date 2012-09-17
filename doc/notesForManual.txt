@@ -1,0 +1,20 @@
+Timer: Is also resolution for delay and waitForEvent. If run-time optimal
+(tic=fastest task time) than the fastest task has no chance to use other
+delay than with limit to next regular task due time
+
+Event ISRs (incl. system time tic generation): Always need to save
+complete context as it normally triggers a context switch. By machine code
+it could be approriate to save it conditionally and in parts if the ISR
+does some preparatory work and triggers an event only under conditions,
+which itself defines. E.g. a keyboard read routine, which reports a key
+touched event only after doing some debouncing in a series of ISR
+invokations (state machine). Only if the event is set, all other registers
+(which are not used by the ISR itself) are saved, before the event setting
+API function of the RTOS is invoked.
+
+The context switch may enable global interrupts first to not block high
+priority interrupts. How to do and rules: Those ISRs must not trigger an
+event which could result in a context switch. Possible e.g. for I/O
+handling with high responsiveness. Initialition and feedback can only be
+done in a normal task not using the RTOS events. 
+  Double check if timer0 used by Arduino for millis etc. is an example.
