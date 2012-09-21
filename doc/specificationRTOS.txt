@@ -19,26 +19,24 @@ code at system startup time.
 
 A task can be suspended but will never end. Suspension is done only
 deliberately. Part of the suspension operation is a statement how to
-become due again. Supported are:
-  Timer tic. May be after an individual time span (a task delays itself)
-or the next regular timer interval (which implements a regular task).
-  An event or a combination of those. An event is posted by any other
-task. (Handy and imaginable are also hardware events, i.e. specific
-interrupts. This is however hard to specify in a generic way and can be
-considered an open TODO at the moment.)
+become due again. Supported are: Timer tic. May be after an individual
+time span (a task delays itself) or the next regular timer interval (which
+implements a regular task). An event or a combination of those. An event
+is posted by any other task. (Handy and imaginable are also hardware
+events, i.e. specific interrupts. This is however hard to specify in a
+generic way and can be considered an open TODO at the moment.)
 
 The idle task would be a task which has the lowest priority and which does
 never suspend itself. For implementation reasons, such a task is simply
 required if we don't want to introduce a processor sleep mode with timer
-awake.
-  Idea: There there is a hidden true idle task which just contains an
+awake. Idea: There there is a hidden true idle task which just contains an
 empty, infinite loop. This behaves like a processor sleep but without the
 complexity of hardwrae and interrupt programming. Because of the same
 behavior, a later implementation could replace it with a true sleep mode.
-  Disadvantage: Making the idle loop manifest and useable to the
-application would save one task context area. The idle task would
-naturally use the "rest" of the memory as stack area - like normal
-applications without RTOS do.
+Disadvantage: Making the idle loop manifest and useable to the application
+would save one task context area. The idle task would naturally use the
+"rest" of the memory as stack area - like normal applications without RTOS
+do.
 
 Event: Posting it is handled similar to a timer tic. The posting task is
 suspended, the event is braodcasted to all suspended tasks and all their
@@ -119,10 +117,9 @@ return code; in this sense those events are lost.
 The suspend command may have signatures like:
 
 /* Suspend until an absolute time. No combination with other events is
-   possible.
-     deltaTimeTillRelease refers to the last recent absolute time event.
-   In the very first call of the function it refers to the point in time
-   the task was started. */
+   possible. deltaTimeTillRelease refers to the last recent absolute time
+   event. In the very first call of the function it refers to the point in
+   time the task was started. */ 
 suspendTaskTillTime(taskTime_t deltaTimeTillRelease);
 
 /* Suspend task until a combination of events appears. Set a timeout by
@@ -132,26 +129,37 @@ suspendTaskTillTime(taskTime_t deltaTimeTillRelease);
 waitForEvent(eventMask_t eventMask, bool all, taskTime_t timeout);
 
 /* Delay a task without looking at other events. delay(n) would be
-   identical to waitForEvent(eventMask, false, n), where eventMask's only
-   set bit is the delay timer event. */
+   identical to waitForEvent(eventMask, false, n), where eventMask's only set
+   bit is the delay timer event. */ 
 delay(taskTime_t delayTime);
 
 /* Suspend task until a combination of events appears but no longer than
    until an absolute time, which is most typically the next due time of a
-   regular task.
-     deltaTimeTillRelease refers to the last recent absolute time event.
-   In the very first call of the function it refers to the point in time
-   the task was started.
-     The timer is however regarded only if the absolute-timer bit is set
-   in the event mask. Otherwise timeout doesn't matter.
-     The flag "all" is missing: This call implicitly assumes an OR
+   regular task. deltaTimeTillRelease refers to the last recent absolute time
+   event. In the very first call of the function it refers to the point in
+   time the task was started. The timer is however regarded only if the
+   absolute-timer bit is set in the event mask. Otherwise timeout doesn't
+   matter. The flag "all" is missing: This call implicitly assumes an OR
    combination of all events (including the elapsed timer). */
 waitForEventTillTime(eventMask_t eventMask, taskTime_t deltaTimeTillRelease);
 
-All tasks are initially due. If this is undesired, the task code itself will
-immediately invoke the appropriate suspend command.
+All tasks are initially due. If this is undesired, the task code itself
+will immediately invoke the appropriate suspend command.
 
 Inside the application code arbitrary interrupts in the system can be
 bound to one of the global events so that a task can wait for the
 interrupt. Documented template code for the implementation of such an ISR
 will be provided.
+
+A mutex will be offered which does not block all interrupts globally (as
+the pair cli/sei would do) so that e.g. the Arduino delay function still
+operates well.
+
+Optional: Round-Robin schema for tasks belonging to same priority class.
+After a task individual execution time the task is inactivated but stays
+due. It will become the last entry in the list of due tasks of the givven
+class. If no other conditions are present, a number of tasks of same class
+would be cyclically activated, each getting its individual time slice. In
+combination with other activation events, particulary based on absolute
+time, the task individual execution time serves as a limititation of the
+time the task may execute (if this had any need).
