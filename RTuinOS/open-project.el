@@ -161,11 +161,11 @@ C and M files in the scope of this project."
   ; try the default directory.
   ;   The location of the make file should always be in the list as files named in a
   ; compiler's output often referenced with relative paths from here.
-  (setq compilation-search-path (list "." (concat project-path "/code")))
+  (setq compilation-search-path (list "." (concat project-path)))
 
   ; Prepare all frequently used build commands
   (let*
-    ( (make-cmd-base (concat "cd /d " project-path-win32 " & dsmake "))
+    ( (make-cmd-base (concat "cd /d " project-path-win32 " & dsmake TEST_CASE=tc01 "))
 ;      (lint-cmd-base (concat "cd /d " project-path-win32
 ;                             " & lint-nt lint\\std.lnt "
 ;                     ) 

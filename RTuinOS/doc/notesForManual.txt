@@ -18,3 +18,28 @@ event which could result in a context switch. Possible e.g. for I/O
 handling with high responsiveness. Initialition and feedback can only be
 done in a normal task not using the RTOS events. 
   Double check if timer0 used by Arduino for millis etc. is an example.
+
+Explain cli/sei versus enterLeaveCriticalSection: All interrupts are
+locked or only the task switch causing one.
+
+Tasks can be interrupted only by tasks of higher priority. If round robin
+is implemented and activated, it may also be interrupted by tasks of same
+priority class. Those and only those tasks which share data with tasks
+which may interrupt them because of the rules before, need to apply calls
+of enter/leaveCriticalSection to protect the access to this data.
+
+Enter/leaveCriticalSection is part of the code adaptations when binding a
+new interrupt to an existing event. ECS/LCS need to lock all interrupts
+which possibly can cause a task switch - but no other interrupts.
+  Example: producer-consumer model ADC: Free-running mode, interrupt on
+conversion completed sets event. Task waiting for event with high priority
+will read the result and switch the channel. It'll than do the
+anti-aliasing filtering. The time-triggered slow task reads the filter
+output (and does implicitly do the downsampling this way).
+
+Idle task may set an event but may not suspend in any way. If it sets an
+event it can be sure that the awaked task has completed all related data
+processing until idle gets reactivated again. Therefore, a
+producer-consumer solution can be implemented with a single event as
+access synchronization, no ECS/LCS needs to be applied. (Explain why and
+generalize this idea to any pair of tasks of different priority classes.)

@@ -80,6 +80,13 @@
 #   TODO Choose your project's name
 project = RTuinOS
 
+# RTuinOS can't be linked without an application. Select which one. Here, all applications
+# are considered test cases.
+%ifndef TEST_CASE
+    %echo Please select a test case. Add TEST_CASE=\<myTestCase\> to the command line
+    %abort
+%endif
+
 # The target micro controller the code is to be compiled for. The Setting is used in the
 # command line of compiler, linker and flash tool. Please be aware, that changing this
 # setting is not sufficient to ensure that this makefile is woring with another target. You
@@ -93,7 +100,7 @@ COM_PORT ?= \\.\COM8
 # Access help as default target or by several names. This target needs to be the first one
 # in this file.
 h help targets usage .ALWAYS:
-    %echo Usage: make [CONFIGURATION=\<configuration\>] [COM_PORT=\<portName\>] {\<target\>}
+    %echo Usage: make TEST_CASE=\<myRTuinOSApplication\> [CONFIGURATION=\<configuration\>] [COM_PORT=\<portName\>] {\<target\>}
     %echo where \<configuration\> is one out of DEBUG (default) or PRODUCTION.
     %echo and \<portName\> is an a USB port identifying string to be used for the download.
     %echo See help of avrdude for more.
@@ -157,7 +164,7 @@ bin\core\obj:
 # Determine the list of files to be compiled.
 #   Specify a blank separated list of directories (better: file patterns) holding source
 # files. 
-srcDirList = code\RTOS\*.c?? code\sampleApp\*.c??
+srcDirList = code\RTOS\*.c?? code\sampleApp\$(TEST_CASE)\*.c??
 # *F: Get all files matching the soucre file patterns in the directory list.
 # F: Extract file names (incl. extension).
 cFileList = $(srcDirList,*F,F)
@@ -172,10 +179,10 @@ objListWithPath = $(objList,<$(targetDir)\obj\)
 #%echo $(objListWithPath)
 
 # Semicolon separated search paths for *.c and *.h permit to use auto rules for compilation.
-.PATH.cpp = code\RTOS;code\sampleApp;                                               \
+.PATH.cpp = code\RTOS;code\sampleApp\$(TEST_CASE);                                  \
             $(ARDUINO_HOME)\hardware\arduino\cores\arduino;                         \
             $(ARDUINO_HOME)\libraries\LiquidCrystal
-.PATH.c   = code\RTOS;code\sampleApp;                                               \
+.PATH.c   = code\RTOS;code\sampleApp\$(TEST_CASE);                                  \
             $(ARDUINO_HOME)\hardware\arduino\cores\arduino
 .PATH.h   = code\RTOS;code\sampleApp
 # All other products is looked for in the target directory.
@@ -190,6 +197,7 @@ cFlags =  $(cDefines) -c -g -Os -Wall -fno-exceptions -ffunction-sections       
           -fdata-sections -mmcu=$(targetMicroController) -DF_CPU=16000000L -MMD     \
           -DUSB_VID=null -DUSB_PID=null -DARDUINO=101                               \
           # TODO You may need to add more include paths here.                       \
+          -Icode\RTOS -Icode\sampleApp\$(TEST_CASE)                                 \
           -I$(ARDUINO_HOME)\hardware\arduino\cores\arduino                          \
           -I$(ARDUINO_HOME)\hardware\arduino\variants\mega                          \
           -I$(ARDUINO_HOME)\libraries\LiquidCrystal                                 \
@@ -211,7 +219,7 @@ $(objListWithPath) $(objListCoreWithPath): makefile
 #   The compilation of the code is implemented configuration independent - the original
 # Arduino code will not know or respect our configuration dependent #defines.
 objListCore = WInterrupts.o wiring.o wiring_analog.o wiring_digital.o wiring_pulse.o    \
-              wiring_shift.o CDC.o HardwareSerial.o HID.o IPAddress.o main.o new.o      \
+              wiring_shift.o CDC.o HardwareSerial.o HID.o IPAddress.o new.o      		\
               Print.o Stream.o Tone.o USBCore.o WMath.o WString.o LiquidCrystal.o
 objListCoreWithPath = $(objListCore,<bin\core\obj\)
 #%echo $(objListCoreWithPath)
