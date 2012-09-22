@@ -23,6 +23,7 @@
  *   loop
  * Local functions
  *   blink
+ *   task01_class00
  */
 
 /*
@@ -40,7 +41,10 @@
 /** Pin 13 has an LED connected on most Arduino boards. */
 #define LED 13
  
+/** Stack size of task. */
+#define STACK_SIZE_TASK00   256
  
+
 /*
  * Local type definitions
  */
@@ -50,17 +54,62 @@
  * Local prototypes
  */
  
+static void task01_class00(uint16_t taskParam);
+ 
  
 /*
  * Data definitions
  */
-rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1];
+ 
+static uint8_t _taskStack[STACK_SIZE_TASK00];
+
+rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1] =
+{ /* Task 1 */
+  { /* prioClass */	        0
+  , /* taskFunction */	    task01_class00
+  , /* taskFunctionParam */	0x3472
+  , /* timeDueAt */	        5
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+  , /* timeRoundRobin */	0
+#endif
+  , /* pStackArea */	    &_taskStack[0]   
+  , /* stackSize */	        STACK_SIZE_TASK00
+  , /* cntDelay */	        0
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+  , /* cntRoundRobin */	    0
+#endif
+  , /* postedEventVec */	0
+  , /* eventMask */	        0
+  , /* waitForAnyEvent */	0
+  , /* stackPointer */	    0
+  } /* End Task 1 */
+  
+, /* Idle Task */
+  { /* prioClass */	        0
+  , /* taskFunction */      NULL
+  , /* taskFunctionParam */	0
+  , /* timeDueAt */	        255
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+  , /* timeRoundRobin */	0
+#endif
+  , /* pStackArea */	    NULL
+  , /* stackSize */	        0
+  , /* cntDelay */	        0
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+  , /* cntRoundRobin */	    0
+#endif
+  , /* postedEventVec */	0
+  , /* eventMask */	        0
+  , /* waitForAnyEvent */	0
+  , /* stackPointer */	    0
+  } /* End Task 1 */
+  
+}; /* End of initialization of task array. */
  
  
 /*
  * Function implementation
  */
-
 
 /**
  * Trivial routine that flashes the LED a number of times to give simple feedback. The
@@ -68,9 +117,11 @@ rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1];
  *   @param noFlashes
  * The number of times the LED is lit.
  */
+ 
 static void blink(uint8_t noFlashes)
 {
 #define TI_FLASH 150
+
     while(noFlashes-- > 0)
     {
         digitalWrite(LED, HIGH);  /* Turn the LED on. (HIGH is the voltage level.) */
@@ -83,6 +134,26 @@ static void blink(uint8_t noFlashes)
                                      bursts need to be separated. */
 #undef TI_FLASH
 }
+
+
+/**
+ * The only task in this test case (besides idle).\n
+ *   @param initParam
+ * The task gets an initialization parameter for whatever configuration purpose.
+ *   @remark
+ * A task function must never return; this would cause a reset.
+ */ 
+
+static void task01_class00(uint16_t taskParam)
+
+{
+    for(;;)
+        blink(2);    
+    
+} /* End of task01_class00 */
+
+
+
 
 
 /**
@@ -119,8 +190,18 @@ void setup(void)
 void loop(void)
 
 {
-    blink(4);
+    extern uintTime_t _time;
+    extern uint16_t _postEv;
+    extern uint16_t _makeDue;
+    extern uint8_t _activeTaskId;
+
     Serial.println("RTuinOS is idle");
+    delay(300);
+    Serial.print("time: "); Serial.println(_time);
+    Serial.print("postEv: "); Serial.println(_postEv);
+    Serial.print("makeDue: "); Serial.println(_makeDue);
+    Serial.print("activeTaskId: "); Serial.println(_activeTaskId);
+    blink(4);
     
 } /* End of loop */
 
