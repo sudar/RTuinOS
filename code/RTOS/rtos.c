@@ -22,6 +22,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  * Module interface
+ *   ISR
  *   rtos_initRTOS (internally called only)
  *   rtos_enableIRQTimerTic
  *   rtos_suspendTaskTillTime
@@ -38,11 +39,23 @@
 #include <arduino.h>
 #include "rtos.h"
 
+/** @todo DEBUG code */
+uint16_t _postEv = 0;
+uint16_t _makeDue = 0;
 
 /*
  * Defines
  */
+
+/** The ID of the idle task. The ID of a task is identical with the index into the task
+    array and the array of stack pointers. */
 #define IDLE_TASK_ID    (RTOS_NO_TASKS)
+
+/** A pattern byte, which is used as prefill byte of any task stack area. A simple and
+    unexpensive stack usage check at runtime can be implemented by looking for up to where
+    this pattern has been destroyed. Any value which is improbable to be a true stack
+    contents byte can be used -- whatever this value might be. */
+#define UNUSED_STACK_PATTERN 0x29
 
 
 /*
@@ -66,11 +79,11 @@ static bool onTimerTic(void);
       The initial value is such that the time is 0 during the execution of the very first
     system timer interrupt service. This is important for getting a task startup behavior,
     which is transparent and predictable for the application. */
-static uintTime_t _time = (uintTime_t)-1;
+/*static*/ uintTime_t _time = (uintTime_t)-1;
 
 /** The one and only active task. This may be the only internally seen idle task which does
     nothing. */
-static uint8_t _activeTaskId;
+/*static*/ uint8_t _activeTaskId = IDLE_TASK_ID;
 
 /** The task which is to be suspended because of a newly activated one. Only temporarily
     used in the instance of a task switch. */
@@ -125,7 +138,7 @@ volatile uint16_t _leftStackPointer_u16, _newStackPointer_u16;
  * the task needs to be passed now.
  */
 
-static uint8_t *prepareTaskStack( uint8_t *pEmptyTaskStack
+static uint8_t *prepareTaskStack( uint8_t * const pEmptyTaskStack
                                 , uint16_t stackSize
                                 , rtos_taskFunction_t taskEntryPoint
                                 , uint16_t taskParam
@@ -135,7 +148,8 @@ static uint8_t *prepareTaskStack( uint8_t *pEmptyTaskStack
 
     /* -1: We handle the stack pointer variable in the same way like the CPU does, with
        post-decrement. */
-    uint8_t *sp = pEmptyTaskStack + stackSize - 1;
+    uint8_t *sp = pEmptyTaskStack + stackSize - 1
+          , *retCode;
     
     /* Push 3 Bytes of guard program counter, which is the reset address, 0x00000. If
        someone returns from a task, this will cause a reset of the controller (instead of
@@ -168,7 +182,7 @@ static uint8_t *prepareTaskStack( uint8_t *pEmptyTaskStack
        doesn't matter, but why should we set any of the arithmetic flags? Also the global
        interrupt flag actually doesn't matter as the context switch will always enable
        global interrupts.
-         Tip: Set the genral purpose flag T controlled by a parameter of this function is a
+         Tip: Set the general purpose flag T controlled by a parameter of this function is a
        cheap way to pass a Boolean parameter to the task function. */
     * sp-- = 0x80;
        
@@ -193,7 +207,15 @@ static uint8_t *prepareTaskStack( uint8_t *pEmptyTaskStack
     /* The stack is prepared. The value, the stack pointer has now needs to be returned to
        the caller. It has to be stored in the context save area of the new task as current
        stack pointer. */
-    return sp;
+    retCode = sp;
+    
+    /* The rest of the stack area doesn't matter. Nonetheless, we fill it with a specific
+       pattern, which will permit to run a (a bit guessing) stack usage routine later on:
+       We can look up to where the pattern has been destroyed. */
+    while(sp >= pEmptyTaskStack)
+        * sp-- = UNUSED_STACK_PATTERN;
+       
+    return retCode;
 
 } /* End of prepareTaskStack. */
 
@@ -317,6 +339,9 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
           "sts _leftStackPointer_u16, r0 \n\t"
           "in r0, __SP_H__ \n\t"
           "sts _leftStackPointer_u16+1, r0 \n\t"
+//);
+//_newStackPointer_u16 = _leftStackPointer_u16;
+//asm volatile (
           "lds r0, _newStackPointer_u16 \n\t"
           "out __SP_L__, r0 /* Write l-byte of new stack pointer content */ \n\t"
           "lds r0, _newStackPointer_u16 + 1 \n\t"
@@ -402,11 +427,14 @@ static bool onTimerTic(void)
 {
     uint8_t idxSuspTask;
     bool isNewActiveTask = false;
-          
+
+    /* Clock the system time. Cyclic overrun is intended. */
+    ++ _time;
+
     for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
     {
         rtos_task_t *pT = &rtos_taskAry[_suspendedTaskIdAry[idxSuspTask]];
-        uint8_t eventVec;
+        uint16_t eventVec;
 
         /* Check for absolute timer event. */
         if(_time == pT->timeDueAt)
@@ -423,6 +451,7 @@ static bool onTimerTic(void)
                  For these reasons, the code doesn't double check for repeatedly setting the
                same event. */
             pT->postedEventVec |= RTOS_EVT_ABSOLUTE_TIMER;
+++ _postEv;
         }
             
         /* Check for delay timer event. The code here should optimally support the standard
@@ -443,13 +472,13 @@ static bool onTimerTic(void)
             uint8_t u
                   , prio = pT->prioClass;
             
-            /* This task became due. Move it from the list of suspended tasks to the list
+            /* This task becomes due. Move it from the list of suspended tasks to the list
                of due tasks of its priority class. */
             _dueTaskIdAryAry[prio][_noDueTasksAry[prio]++] = _suspendedTaskIdAry[idxSuspTask];
             -- _noSuspendedTasks;
             for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
                 _suspendedTaskIdAry[idxSuspTask] = _suspendedTaskIdAry[idxSuspTask+1];
-            
+++ _makeDue;
             /* Since a task became due there might be a change of the active task. */
             isNewActiveTask = true;
         }
@@ -478,11 +507,11 @@ static bool onTimerTic(void)
                 _suspendedTaskId = _activeTaskId;
                 _activeTaskId    = _dueTaskIdAryAry[idxPrio][0];
                 
-                /* As we made at least one task due, these statements are surely reached if
-                   we only entered the outermost if clause. As the due becoming task might
-                   be of lower priority it can easily be that we nonetheless don't have a
-                   task switch. */
-                isNewActiveTask = _activeTaskId == _suspendedTaskId;
+                /* If we only entered the outermost if clause we made at least one task
+                   due; these statements are thus surely reached. As the due becoming task
+                   might however be of lower priority it can easily be that we nonetheless
+                   don't have a task switch. */
+                isNewActiveTask = _activeTaskId != _suspendedTaskId;
 
                 break;
             }
@@ -491,7 +520,7 @@ static bool onTimerTic(void)
     
     /* The calling interrupt service routine will do a context switch only if we return
        true. Otherwise it'll simply do a "reti" to the interrupted context and continue
-       it. */ 
+       it. */
     return isNewActiveTask;
     
 } /* End of onTimerTic. */
