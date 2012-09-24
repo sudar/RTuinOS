@@ -67,7 +67,7 @@ rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1] =
 { /* Task 1 */
   { /* prioClass */	        0
   , /* taskFunction */	    task01_class00
-  , /* taskFunctionParam */	0x3472
+  , /* taskFunctionParam */	10
   , /* timeDueAt */	        5
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
   , /* timeRoundRobin */	0
@@ -136,8 +136,9 @@ static void blink(uint8_t noFlashes)
 }
 
 
+
 /**
- * The only task in this test case (besides idle).\n
+ * The only task in this test case (besides idle).
  *   @param initParam
  * The task gets an initialization parameter for whatever configuration purpose.
  *   @remark
@@ -147,9 +148,22 @@ static void blink(uint8_t noFlashes)
 static void task01_class00(uint16_t taskParam)
 
 {
-    for(;;)
-        blink(2);    
+    uint16_t u;
     
+    Serial.print("task01_class00: Activated by 0x");
+    Serial.println(taskParam, HEX);
+
+    for(u=0; u<3; ++u)
+        blink(2);
+    
+    for(;;)
+    {
+        delay(1000);
+        Serial.println("task01_class00: Suspending...");
+        u = rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 125);
+        Serial.print("task01_class00: Released with ");
+        Serial.println(u, HEX);
+    }
 } /* End of task01_class00 */
 
 
@@ -161,7 +175,6 @@ static void task01_class00(uint16_t taskParam)
  */ 
 
 void setup(void)
-
 {
     /* All tasks are set up by using a compile-time expression. */    
     
@@ -172,6 +185,9 @@ void setup(void)
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
     pinMode(LED, OUTPUT);
+    
+    Serial.print("sizeof(rtos_task_t): "); 
+    Serial.println(sizeof(rtos_task_t)); 
     
 } /* End of setup */
 
@@ -188,19 +204,18 @@ void setup(void)
  */ 
 
 void loop(void)
-
 {
     extern uintTime_t _time;
     extern uint16_t _postEv;
     extern uint16_t _makeDue;
     extern uint8_t _activeTaskId;
 
-    Serial.println("RTuinOS is idle");
-    delay(300);
-    Serial.print("time: "); Serial.println(_time);
-    Serial.print("postEv: "); Serial.println(_postEv);
-    Serial.print("makeDue: "); Serial.println(_makeDue);
-    Serial.print("activeTaskId: "); Serial.println(_activeTaskId);
+//    Serial.println("RTuinOS is idle");
+    delay(3000);
+//    Serial.print("time: "); Serial.println(_time);
+//    Serial.print("postEv: "); Serial.println(_postEv);
+//    Serial.print("makeDue: "); Serial.println(_makeDue);
+//    Serial.print("activeTaskId: "); Serial.println(_activeTaskId);
     blink(4);
     
 } /* End of loop */
