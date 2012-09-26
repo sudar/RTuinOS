@@ -1,6 +1,7 @@
 /**
- * @file tc02_oneTask.c
- *   Test case 02 or RTuinoOS. One task is defined, which runs alternating with the idle task.
+ * @file tc03_RTTasks.c
+ *   Test case 03 or RTuinoOS. Several tasks of different priority are defined. Task
+ * switches are counted and reported in the idle task.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -40,8 +41,10 @@
 /** Pin 13 has an LED connected on most Arduino boards. */
 #define LED 13
  
-/** Stack size of task. */
-#define STACK_SIZE_TASK00   256
+/** Stack size of all the tasks. */
+#define STACK_SIZE_TASK00_C0   256
+#define STACK_SIZE_TASK01_C0   256
+#define STACK_SIZE_TASK00_C1   256
  
 
 /*
@@ -53,26 +56,70 @@
  * Local prototypes
  */
  
-static void task01_class00(uint16_t taskParam);
+static void task00_class00(uint16_t postedEventVec);
+static void task01_class00(uint16_t postedEventVec);
+static void task00_class01(uint16_t postedEventVec);
  
  
 /*
  * Data definitions
  */
  
-static uint8_t _taskStack[STACK_SIZE_TASK00];
+static uint8_t _taskStack00_C0[STACK_SIZE_TASK00_C0]
+             , _taskStack01_C0[STACK_SIZE_TASK01_C0]
+             , _taskStack00_C1[STACK_SIZE_TASK00_C1];
 
 rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1] =
-{ /* Task 1 */
+{ /* Task 0 of priority class 0 */
+  { /* prioClass */	        0
+  , /* taskFunction */	    task00_class00
+  , /* taskFunctionParam */	0
+  , /* timeDueAt */	        5
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+  , /* timeRoundRobin */	0
+#endif
+  , /* pStackArea */	    &_taskStack00_C0[0]   
+  , /* stackSize */	        sizeof(_taskStack00_C0)
+  , /* cntDelay */	        0
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+  , /* cntRoundRobin */	    0
+#endif
+  , /* postedEventVec */	0
+  , /* eventMask */	        0
+  , /* waitForAnyEvent */	0
+  , /* stackPointer */	    0
+  } /* End Task 1 */
+  
+, /* Task 1 of priority class 0 */
   { /* prioClass */	        0
   , /* taskFunction */	    task01_class00
+  , /* taskFunctionParam */	0
+  , /* timeDueAt */	        15
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+  , /* timeRoundRobin */	0
+#endif
+  , /* pStackArea */	    &_taskStack01_C0[0]   
+  , /* stackSize */	        sizeof(_taskStack01_C0)
+  , /* cntDelay */	        0
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+  , /* cntRoundRobin */	    0
+#endif
+  , /* postedEventVec */	0
+  , /* eventMask */	        0
+  , /* waitForAnyEvent */	0
+  , /* stackPointer */	    0
+  } /* End Task 1 */
+  
+, /* Task 0 of priority class 1 */
+  { /* prioClass */	        1
+  , /* taskFunction */	    task00_class01
   , /* taskFunctionParam */	10
   , /* timeDueAt */	        5
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
   , /* timeRoundRobin */	0
 #endif
-  , /* pStackArea */	    &_taskStack[0]   
-  , /* stackSize */	        STACK_SIZE_TASK00
+  , /* pStackArea */	    &_taskStack00_C1[0]   
+  , /* stackSize */	        sizeof(_taskStack00_C1)
   , /* cntDelay */	        0
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
   , /* cntRoundRobin */	    0
@@ -137,37 +184,78 @@ static void blink(uint8_t noFlashes)
 
 
 /**
- * The only task in this test case (besides idle).
- *   @param initParam
- * The task gets an initialization parameter for whatever configuration purpose.
+ * One of the low priority tasks in this test case.
+ *   @param initCondition
+ * Which events made the task run the very first time?
  *   @remark
  * A task function must never return; this would cause a reset.
  */ 
 
-static void task01_class00(uint16_t taskParam)
+static uint16_t noLoopsTask00_C0 = 0;
+static void task00_class00(uint16_t initCondition)
 
 {
-    uint16_t u;
-    
-    Serial.print("task01_class00: Activated by 0x");
-    Serial.println(taskParam, HEX);
-
-    for(u=0; u<3; ++u)
-        blink(2);
-    
     for(;;)
     {
-        Serial.println("task01_class00: rtos_delay...");
-        u = rtos_delay(255);
-        Serial.print("task01_class00: Released with ");
-        Serial.println(u, HEX);
-        
-        Serial.println("task01_class00: Suspending...");
-        u = rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 125);
-        Serial.print("task01_class00: Released with ");
-        Serial.println(u, HEX);
+        ++ noLoopsTask00_C0;
+
+        /* This tasks cycles with about 200ms. */
+        //u = rtos_delay(255);
+        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 100);
+    }
+} /* End of task00_class00 */
+
+
+
+
+
+/**
+ * Second task of low priority in this test case.
+ *   @param initCondition
+ * Which events made the task run the very first time?
+ *   @remark
+ * A task function must never return; this would cause a reset.
+ */ 
+
+static uint16_t noLoopsTask01_C0 = 0;
+static void task01_class00(uint16_t initCondition)
+
+{
+    for(;;)
+    {
+        ++ noLoopsTask01_C0;
+
+        /* This tasks cycles with about 100ms. */
+        //u = rtos_delay(255);
+        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 50);
     }
 } /* End of task01_class00 */
+
+
+
+
+
+/**
+ * Task of high priority.
+ *   @param initCondition
+ * Which events made the task run the very first time?
+ *   @remark
+ * A task function must never return; this would cause a reset.
+ */ 
+
+static uint16_t noLoopsTask00_C1 = 0;
+static void task00_class01(uint16_t initCondition)
+
+{
+    for(;;)
+    {
+        ++ noLoopsTask00_C1;
+
+        /* This tasks cycles with about 10ms. */
+        //u = rtos_delay(255);
+        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 5);
+    }
+} /* End of task00_class01 */
 
 
 
@@ -208,7 +296,10 @@ void setup(void)
 
 void loop(void)
 {
-    delay(1000);
+    Serial.println("RTuinOS is idle");
+    Serial.print("noLoopsTask00_C0: "); Serial.println(noLoopsTask00_C0);
+    Serial.print("noLoopsTask01_C0: "); Serial.println(noLoopsTask01_C0);
+    Serial.print("noLoopsTask00_C1: "); Serial.println(noLoopsTask00_C1);
     blink(4);
     
 } /* End of loop */
