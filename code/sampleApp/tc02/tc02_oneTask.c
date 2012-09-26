@@ -153,12 +153,16 @@ static void task01_class00(uint16_t taskParam)
     Serial.print("task01_class00: Activated by 0x");
     Serial.println(taskParam, HEX);
 
-    for(u=0; u<3; ++u)
-        blink(2);
+//    for(u=0; u<3; ++u)
+//        blink(2);
     
     for(;;)
     {
-        delay(1000);
+        Serial.println("task01_class00: rtos_delay...");
+        u = rtos_delay(255);
+        Serial.print("task01_class00: Released with ");
+        Serial.println(u, HEX);
+        
         Serial.println("task01_class00: Suspending...");
         u = rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 125);
         Serial.print("task01_class00: Released with ");
