@@ -26,10 +26,12 @@
  *   rtos_initRTOS (internally called only)
  *   rtos_enableIRQTimerTic
  *   rtos_suspendTaskTillTime
+ *   rtos_waitForEvent
  * Local functions
  *   prepareTaskStack
  *   onTimerTic
  *   suspendTaskTillTime
+ *   waitForEvent
  */
 
 
@@ -78,7 +80,6 @@ uint16_t _makeDue = 0;
 /* End of macro PUSH_CONTEXT_ONTO_STACK */
 
 
-/** @todo check comment: do we need pop_without_r24? e can push r24 and do a pop_all. */
 /** An important code pattern, which is used in every suspend command. The CPU context
     execpt for the register pair r24/r25 is saved by pushing it onto the stack of the given
     context. (Exception program counter: see macro #PUSH_CONTEXT_ONTO_STACK.)\n
@@ -91,8 +92,7 @@ uint16_t _makeDue = 0;
     would not be part of the saved context and the system would crash when trying to return
     to this context the next time!
       @remark This pattern needs to be changed only in strict accordance with the
-    counterpart pattern, which pops the context from a stack back into the CPU. Both
-    pattern needs to be the inverse of each other. */
+    counterpart pattern, which pops the context from a stack back into the CPU. */
 #define PUSH_CONTEXT_WITHOUT_R24R25_ONTO_STACK         \
     asm volatile                                       \
     ( "push r0 \n\t"                                   \
@@ -182,6 +182,91 @@ uint16_t _makeDue = 0;
 /* End of macro POP_CONTEXT_FROM_STACK */
 
 
+/** An important code pattern, which is used in every interrupt routine (including the
+    suspend commands, which can be considered pseudo-software interrupts). The code
+    performs the actual task switch by saving the current stack pointer in a location owned
+    by the left task and loading the stack pointer from a location owned by the new task
+    (where its stack pointer value had been saved at initialization time or the last time
+    it became inactive.).\n
+      The code fragment then decides whether the new task had been inactivated by a timer
+    interrupt or by a suspend command. In the latter case the return value of the suspend
+    command is put onto the stack. From there it'll be loaded into the CPU when ending the
+    interrupt routine.\n
+      Side effects: The left task and the new task are read from the global variables
+    _suspendedTaskId and _activeTaskId.\n
+      Prerequisites: The use of the macro needs to be followed by a use of macro
+    PUSH_RET_CODE_OF_SWITCH_CONTEXT. (Both macros have not been yoined to a single one only
+    for sake of comprehensibility of the code using the code patterns.)\n
+      The routine depends on a reset global interrupt flag.\n
+      The implementation must be compatible with a naked function. In particular, it must
+    not define any local data! */
+// @todo For sake of readability, this could become two macros - although they will always be used as a pair, SWITCH_CONTEXT and PUSH_FUNCTION_RETURN_CODE
+#define SWITCH_CONTEXT                                                                      \
+{                                                                                           \
+    /* Switch the stack pointer to the (saved) stack pointer of the new active task. */     \
+    _tmpVarCToAsm_u16 = rtos_taskAry[_activeTaskId].stackPointer;                           \
+    asm volatile                                                                            \
+    ( "in r0, __SP_L__ /* Save current stack pointer at known, fixed location */ \n\t"      \
+      "sts _tmpVarAsmToC_u16, r0 \n\t"                                                      \
+      "in r0, __SP_H__ \n\t"                                                                \
+      "sts _tmpVarAsmToC_u16+1, r0 \n\t"                                                    \
+      "lds r0, _tmpVarCToAsm_u16 \n\t"                                                      \
+      "out __SP_L__, r0 /* Write l-byte of new stack pointer content */ \n\t"               \
+      "lds r0, _tmpVarCToAsm_u16+1 \n\t"                                                    \
+      "out __SP_H__, r0 /* Write h-byte of new stack pointer content */ \n\t"               \
+    );                                                                                      \
+    rtos_taskAry[_suspendedTaskId].stackPointer = _tmpVarAsmToC_u16;                        \
+                                                                                            \
+} /* End of macro SWITCH_CONTEXT */
+
+
+
+/** An important code pattern, which is used in every interrupt routine (including the
+    suspend commands, which can be considered pseudo-software interrupts). Immediately
+    after a context switch, the code fragment decides whether the task we had switch to had
+    been inactivated by a timer interrupt or by a suspend command. (Only) in the latter
+    case the return value of the suspend command is put onto the stack. From there it'll be
+    loaded into the CPU when ending the interrupt routine.\n
+      Side effects: The ID of the new task is read from the global variable _activeTaskId.\n
+      Prerequisites: The use of the macro needs to be preceeded by a use of macro
+    SWITCH_CONTEXT.\n
+      The routine depends on a reset global interrupt flag.\n
+      The implementation must be compatible with a naked function. In particular, it must
+    not define any local data! */
+#define PUSH_RET_CODE_OF_CONTEXT_SWITCH                                                     \
+{                                                                                           \
+    /* The first matter after a context switch is whether the new task became active the    \
+       very first time after it had been suspended or if it became active again after being \
+       temporarily only ready (but not suspended) because of being superseded by a higher   \
+       prioritized task or because of a round-robin cycle.                                  \
+         If this is the first activation after state suspended, we need to return the       \
+       cause for release from suspended state as function return code to the task. When     \
+       a task is suspended it always pauses inside the suspend command. */                  \
+    _tmpVarCToAsm_u16 = rtos_taskAry[_activeTaskId].postedEventVec;                         \
+    if(_tmpVarCToAsm_u16 > 0)                                                               \
+    {                                                                                       \
+        /* Neither at state changes active -> ready, and nor at changes ready ->            \
+           active, the event vector is touched. It'll be set only at state changes          \
+           suspended -> ready. If we reset it now, we will surely not run into this if      \
+           clause again after later changes active -> ready -> active. */                   \
+        rtos_taskAry[_activeTaskId].postedEventVec = 0;                                     \
+                                                                                            \
+        /* Yes, the new context was suspended before, i.e. it currently pauses inside a     \
+           suspend command, waiting for its completion and expecting its return value.      \
+           Place this value onto the new stack and let it be loaded by the restore          \
+           context operation below. */                                                      \
+        asm volatile                                                                        \
+        ( "lds r0, _tmpVarCToAsm_u16 \n\t"      /* Read low byte of return code. */         \
+          "push r0 \n\t"                        /* Push it at context position r24. */      \
+          "lds r0, _tmpVarCToAsm_u16+1 \n\t"    /* Read high byte of return code. */        \
+          "push r0 \n\t"                        /* Push it at context position r25. */      \
+        );                                                                                  \
+    } /* if(Do we need to place a suspend command's return code onto the new stack?) */     \
+                                                                                            \
+} /* End of macro PUSH_RET_CODE_OF_CONTEXT_SWITCH */
+
+
+
 /*
  * Local type definitions
  */
@@ -190,7 +275,12 @@ uint16_t _makeDue = 0;
 /*
  * Local prototypes
  */
+ 
 static bool onTimerTic(void);
+volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease) __attribute__((naked, noinline));
+static void suspendTaskTillTime(uintTime_t) __attribute__((used, noinline));
+static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout) __attribute__((used, noinline));
+volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout) __attribute__((naked, noinline));
 
 
 /*
@@ -423,6 +513,13 @@ static bool onTimerTic(void)
 
         /* Check if the task becomes due because of the possibly occured timer events. The
            optimally supported case is the more probable OR combination of events. */
+        /* @todo The AND operation has been specified bad: AND must only refer to the
+           postable events but not include the timer events. All postable events need to be
+           set in either the mask and the vector of posted events OR any of the timer
+           events in the mask are set in the vector of posted events. Consider if it still
+           makes sense to have all events uniquely in a single vector: This decision was
+           mainly taken because of the homegenous implementation -- which is no longer
+           given with this specification change. */
         eventVec = pT->postedEventVec & pT->eventMask;
         if( (pT->waitForAnyEvent &&  eventVec != 0)
             ||  (!pT->waitForAnyEvent &&  eventVec == pT->eventMask)
@@ -546,49 +643,8 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
     {
         /* Yes, another task becomes active with this timer tic. Switch the stack pointer
            to the (saved) stack pointer of that task. */
-
-        /* @todo Find a more elegant way of passing the stack pointer values to/from the
-           assembly code. */
-        _tmpVarCToAsm_u16 = rtos_taskAry[_activeTaskId].stackPointer;
-        asm volatile
-        ( "in r0, __SP_L__ /* Save current stack pointer at known, fixed location */ \n\t"
-          "sts _tmpVarAsmToC_u16, r0 \n\t"
-          "in r0, __SP_H__ \n\t"
-          "sts _tmpVarAsmToC_u16+1, r0 \n\t"
-          "lds r0, _tmpVarCToAsm_u16 \n\t"
-          "out __SP_L__, r0 /* Write l-byte of new stack pointer content */ \n\t"
-          "lds r0, _tmpVarCToAsm_u16+1 \n\t"
-          "out __SP_H__, r0 /* Write h-byte of new stack pointer content */ \n\t"
-        );
-        rtos_taskAry[_suspendedTaskId].stackPointer = _tmpVarAsmToC_u16;
-        
-        /* The next matter is whether the new task became active the very first time after
-           it had been suspended or if it became active again after being temporarily only
-           ready (but not suspended) because of being superseded by a higher prioritized
-           task or because of a round-robin cycle.
-             If this is the first activation after state suspended, we need to return the
-           cause for release from suspended state as function return code to the task. When
-           a task is suspended it always pauses inside the suspend command. */
-        _tmpVarCToAsm_u16 = rtos_taskAry[_activeTaskId].postedEventVec;
-        if(_tmpVarCToAsm_u16 > 0)
-        {
-            /* Neither at state changes active -> ready, and nor at changes ready ->
-               active, the event vector is touched. It'll be set only at state changes
-               suspended -> ready. If we reset it now, we will surely not run into this if
-               clause again after later changes active -> ready -> active. */
-            rtos_taskAry[_activeTaskId].postedEventVec = 0;
-            
-            /* Yes, the new context was suspended before, i.e. it currently pauses inside a
-               suspend command, waiting for its completion and expecting its return value.
-               Place this value onto the new stack and let it be loaded by the restore
-               context operation below. */
-            asm volatile
-            ( "lds r0, _tmpVarCToAsm_u16 \n\t"      /* Read low byte of return code. */
-              "push r0 \n\t"                        /* Push it at context position r24. */
-              "lds r0, _tmpVarCToAsm_u16+1 \n\t"    /* Read high byte of return code. */
-              "push r0 \n\t"                        /* Push it at context position r25. */
-            );
-        } /* if(Do we need to place a suspend command's return code onto the new stack?) */
+        SWITCH_CONTEXT
+        PUSH_RET_CODE_OF_CONTEXT_SWITCH
     }
 
     /* The highly critical operation of modifying the stack pointer is done. From now on,
@@ -638,11 +694,10 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
  *   @see
  * uint16_t rtos_suspendTaskTillTime(uintTime_t)
  *   @remark
- * This function and particularly passing the return code via a global variable will
+ * This function and particularly passing the return codes via a global variable will
  * operate only if all interrupts are disabled.
  */ 
 
-static void suspendTaskTillTime(uintTime_t) __attribute__((used, noinline));
 static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
 {
     /* Avoid inlining under all circumstances. */
@@ -661,6 +716,8 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     /* This suspend command want a reactivation at a certain time. */
     // @todo Here, we need some code for task overrun detection. The new time must not more than half a cycle in the future.
     pT->timeDueAt += deltaTimeTillRelease;
+    pT->eventMask = RTOS_EVT_ABSOLUTE_TIMER;
+    pT->waitForAnyEvent = true;
     
     /* Put the task in the list of suspended tasks. */
     _suspendedTaskIdAry[++_noSuspendedTasks] = _activeTaskId;
@@ -715,45 +772,30 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
  * having local function parameters, GCC has a problem when generating code without
  * optimization: It doesn't generate a stack frame but still does save the local parameter
  * into the (not existing) stack frame as very first assembly operation of the function
- * code. There's aboslutely not worl around, when the earliest code, we can write inside
+ * code. There's absolutely not work around; when the earliest code, we can write inside
  * the function is executed, the stack is already corrupted in a harzardous way. A crash is
  * unavoidable.\n
+ *   A (less helpful) discussion of the issue can be found at
+ * http://lists.gnu.org/archive/html/avr-gcc-list/2012-08/msg00014.html.\n
  *   An imaginable work around is to pass data to the function by global objects.
  * This data would be task related so that filling the data object and calling this
- * function needed to be an atomic operation. A macro resetting the global interrupt,
+ * function needed to be an atomic operation. A macro resetting the global interrupt flag,
  * filling the data object and calling the function would be required to do this.\n
  *   So far, we do not use this very, very ugly work around. Instead, we forbid to compile
  * the code with optimization off. Nonetheless, who will ever know or understand under
- * which circumstances GCC will also generate this trash-code. Consequently, at any change of
- * a compiler setting you will need to inspect the assembly listing file and double-check
- * that it is proper with respect of using (better not using) the stack frame for this
- * function.\n
+ * which circumstances, e.g. which combination of optimization flags, GCC will again
+ * generate this trash-code. This issue remains a severe risk! Consequently, at any change
+ * of a compiler setting you will need to inspect the assembly listing file and
+ * double-check that it is proper with respect of using (better not using) the stack frame
+ * for this function (and all other suspend functions).\n
  *   Another idea would be the implementation of this function completely in assembly code.
- * Doing so, we have the new problem of calling assembly code as C functions.
+ * Doing so, we have the new problem of calling assembly code as C functions. Find an
+ * example of how to do in
+ * file:///M:/SVNMainRepository/Arduino/RTuinOS/trunk/RTuinOS/code/RTOS/rtos.c, revision 215.
  */
 #ifndef __OPTIMIZE__
 # error This code must not be compiled with optimization off. See source code comments for more
 #endif
-//extern uint16_t myFunc(uintTime_t);
-//asm volatile
-//( ".section	.text._Z6myFunch,\"ax\",@progbits \n\t"
-//  ".global _Z6myFunch \n\t"
-//  ".type _Z6myFunch, @function \n\t"
-//  "_Z6myFunch: \n\t"
-//  "push r1 \n\t"
-//);
-//asm volatile
-//( "rcall _ZL19suspendTaskTillTimeh \n\t"
-//  "ret \n\t"
-//  ".size	_Z6myFunch, .-_Z6myFunch \n\t"
-//);
-//// 636               	.LFE74:
-//// 637               		.size	_ZL10onTimerTicv, .-_ZL10onTimerTicv
-//// 638               		.section	.text.__vector_15,"ax",@progbits
-//// 639               	.global	__vector_15
-//// 640               		.type	__vector_15, @function
-//// 641               	__vector_15:
-
 
 volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
 {
@@ -769,85 +811,22 @@ volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     PUSH_CONTEXT_WITHOUT_R24R25_ONTO_STACK
 
     /* Here, we could double-check _activeTaskId for the idle task ID and return without
-       context switch if it is active. However, all implementation rates performance higher
-       than failure tolerance, and so do we here. */
+       context switch if it is active. (The idle task has illicitly called a suspend
+       command.). However, all implementation rates performance higher than failure
+       tolerance, and so do we here. */
        
     /* The actual implementation of the task switch logic is placed into a sub-routine in
        order to benefit from the compiler generated stack frame for local variables (in
-       this function we must not have declared any). The call of the function is
+       this naked function we must not have declared any). The call of the function is
        immediately followed by some assembly code which processes the return value of the
        function, found in register pair r25/25. */
     suspendTaskTillTime(deltaTimeTillRelease);
     
-    /* Switch the stack pointer to the (saved) stack pointer of the new active task. */
-    _tmpVarCToAsm_u16 = rtos_taskAry[_activeTaskId].stackPointer;
-    asm volatile
-    ( "in r0, __SP_L__ /* Save current stack pointer at known, fixed location */ \n\t"
-      "sts _tmpVarAsmToC_u16, r0 \n\t"
-      "in r0, __SP_H__ \n\t"
-      "sts _tmpVarAsmToC_u16+1, r0 \n\t"
-      "lds r0, _tmpVarCToAsm_u16 \n\t"
-      "out __SP_L__, r0 /* Write l-byte of new stack pointer content */ \n\t"
-      "lds r0, _tmpVarCToAsm_u16+1 \n\t"
-      "out __SP_H__, r0 /* Write h-byte of new stack pointer content */ \n\t"
-    );
-    rtos_taskAry[_suspendedTaskId].stackPointer = _tmpVarAsmToC_u16;
-
-    /* The next matter is whether the new task became active the very first time after
-       it had been suspended or if it became active again after being temporarily only
-       ready (but not suspended) because of being superseded by a higher prioritized
-       task or because of a round-robin cycle.
-         If this is the first activation after state suspended, we need to return the
-       cause for release from suspended state as function return code to the task. When
-       a task is suspended it always pauses inside the suspend command. */
-    _tmpVarCToAsm_u16 = rtos_taskAry[_activeTaskId].postedEventVec;
-    if(_tmpVarCToAsm_u16 > 0)
-    {
-        /* Neither at state changes active -> ready, and nor at changes ready ->
-           active, the event vector is touched. It'll be set only at state changes
-           suspended -> ready. If we reset it now, we will surely not run into this if
-           clause again after later changes active -> ready -> active. */
-        rtos_taskAry[_activeTaskId].postedEventVec = 0;
-
-        /* Yes, the new context was suspended before, i.e. it currently pauses inside a
-           suspend command, waiting for its completion and expecting its return value.
-           Place this value onto the new stack and let it be loaded by the restore
-           context operation below. */
-        asm volatile
-        ( "lds r0, _tmpVarCToAsm_u16 \n\t"      /* Read low byte of return code. */
-          "push r0 \n\t"                        /* Push it at context position r24. */
-          "lds r0, _tmpVarCToAsm_u16+1 \n\t"    /* Read high byte of return code. */
-          "push r0 \n\t"                        /* Push it at context position r25. */
-        );
-    } /* if(Do we need to place a suspend command's return code onto the new stack?) */
-
-/*
-    Idea: A task needs to return a value at restore context when and only when it is
-    activated the very first time after it had been suspended. (It will not return a value
-    if it is activated from an interruption by another task of higher priority or because
-    of a round-robin cycle.) Prove: The
-    task gets suspended only on its own demand by calling one of the suspend functions
-    and these functions have a return value. (Exception is task initialization: if we set
-    r24/25 now, it'll become the function parameter. This inhibits a general purpose
-    parameter but generalizes the start of a task: It can be started by any combination of
-    events and its parameter tells how it actually was.)
-      Thus: The activation will check the event vector. If not null the task is awaked,
-    thus activated the first time after suspension. Now the event vector is returned and
-    reset in the task array. If we find event vector equal to null, the task is activated
-    for continuation, not after a suspend, and the completed pushed context is restored.
-      In the first case, we will overwrite r24/25 with the return value and this can be
-    done easiest by pushing the values after switching the SP and then doing a complete pop
-    context. (Required change: r24/25 is the topmost entry in the pushed context.)
-    Consequently, the switch functions and the task stack preparation would not push r24/25
-    as part of the context.
-      Going back to a context:
-    If task ID stays same: do not switch SP, pop all, reti.
-    If task ID changes:
-        If eventVec of new task is null
-            Switch SP, pop all, reti
-        If eventVec of new task is not null
-            Switch SP, push eventVec, clear eventVec, pop all, reti
-*/
+    /* Switch the stack pointer to the (saved) stack pointer of the new active task and
+       push the function result onto the new stack - from where it is loaded into r24/r25
+       by the subsequent pop-context command. */
+    SWITCH_CONTEXT
+    PUSH_RET_CODE_OF_CONTEXT_SWITCH
 
     /* The stack pointer points to the now active task (which will often be still the same
        as at function entry). The CPU context to continue with is popped from this stack. If
@@ -862,6 +841,168 @@ volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     );
     
 } /* End of rtos_suspendTaskTillTime. */
+
+
+
+
+/**
+ * Actual implentation of task suspension routine \a rtos_waitForEvent. The task is
+ * suspended until a specified event occurs.\n
+ *   The action of this SW interrupt is placed into an own function in order to let the
+ * compiler generate the stack frame required for all local data. (The stack frame
+ * generation of the SW interupt entry point needs to be inhibited in order to permit the
+ * implementation of saving/restoring the task context).
+ *   @return
+ * The function determines which task is to be activated and records which task is left
+ * (i.e. the task calling this routine) in the global variables _activeTaskId and
+ * _suspendedTaskId.
+ *   @param eventMask
+ * See software interrupt \a rtos_waitForEvent.
+ *   @param all
+ * See software interrupt \a rtos_waitForEvent.
+ *   @param timeout
+ * See software interrupt \a rtos_waitForEvent.
+ *   @see
+ * uint16_t rtos_waitForEvent(uint16_t, bool, uintTime_t)
+ *   @remark
+ * This function and particularly passing the return codes via a global variable will
+ * operate only if all interrupts are disabled.
+ */ 
+
+static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+{
+    /* Avoid inlining under all circumstances. */
+    asm("");
+    
+    int8_t idxPrio;
+    uint8_t idxTask;
+    
+    /* Take the active task out of the list of due tasks. */
+    rtos_task_t *pT = &rtos_taskAry[_activeTaskId];
+    uint8_t prio = pT->prioClass;
+    uint8_t noDueNow = -- _noDueTasksAry[prio];
+    for(idxTask=0; idxTask<noDueNow; ++idxTask)
+        _dueTaskIdAryAry[prio][idxTask] = _dueTaskIdAryAry[prio][idxTask+1];
+    
+    /* This suspend command want a reactivation by a combination of events (which may
+       include the timeout event).
+         ++timeout: The call of the suspend function is in no way synchronized with the
+       system clock. We define the delay to be a minimum and implement the resolution
+       caused uncertainty as an additional delay. */
+    if((uintTime_t)(timeout+1) != 0)
+        ++ timeout;
+    pT->cntDelay = timeout;
+    pT->eventMask = eventMask;
+    pT->waitForAnyEvent = !all;
+    
+    /* Put the task in the list of suspended tasks. */
+    _suspendedTaskIdAry[++_noSuspendedTasks] = _activeTaskId;
+
+    /* Record which task suspends itself for the assembly code in the calling function
+       which actually switches the context. */
+    _suspendedTaskId = _activeTaskId;
+    
+    /* Look for the task we will return to. It's the first entry in the highest non-empty
+       priority class. The loop requires a signed index.
+         It's not guaranteed that there is any due task. Idle is the fallback. */
+    _activeTaskId = IDLE_TASK_ID;
+    for(idxPrio=RTOS_NO_PRIO_CLASSES-1; idxPrio>=0; --idxPrio)
+    {
+        if(_noDueTasksAry[idxPrio] > 0)
+        {
+            _activeTaskId = _dueTaskIdAryAry[idxPrio][0];
+            break;
+        }
+    }
+    
+    
+} /* End of waitForEvent */
+
+
+
+
+/**
+ * Suspend the current task (i.e. the one which invokes this method) until a specified
+ * combination of events occur.\n
+ *   A task is suspended in the instance of calling this method. It specifies a list of
+ * events. The task becomes due again, when either the first one or all of the specified
+ * events have been posted by other tasks.
+ *   @return
+ * The event mask of resuming events is returned. See \a rtos.h for a list of known events.
+ *   @param eventMask
+ * The bit vector of events to wait for. Needs to include the delay timer event
+ * RTOS_EVT_DELAY_TIMER, if a timeout is required.
+ *   @param all
+ * If true, the task is made due only if all events are posted.\n
+ *   CAUTION: Due to a specification error, this flag can be reasonable set in only in
+ * combination of \a not specifying a timeout. Otherwise the activation condition would be
+ * to wait for all events and to wait for the timeout being elapsed -- which is surely not
+ * what you mean with a timeout. Waiting for any event with timeout is obviously not a
+ * problem.
+ *   @param timeout
+ * The number of system timer tics from now on until the timeout elapses. One should be
+ * aware the resolution of any timing is the tic of the system timer. A timeout of n may
+ * actually mean any delay in the range n..n+1 tics.\n
+ *   Even specifying 0 will suspend the task a short time and give others the chance to
+ * become active.\n
+ *   If RTOS_EVT_DELAY_TIMER is not set in the event mask, this parameter doesn't matter.
+ *   @see uint16_t rtos_suspendTaskTillTime(uintTime_t)
+ *   @remark
+ * It is absolutely essential that this routine is implemented as naked and noinline. See
+ * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
+ *   @remark
+ * In optimization level 0 GCC has a problem with code generation for naked functions. See
+ * function \a rtos_suspendTaskTillTime for details.
+ */
+#ifndef __OPTIMIZE__
+# error This code must not be compiled with optimization off. See source code comments for more
+#endif
+
+volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+{
+    /* This function is a pseudo-software interrupt. A true interrupt had reset the global
+       interrupt enable flag, we inhibit any interrupts now. */
+    asm volatile
+    ( "cli \n\t"
+    );
+    
+    /* The program counter as first element of the context is already on the stack (by
+       calling this function). Save rest of context onto the stack of the interrupted
+       active task. */ 
+    PUSH_CONTEXT_WITHOUT_R24R25_ONTO_STACK
+
+    /* Here, we could double-check _activeTaskId for the idle task ID and return without
+       context switch if it is active. (The idle task has illicitly called a suspend
+       command.). However, all implementation rates performance higher than failure
+       tolerance, and so do we here. */
+       
+    /* The actual implementation of the task switch logic is placed into a sub-routine in
+       order to benefit from the compiler generated stack frame for local variables (in
+       this naked function we must not have declared any). The call of the function is
+       immediately followed by some assembly code which processes the return value of the
+       function, found in register pair r25/25. */
+    waitForEvent(eventMask, all, timeout);
+    
+    /* Switch the stack pointer to the (saved) stack pointer of the new active task and
+       push the function result onto the new stack - from where it is loaded into r24/r25
+       by the subsequent pop-context command. */
+    SWITCH_CONTEXT
+    PUSH_RET_CODE_OF_CONTEXT_SWITCH
+
+    /* The stack pointer points to the now active task (which will often be still the same
+       as at function entry). The CPU context to continue with is popped from this stack. If
+       there's no change in active task the entire routine call is just like any ordinary
+       interrupt. */
+    POP_CONTEXT_FROM_STACK
+    
+    /* The global interrupt enable flag is not saved across task switches, but always set
+       on entry into the new or same context by using a reti rather than a ret. */
+    asm volatile
+    ( "reti \n\t"
+    );
+    
+} /* End of rtos_waitForEvent */
+
 
 
 
@@ -1009,7 +1150,8 @@ void rtos_initRTOS(void)
 } /* End of rtos_initRTOS */
 
 
-
+/* setEvent: Needs to push all, as it doesn't suspend a task. It can however yield a task
+   switch as the set event may release a task of higher priority. */
 
 
 /*

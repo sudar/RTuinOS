@@ -52,6 +52,18 @@
 #define RTOS_EVT_ABSOLUTE_TIMER (0x0001<<14)
 #define RTOS_EVT_DELAY_TIMER    (0x0001<<15)
 
+
+/** Delay a task without looking at other events. rtos_delay(delayTime) is
+    identical to rtos_waitForEvent(RTOS_EVT_DELAY_TIMER, false, delayTime), i.e.
+    eventMask's only set bit is the delay timer event.\n
+      delayTime: The duration of the delay in the unit of the system time. The permitted
+    range is 0..max(uintTime_t).\n
+      CAUTION: This method is one of the task suspend commands. It must not be used by the
+    idle task, which can't be suspended. A crash would be the immediate consequence. */
+#define rtos_delay(delayTime)                                               \
+                rtos_waitForEvent(RTOS_EVT_DELAY_TIMER, false, delayTime)
+
+
 /*
  * Global type definitions
  */
@@ -179,8 +191,17 @@ extern rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1];
  * Global prototypes
  */
 
+/** Initialization of the internal data structures of RTuinOS and start of the timer
+    interrupt (@see void rtos_enableIRQTimerTic(void)). This function does not return but
+    forks into the configured tasks. */
 void rtos_initRTOS(void);
-volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease) __attribute__((naked, noinline));
+
+/** Suspend a task untill a specified point in time. Used to implement regular real time
+    tasks. */
+volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
+
+/** Suspend task until a combination of events appears or a timeout elapses. */
+volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
 
 
 #endif  /* RTOS_INCLUDED */
