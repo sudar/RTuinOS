@@ -70,10 +70,10 @@
 
 /** The type of any task.\n
       The function is of type void; it must never return.\n
-      The function takes a single parameter. It can be a simple integer or a typecasted
-    pointer into the memory address space and therefore convey any kind of information to
-    the task function. */
-typedef void (*rtos_taskFunction_t)(uint16_t taskParam);
+      The function takes a single parameter. It is the event vector of the very event
+    combination which made the task initially run. Typically this is just an absolute or
+    delay timer event. */
+typedef void (*rtos_taskFunction_t)(uint16_t postedEventVec);
 
 /** The descriptor of any task. Contains static information like task priority class and
     dynamic information like received events, timer values etc.\n
@@ -99,6 +99,7 @@ typedef struct
     rtos_taskFunction_t taskFunction;
     
     /** The parameter of the task function. */
+// @todo Remove, not used
     uint16_t taskFunctionParam;
     
     /** The timer value triggering the task local absolute-timer event.\n

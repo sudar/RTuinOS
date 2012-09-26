@@ -82,3 +82,13 @@ Look for comment blocks in source code.
             Switch SP, pop all, reti
         If eventVec of new task is not null
             Switch SP, push eventVec, clear eventVec, pop all, reti
+
+Why do we not have type eventMask_t and leave it to the user if he needs
+8, 16 or 32 events? The complexity of stack handling for passing the event
+mask parameters hence and force would require quite complex #if switches
+which would make the code ugly. It's however basically possible without
+conceptual changes.
+
+Explain the flag-meaning of task.postedEventVec, how it tracks from which
+state a task comes from and how it determines what the return in r24/25 to
+the caller
