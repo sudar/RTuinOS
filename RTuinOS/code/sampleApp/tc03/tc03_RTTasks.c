@@ -200,7 +200,7 @@ static void task00_class00(uint16_t initCondition)
         ++ noLoopsTask00_C0;
 
         /* This tasks cycles with about 200ms. */
-        //u = rtos_delay(255);
+        rtos_delay(80);
         rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 100);
     }
 } /* End of task00_class00 */
@@ -225,8 +225,10 @@ static void task01_class00(uint16_t initCondition)
     {
         ++ noLoopsTask01_C0;
 
+        /* For test purpose only: This task consumes the CPU for most of the cycle time. */
+        delay(80 /*ms*/);
+        
         /* This tasks cycles with about 100ms. */
-        //u = rtos_delay(255);
         rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 50);
     }
 } /* End of task01_class00 */

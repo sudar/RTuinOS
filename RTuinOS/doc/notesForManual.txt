@@ -92,3 +92,55 @@ conceptual changes.
 Explain the flag-meaning of task.postedEventVec, how it tracks from which
 state a task comes from and how it determines what the return in r24/25 to
 the caller
+
+Producer-Consumer patterns like
+taskProducer()
+{
+    while(rtos_waitForEvent(myEvtStartToProduce))
+    {
+        /* Generate the shared, produced data. */
+        ...
+
+        /* Signal "data available". */
+        rtos_setEvent(myEvtStartToConsume);
+    }
+}
+taskConsumer()
+{
+    while(rtos_waitForEvent(myEvtStartToComsume))
+    {
+        /* Evaluate the shared, produced data. */
+        ...
+
+        /* Signal termination. */
+        rtos_setEvent(myEvtStartToProduce);
+    }
+}
+will run only if both tasks have same priority and no round robin characteristics.
+Otherwise we'd need an atomic combination of setting events and suspending with waiting for
+other events. If the consumer had e.g. a higher priority as the producer, it could be
+started in the instance the producer posts the event "data available". When it would post
+the event "start next production cycle", this event would be lost as the producer is not
+yet listening to this event. At this time the producer's program counter still points into
+the middle of its setEvent method - the lower priority task had no chance to reach the call
+of rtos_waitForEvent yet.
+
+In practice we often have a loose coupling between consumer and producer. Consuming the
+data is considered fast in comparison to the production cycle and backward feedback is not
+implemented. Principally, data can be lost but the probability is low enough to neglect
+this risk. An example can be an interrupt driven I/O operation. Each time the ADC has
+completed a conversion is sets an event and a task of high priority reads the data and
+processes it:
+taskReadADC()
+{
+    while(rtos_waitForEvent(myEvtADCConversionReady))
+    {
+        /* The ADC is read and retriggered for the next conversion. */
+        x = readADC();
+        
+        /* The read value is low pass filtered and put into a global variable from where it
+           is processed by another, slower, regular task. The slower task is of lower
+           priority, therefore we need no mutex operation here in this task. */
+        globalY = antiAliasFilter(x);
+    }        
+}
