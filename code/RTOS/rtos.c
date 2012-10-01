@@ -1,7 +1,7 @@
 /**
  * @file rtos.c
- *   Implementation of a Real Time Operation System for the Arduino Mega board in the
- * Arduino environment 1.1.\n
+ *   Implementation of a Real Time Operating System for the Arduino Mega board in the
+ * Arduino environment 1.0.1.\n
  *   The implementation is dependent on the board (the controller) and the GNU C++ compiler
  * (thus the release of the Arduino environment) but should be easily portable to other
  * boards and Arduino releases. See documentation for details.
@@ -275,13 +275,14 @@
  * Local prototypes
  */
  
-static bool onTimerTic(void) __attribute__((used, noinline));
-volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease) __attribute__((naked, noinline));
-static void suspendTaskTillTime(uintTime_t) __attribute__((used, noinline));
-static bool setEvent(uint16_t eventVec) __attribute__((used, noinline));
-volatile void rtos_setEvent(uint16_t eventVec) __attribute__((naked, noinline));
-static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout) __attribute__((used, noinline));
-volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout) __attribute__((naked, noinline));
+// @todo Consider to use macros for the two used attribute function decorations
+static __attribute__((used, noinline)) bool onTimerTic(void);
+volatile  __attribute__((naked, noinline)) uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
+static __attribute__((used, noinline)) void suspendTaskTillTime(uintTime_t);
+static __attribute__((used, noinline)) bool setEvent(uint16_t eventVec);
+volatile __attribute__((naked, noinline)) void rtos_setEvent(uint16_t eventVec);
+static void __attribute__((used, noinline)) waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+volatile uint16_t __attribute__((naked, noinline)) rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
 
 
 /*
@@ -471,13 +472,13 @@ void rtos_enableIRQTimerTic(void)
 
 static bool onTimerTic(void)
 {
-    uint8_t idxSuspTask;
+    uint8_t idxSuspTask = 0;
     bool isNewActiveTask = false;
 
     /* Clock the system time. Cyclic overrun is intended. */
     ++ _time;
 
-    for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
+    while(idxSuspTask<_noSuspendedTasks)
     {
         rtos_task_t *pT = &rtos_taskAry[_suspendedTaskIdAry[idxSuspTask]];
         uint16_t eventVec;
@@ -530,13 +531,20 @@ static bool onTimerTic(void)
             _dueTaskIdAryAry[prio][_noDueTasksAry[prio]++] = _suspendedTaskIdAry[idxSuspTask];
             -- _noSuspendedTasks;
             for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
-                _suspendedTaskIdAry[idxSuspTask] = _suspendedTaskIdAry[idxSuspTask+1];
+                _suspendedTaskIdAry[u] = _suspendedTaskIdAry[u+1];
 
             /* Since a task became due there might be a change of the active task. */
             isNewActiveTask = true;
         }
+        else
+        {
+            /* Check next suspended task, which is in this case found in the next array
+               element. */ 
+            ++ idxSuspTask;
 
-    } /* End for(All suspended tasks) */
+        } /* End if(Did this suspended task become due?) */
+        
+    } /* End while(All suspended tasks) */
 
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
     /* Round-robin: Applies only to the active task. It can become inactive, however not
@@ -624,6 +632,15 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
     /* Save context onto the stack of the interrupted active task. */
     PUSH_CONTEXT_ONTO_STACK
 
+	/* We must not exclude that the zero_reg is temporarily altered in the calling,
+       arbitrarily interrupted code. To make the local code here running, we need
+       to aniticpate this situation and clear the register. */
+// @todo use __zero_reg__
+    asm volatile 
+    ("LabClrR0InOnTi: \n\t"
+     "clr r1 \n\t"
+    );
+
     /* Check for all suspended tasks if this change in time is an event for them. */
     if(onTimerTic())
     {
@@ -680,7 +697,7 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
  *   @see
  * uint16_t rtos_suspendTaskTillTime(uintTime_t)
  *   @remark
- * This function and particularly passing the return codes via a global variable will
+ * This function and particularly passing the return code via a global variable will
  * operate only if all interrupts are disabled.
  */ 
 
@@ -706,7 +723,7 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     pT->waitForAnyEvent = true;
     
     /* Put the task in the list of suspended tasks. */
-    _suspendedTaskIdAry[++_noSuspendedTasks] = _activeTaskId;
+    _suspendedTaskIdAry[_noSuspendedTasks++] = _activeTaskId;
 
     /* Record which task suspends itself for the assembly code in the calling function
        which actually switches the context. */
@@ -758,7 +775,7 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
  * having local function parameters, GCC has a problem when generating code without
  * optimization: It doesn't generate a stack frame but still does save the local parameter
  * into the (not existing) stack frame as very first assembly operation of the function
- * code. There's absolutely not work around; when the earliest code, we can write inside
+ * code. There's absolutely no work around; when the earliest code, we can write inside
  * the function is executed, the stack is already corrupted in a harzardous way. A crash is
  * unavoidable.\n
  *   A (less helpful) discussion of the issue can be found at
@@ -1057,7 +1074,7 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
     for(idxTask=0; idxTask<noDueNow; ++idxTask)
         _dueTaskIdAryAry[prio][idxTask] = _dueTaskIdAryAry[prio][idxTask+1];
     
-    /* This suspend command want a reactivation by a combination of events (which may
+    /* This suspend command wants a reactivation by a combination of events (which may
        include the timeout event).
          ++timeout: The call of the suspend function is in no way synchronized with the
        system clock. We define the delay to be a minimum and implement the resolution
@@ -1069,7 +1086,7 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
     pT->waitForAnyEvent = !all;
     
     /* Put the task in the list of suspended tasks. */
-    _suspendedTaskIdAry[++_noSuspendedTasks] = _activeTaskId;
+    _suspendedTaskIdAry[_noSuspendedTasks++] = _activeTaskId;
 
     /* Record which task suspends itself for the assembly code in the calling function
        which actually switches the context. */
@@ -1087,8 +1104,6 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
             break;
         }
     }
-    
-    
 } /* End of waitForEvent */
 
 
@@ -1283,7 +1298,7 @@ void rtos_initRTOS(void)
             understand. */
         pT->eventMask = RTOS_EVT_ABSOLUTE_TIMER;
 
-        /* Mode of waiting doen't matter as we just set one. */
+        /* Mode of waiting doesn't matter as we just set one. */
         pT->waitForAnyEvent = true;
 
         /* Any task is suspended at the beginning. No task is active, see before. */

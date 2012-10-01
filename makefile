@@ -193,7 +193,7 @@ objListWithPath = $(objList,<$(targetDir)\obj\)
 .PATH.lst = $(targetDir)\obj
 
 # Inference rules for compilation of C and C++ source files.
-cFlags =  $(cDefines) -c -g -Os -Wall -fno-exceptions -ffunction-sections           \
+cFlags =  $(cDefines) -c -g -O1 -Wall -fno-exceptions -ffunction-sections           \
           -fdata-sections -mmcu=$(targetMicroController) -DF_CPU=16000000L -MMD     \
           -DUSB_VID=null -DUSB_PID=null -DARDUINO=101                               \
           # TODO You may need to add more include paths here.                       \
@@ -246,7 +246,7 @@ download .ALWAYS: $(project).hex $(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.
     # -cWiring: The Arduino uses a quite similar protocol which unfortunately requires an
     # additional, preparatory reset command. This protocol can't therefore be applied in an
     # automated process. Here we need to use protocol Wiring instead.
-    avrdude -C$(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf -v -v                 \
+    avrdude -C$(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf -v                    \
             -p$(targetMicroController) -cWiring -P$(COM_PORT) -b115200                  \
             -D -Uflash:w:$(.SOURCE):i
 
