@@ -1,11 +1,9 @@
 #ifndef RTOS_CONFIG_INCLUDED
 #define RTOS_CONFIG_INCLUDED
 /**
- * @file rtos.config.template.h
+ * @file rtos.config.h
  * Switches to define the most relevant compile-time settings of RTuinoOS in an application
  * specific way.
- * @todo Copy this file to your application code, rename it to rtos.config.h and adjust the
- * settings to the need of your RTuinoOS application. Then remove this hint.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -41,14 +39,14 @@
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
     will always be existent and alive. Permitted range is 0..255.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_TASKS    5
+#define RTOS_NO_TASKS    3
 
 
 /** Number of distinct priorities of tasks. Since several tasks may share the same
     priority, this number is lower or equal to NO_TASKS. Permitted range is 0..NO_TASKS,
     but 1..NO_TASKS if at least one task is defined.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_PRIO_CLASSES 3
+#define RTOS_NO_PRIO_CLASSES 2
 
 
 /** Since many tasks will belong to distinct priority classes, the maximum number of tasks
@@ -115,7 +113,6 @@
     of the typedef only is to have an implementation with user-selectable number of bits
     for the integer. Therefore we choose a name similar to the common integer types. */
 typedef uint8_t uintTime_t;
-
 
 
 /*
