@@ -1,0 +1,20 @@
+/*! @mainpage Software Documentation for RTuinOS
+
+@section secIntro Introduction
+
+This is the introduction.\n
+
+@section secInstall Installation
+  Find some details of the installation in section \ref secStep1.
+
+@subsection secStep1 Step 1: Opening the box
+ 
+etc...
+
+@todo Edit the doxygen main page. The chapter should explain the
+structure of this documentation and how to use it. It may also give an
+overview on the structure of the software itself and where to find
+what.\n
+  Edit file doc\doxygen\mainpage.txt to do so.
+
+*/

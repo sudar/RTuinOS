@@ -30,6 +30,7 @@
  *   rtos_waitForEvent
  * Local functions
  *   prepareTaskStack
+ *   checkForTaskActivation
  *   onTimerTic
  *   suspendTaskTillTime
  *   setEvent
@@ -443,13 +444,20 @@ static uint8_t *prepareTaskStack( uint8_t * const pEmptyTaskStack
 void rtos_enableIRQTimerTic(void)
 
 {
-    /* Initialize the timer. Arduino (wiring.c, init()) has initialized it to count up and
-       down (phase correct PWM mode) with prescaler 64 and no TOP value (i.e. it counts
-       from 0 till MAX=255). This leads to a call frequency of 16e6Hz/64/510 = 490.1961 Hz,
-       thus about 2 ms period time.
+#ifdef __AVR_ATmega2560__
+    /* Initialization of the system timer: Arduino (wiring.c, init()) has initialized
+       timer2 to count up and down (phase correct PWM mode) with prescaler 64 and no TOP
+       value (i.e. it counts from 0 till MAX=255). This leads to a call frequency of
+       16e6Hz/64/510 = 490.1961 Hz, thus about 2 ms period time.
          Here, we found on this setting (in order to not disturb any PWM related libraries)
        and just enable the overflow interrupt. */
+    /** @todo It is also possible to do specific initialization of any other available timer
+        here and to enable the related interrupt. In which case you have to alter the name
+        of the interrupt vector in use. Modify #RTOS_ISR_SYSTEM_TIMER_TIC to do so. */
     TIMSK2 |= _BV(TOIE2);
+#else
+# error Modifcation of code for other AVR CPU required
+#endif
 
 } /* End of rtos_enableIRQTimerTic */
 
@@ -457,60 +465,32 @@ void rtos_enableIRQTimerTic(void)
 
 
 /**
- * This function is called from the system interrupt triggered by the main clock. The
- * timers of all due tasks are served and - in case they elapse - timer events are
- * generated. These events may then release some of the tasks. If so, they are placed in
- * the appropriate list of due tasks. Finally, the longest due task in the highest none
- * empty priority class is activated.
+ * When an event has been posted to one or more of the currently suspended tasks, it might
+ * easily be that some of these tasks are released and become due. This routine checks all
+ * suspended tasks and reorders them into the due task lists if they are released.\n
+ *   If there is at least one released tasks it might be that this task is of higher
+ * priority than the currently active task -- in which case it will become the new active
+ * task. This routine determines which task is now the active task.
  *   @return
- * The Boolean information is returned whether we have or not have a task switch. In most
- * invokations we won't have and therefore it's worth to optimize the code for this case:
- * Don't do the expensive switch of the stack pointers.\n
- *   The most important result of the function, the ID of the active task after leaving the
- * function, is returned by side effect: The global variable _activeTaskId is updated.
- */
+ * The Boolean information wheather the active task now is another task is returned.\n
+ *   If the function returns true, the old and the new active task's IDs are reported by
+ * side effect: They are written into the global variables _suspendedTaskId and
+ * _activeTaskId.
+ */ 
 
-static bool onTimerTic(void)
+static bool checkForTaskActivation()
 {
     uint8_t idxSuspTask = 0;
     bool isNewActiveTask = false;
-
-    /* Clock the system time. Cyclic overrun is intended. */
-    ++ _time;
 
     while(idxSuspTask<_noSuspendedTasks)
     {
         rtos_task_t *pT = &rtos_taskAry[_suspendedTaskIdAry[idxSuspTask]];
         uint16_t eventVec;
-
-        /* Check for absolute timer event. */
-        if(_time == pT->timeDueAt)
-        {
-            /* Setting the absolute timer event when it already is set looks like a task
-               overrun indication. It isn't for two reasons. First, by means of available
-               API calls the absolute timer event can't be AND combined with other events,
-               so the event will immediately change the status to due (see below), so that
-               setting it a second time will never occur. Secondary, an AND combination is
-               basically possible by the kernel and would work fine, and if it would be
-               used setting the timer event here multiple times could be an obvious
-               possible consequence, but not an indication of a task overrun - as it were
-               the other event which blocks the task.
-                 For these reasons, the code doesn't double check for repeatedly setting the
-               same event. */
-// @todo Consider to set the event only if it is requested by event mask. Consider to reset the event mask bit if the event occurred. Then the & pT->eventMask some lines below will probably become superfluous
-            pT->postedEventVec |= RTOS_EVT_ABSOLUTE_TIMER;
-        }
-
-        /* Check for delay timer event. The code here should optimally support the standard
-           situation that the counter is constantly 0. */
-        if(pT->cntDelay > 0)
-        {
-            if(-- pT->cntDelay == 0)
-                pT->postedEventVec |= RTOS_EVT_DELAY_TIMER;
-        }
-
-        /* Check if the task becomes due because of the possibly occured timer events. The
-           optimally supported case is the more probable OR combination of events. */
+        
+        /* Check if the task becomes due because of the events posted prior to calling this
+           function. The optimally supported case is the more probable OR combination of
+           events. */
         /* @todo The AND operation has been specified bad: AND must only refer to the
            postable events but not include the timer events. All postable events need to be
            set in either the mask and the vector of posted events OR any of the timer
@@ -518,7 +498,7 @@ static bool onTimerTic(void)
            makes sense to have all events uniquely in a single vector: This decision was
            mainly taken because of the homegenous implementation -- which is no longer
            given with this specification change. */
-        eventVec = pT->postedEventVec & pT->eventMask; // @todo Do we need the & term?
+        eventVec = pT->postedEventVec;
         if( (pT->waitForAnyEvent &&  eventVec != 0)
             ||  (!pT->waitForAnyEvent &&  eventVec == pT->eventMask)
           )
@@ -526,33 +506,33 @@ static bool onTimerTic(void)
             uint8_t u
                   , prio = pT->prioClass;
 
-            /* This task becomes due. Move it from the list of suspended tasks to the list
-               of due tasks of its priority class. */
+            /* This task becomes due. */
+            
+            /* Clear the current event mask; it becomes useless and will be reloaded with
+               the next suspend operation in the next active state. */
+            pT->eventMask = 0;
+            
+            /* Move the task from the list of suspended tasks to the list of due tasks of
+               its priority class. */
             _dueTaskIdAryAry[prio][_noDueTasksAry[prio]++] = _suspendedTaskIdAry[idxSuspTask];
             -- _noSuspendedTasks;
             for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
                 _suspendedTaskIdAry[u] = _suspendedTaskIdAry[u+1];
-
+            
             /* Since a task became due there might be a change of the active task. */
             isNewActiveTask = true;
         }
         else
         {
+            /* The task remains suspended. */
+            
             /* Check next suspended task, which is in this case found in the next array
                element. */ 
             ++ idxSuspTask;
 
         } /* End if(Did this suspended task become due?) */
-        
-    } /* End while(All suspended tasks) */
 
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-    /* Round-robin: Applies only to the active task. It can become inactive, however not
-       undue. If its time slice is elapsed it is put at the end of the due list in its
-       priority class. */
-    // @todo Implement round-robin. Shortcut isNewActiveTask if the active task is made undue: Now we just have to take the first one from the known list of due tasks in the given prio class - after having rotated the list contents.
-# error Round robin is not yet implemented
-#endif
+    } /* End while(All suspended tasks) */
 
     /* Here, isNewActiveTask actually means "could be new active task". Find out now if
        there's really a new active task. */
@@ -585,6 +565,81 @@ static bool onTimerTic(void)
        it. */
     return isNewActiveTask;
 
+} /* End of checkForTaskActivation */
+
+
+
+
+
+
+/**
+ * This function is called from the system interrupt triggered by the main clock. The
+ * timers of all due tasks are served and - in case they elapse - timer events are
+ * generated. These events may then release some of the tasks. If so, they are placed in
+ * the appropriate list of due tasks. Finally, the longest due task in the highest none
+ * empty priority class is activated.
+ *   @return
+ * The Boolean information is returned whether we have or not have a task switch. In most
+ * invokations we won't have and therefore it's worth to optimize the code for this case:
+ * Don't do the expensive switch of the stack pointers.\n
+ *   The most important result of the function, the ID of the active task after leaving the
+ * function, is returned by side effect: The global variable _activeTaskId is updated.
+ */
+
+static bool onTimerTic(void)
+{
+    uint8_t idxSuspTask;
+
+    /* Clock the system time. Cyclic overrun is intended. */
+    ++ _time;
+
+    /* Check for all suspended tasks if a timer event has to be posted. */
+    for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
+    {
+        rtos_task_t *pT = &rtos_taskAry[_suspendedTaskIdAry[idxSuspTask]];
+
+        /* Check for absolute timer event. */
+        if(_time == pT->timeDueAt)
+        {
+            /* Setting the absolute timer event when it already is set looks like a task
+               overrun indication. It isn't for two reasons. First, by means of available
+               API calls the absolute timer event can't be AND combined with other events,
+               so the event will immediately change the status to due (see below), so that
+               setting it a second time will never occur. Secondary, an AND combination is
+               basically possible by the kernel and would work fine, and if it would be
+               used setting the timer event here multiple times could be an obvious
+               possible consequence, but not an indication of a task overrun - as it were
+               the other event which blocks the task.
+                 For these reasons, the code doesn't double check for repeatedly setting the
+               same event. */
+            pT->postedEventVec |= (RTOS_EVT_ABSOLUTE_TIMER & pT->eventMask);
+        }
+
+        /* Check for delay timer event. The code here should optimally support the standard
+           situation that the counter is constantly 0. */
+        if(pT->cntDelay > 0)
+        {
+            if(-- pT->cntDelay == 0)
+                pT->postedEventVec |= (RTOS_EVT_DELAY_TIMER & pT->eventMask);
+        }
+    } /* End for(All suspended tasks) */
+
+
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+    /* Round-robin: Applies only to the active task. It can become inactive, however not
+       undue. If its time slice is elapsed it is put at the end of the due list in its
+       priority class. */
+    // @todo Implement round-robin. Shortcut isNewActiveTask if the active task is made undue: Now we just have to take the first one from the known list of due tasks in the given prio class - after having rotated the list contents.
+# error Round robin is not yet implemented
+#endif
+
+    /* Check if the task becomes due because of the possibly occured timer events.
+         The function has side effects: If there's a task which was suspended before and
+       which is released because of the timer events and which is of higher priority than
+       the one being active so far, the ID of the old and newly active task are written
+       into global variables _suspendedTaskId and _activeTaskId. */
+    return checkForTaskActivation();
+
 } /* End of onTimerTic. */
 
 
@@ -598,7 +653,7 @@ static bool onTimerTic(void)
  * include an inspection of all suspended tasks, whether they could become due again.
  *   The cycle time of the system time is low (typically implemented as 0..255) and
  * determines the maximum delay time or timeout for a task which suspends itself and the
- * ration of task periods of the fastest and the slowest regular task. Furthermore it
+ * ratio of the task periods of the fastest and the slowest regular task. Furthermore it
  * determines the reliability of task overrun recognition. Task overrun events in the
  * magnitude of half the cycle time won't be recognized as such.\n
  *   The unit of the time is defined only by the it triggering source and doesn't matter at
@@ -761,10 +816,12 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
  * The event mask of resuming events is returned. Since no combination with other events
  * than the elapsed system time is possible, this will always be RTOS_EVT_ABSOLUTE_TIMER.
  *   @param deltaTimeTillRelease
- * \a deltaTimeTillRelease refers to the last recent absolute time at which this task
- * had been resumed. This time is defined by the last recent call of either this function
- * or waitForEventTillTime. In the very first call of the function it refers to the point
- * in time the task was started.
+ * \a deltaTimeTillRelease specifies a time in the future at which the task will become due
+ * again. To support the most relevant use case of this function, the implementation of
+ * regular real time tasks, the time designation is relative. It refers to the last recent
+ * absolute time at which this task had been resumed. This time is defined by the last
+ * recent call of either this function or waitForEventTillTime. In the very first call of
+ * the function it refers to the point in time the task was started.
  *   @see waitForEventTillTime
  *   @remark
  * It is absolutely essential that this routine is implemented as naked and noinline. See
@@ -877,81 +934,25 @@ static bool setEvent(uint16_t postedEventVec)
     asm("");
     
     uint8_t idxSuspTask;
-    bool isNewActiveTask = false;
 
-    /* The timer events can't be set. */
+    /* The timer events can't be set manually. */
     postedEventVec &= ~(RTOS_EVT_ABSOLUTE_TIMER | RTOS_EVT_DELAY_TIMER);
     
     /* Post events on all suspended tasks which are waiting for it. */
     for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
     {
         rtos_task_t *pT = &rtos_taskAry[_suspendedTaskIdAry[idxSuspTask]];
-        uint16_t eventVec;
 
         pT->postedEventVec |= (postedEventVec & pT->eventMask);
-        
-        /* Check if the task becomes due because of the posted events. The
-           optimally supported case is the more probable OR combination of events. */
-        /* @todo The AND operation has been specified bad: AND must only refer to the
-           postable events but not include the timer events. All postable events need to be
-           set in either the mask and the vector of posted events OR any of the timer
-           events in the mask are set in the vector of posted events. Consider if it still
-           makes sense to have all events uniquely in a single vector: This decision was
-           mainly taken because of the homegenous implementation -- which is no longer
-           given with this specification change. */
-        eventVec = pT->postedEventVec & pT->eventMask;
-        if( (pT->waitForAnyEvent &&  eventVec != 0)
-            ||  (!pT->waitForAnyEvent &&  eventVec == pT->eventMask)
-          )
-        {
-            uint8_t u
-                  , prio = pT->prioClass;
+    }
 
-            /* This task becomes due. Move it from the list of suspended tasks to the list
-               of due tasks of its priority class. */
-            _dueTaskIdAryAry[prio][_noDueTasksAry[prio]++] = _suspendedTaskIdAry[idxSuspTask];
-            -- _noSuspendedTasks;
-            for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
-                _suspendedTaskIdAry[idxSuspTask] = _suspendedTaskIdAry[idxSuspTask+1];
-                
-            /* Since a task became due there might be a change of the active task. */
-            isNewActiveTask = true;
-        }
-    } /* End for(All suspended tasks) */
+    /* Check if the task becomes due because of the posted events.
+         The function has side effects: If there's a task which was suspended before and
+       which is released because of the timer events and which is of higher priority than
+       the one being active so far, the ID of the old and newly active task are written
+       into global variables _suspendedTaskId and _activeTaskId. */
+    return checkForTaskActivation();
 
-    /* Here, isNewActiveTask actually means "could be new active task". Find out now if
-       there's really a new active task. */
-    if(isNewActiveTask)
-    {
-        int8_t idxPrio;
-
-        /* Look for the task we will return to. It's the first entry in the highest
-           non-empty priority class. */
-        for(idxPrio=RTOS_NO_PRIO_CLASSES-1; idxPrio>=0; --idxPrio)
-        {
-            if(_noDueTasksAry[idxPrio] > 0)
-            {
-                _suspendedTaskId = _activeTaskId;
-                _activeTaskId    = _dueTaskIdAryAry[idxPrio][0];
-
-                /* If we only entered the outermost if clause we made at least one task
-                   due; these statements are thus surely reached. As the due becoming task
-                   might however be of lower priority it can easily be that we nonetheless
-                   don't have a task switch. */
-                isNewActiveTask = _activeTaskId != _suspendedTaskId;
-
-                break;
-            }
-        }
-    } /* if(Is there a non-zero probability for a task switch?) */
-
-    /* Here, isNewActiveTask really tells whether we have a task switch. */
-    
-    /* The calling interrupt service routine will do a context switch only if we return
-       true. Otherwise it'll simply do a "reti" to the interrupted context and continue
-       it. */
-    return isNewActiveTask;
-    
 } /* End of setEvent */
 
 

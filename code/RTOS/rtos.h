@@ -29,8 +29,9 @@
  * Defines
  */
 
-/** Switches to make feature selecting #defines readable. */
+/** Switch to make feature selecting defines readable. Here: Feature is enabled. */
 #define RTOS_FEATURE_ON     1
+/** Switch to make feature selecting defines readable. Here: Feature is disabled. */
 #define RTOS_FEATURE_OFF    0
 
 /** Some global, general purpose events and the two timer events. Used to specify the
@@ -49,7 +50,9 @@
 #define RTOS_EVT_EVENT_11       (0x0001<<11)
 #define RTOS_EVT_EVENT_12       (0x0001<<12)
 #define RTOS_EVT_EVENT_13       (0x0001<<13)
+/** Real time clock is elapsed for the task. */
 #define RTOS_EVT_ABSOLUTE_TIMER (0x0001<<14)
+/** The relative-to-start clock is elapsed for the task */
 #define RTOS_EVT_DELAY_TIMER    (0x0001<<15)
 
 
@@ -170,7 +173,7 @@ typedef struct
     /** The saved stack pointer of this task whenever it is not active. */
     uint16_t stackPointer;
     
-    uint8_t fillToPowerOfTwoSize[32-18];
+    //uint8_t fillToPowerOfTwoSize[32-18];
     
 } rtos_task_t;
 
@@ -200,6 +203,10 @@ void rtos_initRTOS(void);
 /** Suspend a task untill a specified point in time. Used to implement regular real time
     tasks. */
 volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
+
+/** Post a set of events to all suspended tasks. Suspend the current task if the events
+    release another task of higher priority. */
+volatile void rtos_setEvent(uint16_t eventVec);
 
 /** Suspend task until a combination of events appears or a timeout elapses. */
 volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);

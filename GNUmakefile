@@ -216,7 +216,7 @@ VPATH := code\RTOS code\sampleApp\$(TEST_CASE)                                  
 
 # Pattern rules for compilation of C and C++ source files.
 #   TODO You may need to add more include paths here.
-cFlags =  $(cDefines) -c -g -O1 -Wall -fno-exceptions -ffunction-sections           \
+cFlags =  $(cDefines) -c -g -Os -Wall -fno-exceptions -ffunction-sections           \
           -fdata-sections -mmcu=$(targetMicroController) -DF_CPU=16000000L -MMD     \
           -DUSB_VID=null -DUSB_PID=null -DARDUINO=101                               \
           -Wa,-a=$(patsubst %.o,%.lst,$@)                                           \
@@ -283,7 +283,7 @@ $(targetDir)\$(project).hex: $(targetDir)\$(project).elf
 .PHONY: download
 download: $(targetDir)\$(project).hex $(targetDir)\$(project).eep                       \
           $(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf
-	@echo avrdude -C$(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf -v              \
+	avrdude -C$(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf -v                    \
 	        -p$(targetMicroController) -cWiring -P$(COM_PORT) -b115200 -D -Uflash:w:$<:i
 
 # Run the complete build process with compilation, linkage and a2l and binary file
