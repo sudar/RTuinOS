@@ -165,19 +165,14 @@ C and M files in the scope of this project."
 
   ; Prepare all frequently used build commands
   (let*
-    ( (dsmake-cmd-base (concat "cd /d " project-path-win32 " & dsmake TEST_CASE=tc01 "))
-      (make-cmd-base (concat "cd /d " project-path-win32 " & make -s TEST_CASE=tc01 "))
-;      (lint-cmd-base (concat "cd /d " project-path-win32
-;                             " & lint-nt lint\\std.lnt "
-;                     ) 
-;      )
-      (doxygen-cmd-base (concat "cd /d " project-path-win32 "oc\\doxygen & "))
+    ( (dsmake-cmd-base (concat "cd /d " project-path-win32 " & dsmake TEST_CASE=tc05 "))
+      (make-cmd-base (concat "cd /d " project-path-win32 " & make -s TEST_CASE=tc05 "))
+      (doxygen-cmd-base (concat "cd /d " project-path-win32 "doc\\doxygen & "))
       (history (list (concat make-cmd-base "download")
-                     (concat make-cmd-base "bin\\DEBU\\obj\\.o")
+                     (concat make-cmd-base "bin\\DEBUG\\obj\\.o")
                      (concat make-cmd-base "build")
                      (concat make-cmd-base "rebuild")
                      (concat dsmake-cmd-base "rebuild")
-;                     (concat lint-cmd-base "code\\.cpp")
                      (concat doxygen-cmd-base "doxygen doxyfile & start html\\index.html")
                      (concat doxygen-cmd-base "start html\\index.html")
                )

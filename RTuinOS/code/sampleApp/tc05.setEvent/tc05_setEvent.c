@@ -24,6 +24,7 @@
  *   loop
  * Local functions
  *   blink
+ *   subRoutine
  *   task00_class00
  *   task01_class00
  *   task00_class01
@@ -73,89 +74,8 @@ static uint8_t _taskStack00_C0[STACK_SIZE_TASK00_C0]
              , _taskStack01_C0[STACK_SIZE_TASK01_C0]
              , _taskStack00_C1[STACK_SIZE_TASK00_C1];
 
-rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1] =
-{ /* Task 0 of priority class 0 */
-  { /* prioClass */	        0
-  , /* taskFunction */	    task00_class00
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        5
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack00_C0[0]   
-  , /* stackSize */	        sizeof(_taskStack00_C0)
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-, /* Task 1 of priority class 0 */
-  { /* prioClass */	        0
-  , /* taskFunction */	    task01_class00
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        15
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack01_C0[0]   
-  , /* stackSize */	        sizeof(_taskStack01_C0)
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-, /* Task 0 of priority class 1 */
-  { /* prioClass */	        1
-  , /* taskFunction */	    task00_class01
-  , /* taskFunctionParam */	10
-  , /* timeDueAt */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack00_C1[0]   
-  , /* stackSize */	        sizeof(_taskStack00_C1)
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-, /* Idle Task */
-  { /* prioClass */	        0
-  , /* taskFunction */      NULL
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        255
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    NULL
-  , /* stackSize */	        0
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-}; /* End of initialization of task array. */
- 
+rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1]; 
+
 static volatile uint16_t noLoopsTask00_C0 = 0;
 static volatile uint16_t noLoopsTask01_C0 = 0;
 static volatile uint16_t noLoopsTask00_C1 = 0;
@@ -163,6 +83,7 @@ static volatile uint16_t noLoopsTask00_C1 = 0;
 /*
  * Function implementation
  */
+
 
 /**
  * Trivial routine that flashes the LED a number of times to give simple feedback. The
@@ -190,6 +111,42 @@ static void blink(uint8_t noFlashes)
 
 
 
+
+/**
+ * A sub routine which has the only meaning of consuming stack - in order to test the stack
+ * usage computation.
+ *   @param nestedCalls
+ * The routine will call itself recursively \a nestedCalls-1 times. In total the stack will
+ * be burdened by \a nestedCalls calls of this routine.
+ *   @remark
+ * The optimizer removes the recursion completely. The stack-use effect of the sub-routine
+ * is very limited, but still apparent the first time it is called.
+ */ 
+
+static volatile uint8_t _touchedBySubRoutine; /* To discard removal of recursion by
+                                                 optimization. */
+static __attribute__((used, noinline)) void subRoutine(uint8_t);
+static void subRoutine(uint8_t nestedCalls)
+{
+    volatile uint8_t stackUsage[43];
+    if(nestedCalls > 1)
+    {
+        _touchedBySubRoutine += 2;
+        stackUsage[0] = 
+        stackUsage[sizeof(stackUsage)-1] = 0;
+        subRoutine(nestedCalls-1);    
+    }
+    else
+    {
+        ++ _touchedBySubRoutine;
+        stackUsage[0] = 
+        stackUsage[sizeof(stackUsage)-1] = nestedCalls;
+    }
+} /* End of subRoutine */
+
+
+
+
 /**
  * One of the low priority tasks in this test case.
  *   @param initCondition
@@ -198,6 +155,8 @@ static void blink(uint8_t noFlashes)
  * A task function must never return; this would cause a reset.
  */ 
 
+static uint16_t _task00_C0_cntWaitTimeout = 0;
+
 static void task00_class00(uint16_t initCondition)
 
 {
@@ -205,9 +164,31 @@ static void task00_class00(uint16_t initCondition)
     {
         ++ noLoopsTask00_C0;
 
-        /* This tasks cycles with about 200ms. */
-        rtos_delay(80);
-        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 100);
+        /* To see the stack reserve computation working we invoke a nested sub-routine
+           after a while. */
+        if(millis() > 20000ul)
+            subRoutine(1);
+        if(millis() > 30000ul)
+            subRoutine(2);
+        if(millis() > 40000ul)
+            subRoutine(3);
+        
+        /* Wait for an event from the idle task. The idle task is asynchrounous and its
+           speed depends on the system load. The behavior is thus not perfectly
+           predictable. Let's have a look on the overrrun counter for this task. */
+        if(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_03 //| RTOS_EVT_DELAY_TIMER
+                            , /* all */ false
+                            , /* timeout */ 40 /* about 80 ms */
+                            )
+           == RTOS_EVT_DELAY_TIMER
+          )
+        {
+            ++ _task00_C0_cntWaitTimeout;
+        }
+        
+        //rtos_delay(80);
+        /* This tasks cycles with about 500ms. */
+        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 0);
     }
 } /* End of task00_class00 */
 
@@ -262,23 +243,20 @@ static void task01_class00(uint16_t initCondition)
 static void task00_class01(uint16_t initCondition)
 
 {
-    /* At the moment all tasks are started via absolute timer event. This is a useless
-       limitation and should become configurable for the application. Then we would wait
-       for our event right from the beginning. */
-//    ASSERT(initCondition == RTOS_EVT_EVENT_00)
-    ASSERT(initCondition == RTOS_EVT_ABSOLUTE_TIMER)
+    ASSERT(initCondition == RTOS_EVT_EVENT_00)
     
     /* This tasks cycles once it is awaked by the event. */
+    do
+    {
+        /* As long as we stay in the loop we didn't see a timeout. */
+        ++ noLoopsTask00_C1;
+    }
     while(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_00 | RTOS_EVT_DELAY_TIMER
                            , /* all */ false
                            , /* timeout */ 50+5 /* about 100 ms */
                            )
           == RTOS_EVT_EVENT_00
-         )
-    {
-        /* As long as we stay in the loop we didn't see a timeout. */
-        ++ noLoopsTask00_C1;
-    }
+         );
     
     /* We must never get here. Otherwise the test case failed. In compilation mode
        PRODUCTION, when there's no assertion, we will see an immediate reset because we
@@ -307,6 +285,48 @@ void setup(void)
        operability of code. */
     pinMode(LED, OUTPUT);
     
+    /* Task 0 of priority class 0 */
+    rtos_initializeTask( /* idxTask */          0
+                       , /* taskFunction */     task00_class00
+                       , /* prioClass */        0
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+                       , /* timeRoundRobin */
+#endif
+                       , /* pStackArea */       &_taskStack00_C0[0]
+                       , /* stackSize */        sizeof(_taskStack00_C0)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     0
+                       );
+
+    /* Task 1 of priority class 0 */
+    rtos_initializeTask( /* idxTask */          1
+                       , /* taskFunction */     task01_class00
+                       , /* prioClass */        0
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+                       , /* timeRoundRobin */
+#endif
+                       , /* pStackArea */       &_taskStack01_C0[0]
+                       , /* stackSize */        sizeof(_taskStack01_C0)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     15
+                       );
+
+    /* Task 0 of priority class 1 */
+    rtos_initializeTask( /* idxTask */          2
+                       , /* taskFunction */     task00_class01
+                       , /* prioClass */        1
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+                       , /* timeRoundRobin */
+#endif
+                       , /* pStackArea */       &_taskStack00_C1[0]
+                       , /* stackSize */        sizeof(_taskStack00_C1)
+                       , /* startEventMask */   RTOS_EVT_EVENT_00
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     0
+                       );
+
     Serial.print("sizeof(rtos_task_t): "); 
     Serial.println(sizeof(rtos_task_t)); 
     
@@ -326,11 +346,33 @@ void setup(void)
 
 void loop(void)
 {
+    uint8_t idxStack;
+    
+    /* An event can be posted even if nobody is listening for it. */
+    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_04);
+
+    /* This event will release task 0 of class 0. However we do not get here again fast
+       enough to avoid all timeouts in that task. */
+    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
+
     Serial.println("RTuinOS is idle");
     Serial.print("noLoopsTask00_C0: "); Serial.println(noLoopsTask00_C0);
+    Serial.print("_task00_C0_cntWaitTimeout: "); Serial.println(_task00_C0_cntWaitTimeout);
     Serial.print("noLoopsTask01_C0: "); Serial.println(noLoopsTask01_C0);
     Serial.print("noLoopsTask00_C1: "); Serial.println(noLoopsTask00_C1);
-    blink(4);
+    
+    /* Look for the stack usage. */
+    for(idxStack=0; idxStack<RTOS_NO_TASKS; ++idxStack)
+    {
+        Serial.print("Stack reserve of task");
+        Serial.print(idxStack);
+        Serial.print(": ");
+        Serial.print(rtos_getStackReserve(idxStack));
+        Serial.print(", task overrun: ");
+        Serial.println(rtos_getTaskOverrunCounter(idxStack, /* doReset */ false));
+    }
+    
+    blink(2);
     
 } /* End of loop */
 

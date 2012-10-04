@@ -20,14 +20,21 @@
  *
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
- *
- * Module interface
- *   ISR
+ */
+/* Module interface
+ *   rtos_initializeTask
  *   rtos_initRTOS (internally called only)
- *   rtos_enableIRQTimerTic
+ *   rtos_enableIRQTimerTic (callback with local default implementation)
+ *   rtos_enableIRQUser00 (callback without default implementation)
+ *   rtos_enableIRQUser00 (callback without default implementation)
+ *   ISR(RTOS_ISR_SYSTEM_TIMER_TIC)
  *   rtos_suspendTaskTillTime
+ *   ISR(RTOS_ISR_USER_00)
+ *   ISR(RTOS_ISR_USER_01)
  *   rtos_setEvent
  *   rtos_waitForEvent
+ *   rtos_getTaskOverrunCounter
+ *   rtos_getStackReserve
  * Local functions
  *   prepareTaskStack
  *   checkForTaskActivation
@@ -43,6 +50,7 @@
  */
 
 #include <arduino.h>
+#include "rtos_assert.h"
 #include "rtos.h"
 
 
@@ -266,6 +274,12 @@
 } /* End of macro PUSH_RET_CODE_OF_CONTEXT_SWITCH */
 
 
+/* Two nested macros are used to convert a constant expression to a string which can be
+   used e.g. as part of some inline assembler code.
+     If for example PI is defined to be (355/113) you could use STR(PI) instead of
+   "(355/113)" in the source code. ARG2STR is not called directly. */
+#define ARG2STR(x) #x
+#define STR(x) ARG2STR(x)
 
 /*
  * Local type definitions
@@ -673,7 +687,6 @@ static bool onTimerTic(void)
  */
 
 ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
-
 {
     /* An ISR must not occur while we're updating the global data and checking for a
        possible task switch. To be more precise: The call of onTimerTic would just require
@@ -771,9 +784,20 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     for(idxTask=0; idxTask<noDueNow; ++idxTask)
         _dueTaskIdAryAry[prio][idxTask] = _dueTaskIdAryAry[prio][idxTask+1];
     
-    /* This suspend command want a reactivation at a certain time. */
-    // @todo Here, we need some code for task overrun detection. The new time must not more than half a cycle in the future.
-    pT->timeDueAt += deltaTimeTillRelease;
+    /* This suspend command want a reactivation at a certain time. The new time is assigned
+       by the += in the conditional expression.
+         Task overrun detection: The new time must not more than half a cycle in the
+       future. The test uses a signed comparison. The unsigned comparison >= 0x80 would be
+       equivalent but probably less performant (TBC). */
+    if((intTime_t)((pT->timeDueAt+=deltaTimeTillRelease) - _time) <= 0)
+    {
+        if(pT->cntOverrun <= 0xff)
+            ++ pT->cntOverrun;
+        
+        /* The wanted point in time is over. We do the best recocery which is possible: Let
+           the task become due in the very next timer tic. */
+        pT->timeDueAt = _time+1;
+    }
     pT->eventMask = RTOS_EVT_ABSOLUTE_TIMER;
     pT->waitForAnyEvent = true;
     
@@ -811,7 +835,9 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
  * at the end of the infinite loop which contains its functional code with a constant time
  * value. This (fixed) time value becomes the sample time of the task. This behavior is
  * opposed to a delay or sleep function: The execution time of the task is no time which
- * additionally elapses between two task resumes.
+ * additionally elapses between two task resumes.\n
+ *   The idle task can't be suspended. If it calls this function a crash would be the
+ * immediate result.
  *   @return
  * The event mask of resuming events is returned. Since no combination with other events
  * than the elapsed system time is possible, this will always be RTOS_EVT_ABSOLUTE_TIMER.
@@ -900,6 +926,9 @@ volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     ( "reti \n\t"
     );
     
+    /* This statement is never reached. Just to avoid the warning. */
+    return 0;
+    
 } /* End of rtos_suspendTaskTillTime. */
 
 
@@ -958,17 +987,96 @@ static bool setEvent(uint16_t postedEventVec)
 
 
 
+
+#if RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON
 /**
- * A task may post an event. The event is broadcasted to all suspended tasks which are
- * waiting for it. An event is not saved beyond that. If a task suspends and starts waiting
- * for an event which has been posted by another task just before, it'll wait forever and
- * never be resumed.\n
+ * A conditionally compiled interrupt function. If #RTOS_USE_APPL_INTERRUPT_00 is set to
+ * #RTOS_FEATURE_ON, this function implements an interrupt service routine, which posts
+ * event #RTOS_EVT_ISR_USER_00 every time the interrupt occurs.\n
+ *   The use case is to have a task (of high priority) which implements an infinite loop.
+ * At the beginning of each loop cycle the task will suspend itself waiting for this event
+ * (or maybe a timeout). The body of the loop will then handle the interrupt.\n
+ *   In the AVR environment, an ISR can't be compiled independently of the actual interrupt
+ * source it might be connected to. Therefore, to make this code compilable, the name of
+ * the interrupt vector to be used has to be specified. Please set #RTOS_ISR_USER_00 to the
+ * desired vector's name, like TIMER3_COMPA_vect. The supported vector names can be derived
+ * from table 14-1 on page 105 in the CPU manual, doc2549.pdf (see http://www.atmel.com)\n
+ *   CAUTION: There's only one ISR for each interrupt source. If you'd e.g. use
+ * TIMER0_OVF_vect, you'd disable the time measurement routines of Arduino. Functions like
+ * \a millis() or \a delay() would no longer work. Due to their global sphere of influence
+ * interrupts must be chosen very carefully.
+ *   @remark
+ * The implementation of this ISR makes use of the code of the task called routine \a
+ * rtos_setEvent. Both routines need to be maintained in strict accordance.
+ *   @see
+ * void rtos_setEvent(uint16_t)
+ */
+
+ISR(RTOS_ISR_USER_00, ISR_NAKED)
+{
+    /* The program counter as first element of the context is already on the stack (by
+       calling this function). Save rest of context onto the stack of the interrupted
+       active task. */ 
+    PUSH_CONTEXT_ONTO_STACK
+
+    /* The implementation of this ISR makes use of the code of the task called routine
+       rtos_setEvent. (Both routines need to be maintained in strict accordance.) That
+       function is executed with a constant parameter (r24/25) -- the event mask just
+       containing the event which is posted by this interrupt. */
+    asm volatile
+    ( "ldi r24,lo8(" STR(RTOS_EVT_ISR_USER_00) ") \n\t"
+      "ldi r25,hi8(" STR(RTOS_EVT_ISR_USER_00) ") \n\t"
+      "rjmp LabelEntrySetEventForISR \n\t"
+    );
+} /* End of ISR(RTOS_ISR_USER_00) */
+
+#endif /* RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON */
+
+
+
+
+#if RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON
+/**
+ * A conditionally compiled interrupt function. If #RTOS_USE_APPL_INTERRUPT_01 is set to
+ * #RTOS_FEATURE_ON, this function implements an interrupt service routine, which posts
+ * event #RTOS_EVT_ISR_USER_01 every time the interrupt occurs.\n
+ *   See documentation of ISR for application interrupt 0 for more details.
+ */
+
+ISR(RTOS_ISR_USER_01, ISR_NAKED)
+{
+    /* The program counter as first element of the context is already on the stack (by
+       calling this function). Save rest of context onto the stack of the interrupted
+       active task. */ 
+    PUSH_CONTEXT_ONTO_STACK
+
+    /* The implementation of this ISR makes use of the code of the task called routine
+       rtos_setEvent. (Both routines need to be maintained in strict accordance.) That
+       function is executed with a constant parameter (r24/25) -- the event mask just
+       containing the event which is posted by this interrupt. */
+    asm volatile
+    ( "ldi r24,lo8(" STR(RTOS_EVT_ISR_USER_01) ") \n\t"
+      "ldi r25,hi8(" STR(RTOS_EVT_ISR_USER_01) ") \n\t"
+      "rjmp LabelEntrySetEventForISR \n\t"
+    );
+} /* End of ISR(RTOS_ISR_USER_01) */
+
+#endif /* RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON */
+
+
+
+
+/**
+ * A task (including the idle task) may post an event. The event is broadcasted to all
+ * suspended tasks which are waiting for it. An event is not saved beyond that. If a task
+ * suspends and starts waiting for an event which has been posted by another task just
+ * before, it'll wait forever and never be resumed.\n
  *   The posted event may release another task, which may be of higher priority as the
  * event posting task. In this case \a setEvent will cause a task switch. The calling task
- * stays due but stops to be the active task. It does not become suspended. The activated
- * task will resume by coming out of the suspend command it had been invoked to wait for
- * this event. The return value of this suspend command will then tell about the event set
- * here.\n
+ * stays due but stops to be the active task. It does not become suspended (this is why
+ * even the idle task may call this function). The activated task will resume by coming out
+ * of the suspend command it had been invoked to wait for this event. The return value of
+ * this suspend command will then tell about the event set here.\n
  *   If no task of higher priority is released by the posted event the calling task will be
  * continued immediately after execution of this method. In this case \a setEvent behaves
  * like any ordinary sub-routine.
@@ -983,6 +1091,11 @@ static bool setEvent(uint16_t postedEventVec)
  *   @remark
  * In optimization level 0 GCC has a problem with code generation for naked functions. See
  * function \a rtos_suspendTaskTillTime for details.
+ *   @remark
+ * The implementation of this function is reused on machine code level by the
+ * implementation of the application interrupt service routines \a ISR(RTOS_ISR_USER_nn).
+ * This function needs to be maintained in strict accordance with the implementation of the
+ * ISRs.
  */
 #ifndef __OPTIMIZE__
 # error This code must not be compiled with optimization off. See source code comments for more
@@ -1002,11 +1115,15 @@ volatile void rtos_setEvent(uint16_t eventVec)
        this will be restored on function exit. */ 
     PUSH_CONTEXT_ONTO_STACK
 
-    /* Here, we could double-check _activeTaskId for the idle task ID and return without
-       context switch if it is active. (The idle task has illicitly called a task
-       management command.) However, all implementation rates performance higher than
-       failure tolerance, and so do we here. */
-       
+    /* The next assembler statement has not direct impact but permits to jump on machine
+       code level into the middle of this function. The application ISRs make use of this:
+       They push the interrupted context, load the parameter register pair r24/25 with the
+       event they are assigned to and jump here to reuse the code for posting an event and
+       probably initiate a task switch. */
+    asm volatile
+    ( "LabelEntrySetEventForISR: \n\t"
+    );
+
     /* Check for all suspended tasks if the posted events will release them.
          The actual implementation of the function's logic is placed into a sub-routine in
        order to benefit from the compiler generated stack frame for local variables (in
@@ -1115,7 +1232,9 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * combination of events occur.\n
  *   A task is suspended in the instance of calling this method. It specifies a list of
  * events. The task becomes due again, when either the first one or all of the specified
- * events have been posted by other tasks.
+ * events have been posted by other tasks.\n
+ *   The idle task can't be suspended. If it calls this function a crash would be the
+ * immediate result.
  *   @return
  * The event mask of resuming events is returned. See \a rtos.h for a list of known events.
  *   @param eventMask
@@ -1135,13 +1254,13 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  *   Even specifying 0 will suspend the task a short time and give others the chance to
  * become active.\n
  *   If RTOS_EVT_DELAY_TIMER is not set in the event mask, this parameter doesn't matter.
- *   @see uint16_t rtos_suspendTaskTillTime(uintTime_t)
  *   @remark
  * It is absolutely essential that this routine is implemented as naked and noinline. See
  * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
  *   @remark
  * In optimization level 0 GCC has a problem with code generation for naked functions. See
  * function \a rtos_suspendTaskTillTime for details.
+ *   @see uint16_t rtos_suspendTaskTillTime(uintTime_t)
  */
 #ifndef __OPTIMIZE__
 # error This code must not be compiled with optimization off. See source code comments for more
@@ -1190,7 +1309,218 @@ volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t tim
     ( "reti \n\t"
     );
     
+    /* This statement is never reached. Just to avoid the warning. */
+    return 0;
+
 } /* End of rtos_waitForEvent */
+
+
+
+
+
+
+
+/**
+ * Get the current value of the overrun counter of a given task.\n
+ *   The value is a limited (i.e. it won't cycle around) 8 Bit counter. This is considered
+ * satisfying as any task overrun is a kind of error and should not happen in a real
+ * application (with other words: even a Boolean information would maybe enough).
+ * Furthermore, if a larger range is required, one can regularly ask for this information,
+ * accumulate it and reset the value here to zero at the same time.\n
+ *   The function may be called from a task or from the idle task.
+ *   @return
+ * Get the current value of the overrun counter.
+ *   @param idxTask
+ * The index of the task the overrun counter if which is to be returned. The index is the
+ * same as used when initializing the tasks (see rtos_initializeTask).
+ *   @param doReset
+ * Boolean flag, which tells whether to reset the value.\n
+ *   Caution, when setting this to true, reading and resetting the value needs to become an
+ * atomic operation, which requires a critical section. This is significantly more
+ * expensive than just reading the value.
+ *   @see
+ * void rtos_initializeTask()
+ */
+
+uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, bool doReset)
+{
+    if(doReset)
+    {
+        uint8_t retCode;
+        
+        /* Read and reset should be atomic for data consistency if the application wants to
+           accumulate the counter values in order to extend the counter's range. */
+        cli();
+        {
+            retCode = rtos_taskAry[idxTask].cntOverrun;    
+            rtos_taskAry[idxTask].cntOverrun = 0;
+        }
+        sei();
+        
+        return retCode;
+    }
+    else
+    {
+        /* Reading an 8 Bit word is an atomic operation as such, no additional lock
+           operation needed. */
+        return rtos_taskAry[idxTask].cntOverrun;
+    }
+} /* End of rtos_getTaskOverrunCounter */
+
+
+
+
+/**
+ * Compute how many bytes of the stack area of a task are still unsued. If the value is
+ * requested after an application has been run a long while and has been forced to run
+ * through all its paths many times, it may be used to optimize the static stack allocation
+ * of the task. The function is useful only for diagnosis purpose as there's no chance to
+ * dynamically increase or decrease the stack area at runtime.\n
+ *   The function may be called from a task or from the idle task.\n
+ *   The alogorithm is as follows: The unused part of the stack is initialized with a
+ * specific pattern byte. This routine counts the number of subsequent pattern bytes down
+ * from the top of the stack area. This number is returned.\n
+ *   The returned result must not be trusted too much: It could of course be that a pattern
+ * byte is found not because of teh initialization but because it has been pushed onto the
+ * stack - in which case the return value is too great (too optimistic) by one. The
+ * probability that this happens is significanly greater than zero. The chance that two
+ * pattern bytes had been pushed is however much less and the probability of three, four,
+ * five such bytes in sequence is neglectable. (Except the irrelevant case you initialize
+ * an automatic array variable with all pattern bytes.) Any stack size optimization based
+ * on this routine should therefore subtract e.g. five bytes from the returned reserve and
+ * diminish the stack outermost by this modified value.\n
+ *   Be careful with stack size optimization based on this routine: Even if the application
+ * ran a long time there's a non-zero probability that there has not yet been a system
+ * timer interrupt in the very instance that the code of the task of interest was busy in
+ * the deepest nested sub-routine, i.e. when having the largest stack consumption. A good
+ * suggestion is to have another 36 Byte of reserve - this is the stack consumption if an
+ * interrupt occurs.\n
+ *   Recipe: Run your application a long time, ensure that it ran through all paths, get
+ * the stack reserve from this routine, subtract 5+36 Byte and diminish the stack by this
+ * value.
+ *   @return
+ * The number of still unsused stack bytes. See function description for details.
+ *   @param idxTask
+ * The index of the task the stack usage has to be investigated for. The index is the
+ * same as used when initializing the tasks (see rtos_initializeTask).
+ *   @remark
+ * The computation is a linear search for the first non-pattern byte and thus relatively
+ * expensive. It's suggested to call it only in some specific diagnosis compilation or
+ * occasionally from the idle task.
+ *   @see
+ * void rtos_initializeTask()
+ */
+
+uint16_t rtos_getStackReserve(uint8_t idxTask)
+{
+    uint8_t *sp = rtos_taskAry[idxTask].pStackArea;
+    
+    /* The bottom of the stack is always initialized with 0, which must not be the pattern
+       byte. Therefore we don't need a limitation of the search loop -- it'll always find a
+       non-pattern byte in the stack area. */
+    while(*sp == UNUSED_STACK_PATTERN)
+        ++ sp;
+
+    return sp - rtos_taskAry[idxTask].pStackArea;
+    
+} /* End of rtos_getStackReserve */
+
+
+
+
+/**
+ * Initialize the contents of a single task object.\n
+ *   This routine needs to be called from within setup() once for each task. The number of
+ * tasks has been defined by the application using #RTOS_NO_TASKS but the array of this
+ * number of task objects is still empty. The system will crash if this routine is not
+ * called properly for each of the tasks before the RTOS actually starts.\n
+ *   This function must never be called outside of setup(). A crash would result otherwise.
+ *   @param idxTask
+ * The index of the task in the range 0..RTOS_NO_TASKS-1. The order of tasks barely
+ * matters.
+ *   @param taskFunction
+ * The task function as a function pointer. It is used once and only once: The task
+ * function is invoked the first time the task becomes active and must never end. A
+ * return statement would cause an immediate reset of the controller.
+ *   @param prioClass
+ * The priority class this task belongs to. Priority class 255 has the highest
+ * possible priority and the lower the value the lower the priority.
+ *   @param timeRoundRobin
+ * The maximum time a task may be activated if it is operated in round-robin mode. The
+ * range is 1..max_value(\a uintTime_t).\n
+ *   Specify a maximum time of 0 to switch round robin mode off for this task.\n
+ *   Remark: Round robin like behavior is given only if there are several tasks in the
+ * same priority class and all tasks of this class have the round-robin mode
+ * activated. Otherwise it's just the limitation of execution time for an individual
+ * task.\n
+ *   This parameter is available only if #RTOS_ROUND_ROBIN_MODE_SUPPORTED is set to
+ * #RTOS_FEATURE_ON.
+ *   @param pStackArea
+ * The pointer to the preallocated stack area of the task. The area needs to be
+ * available all the RTOS runtime. Therefore dynamic allocation won't pay off. Consider
+ * to use the address of any statically defined array. There's no alignment
+ * constraint.
+ *   @param stackSize
+ * The size in Byte of the memory area \a *pStackArea, which is reserved as stack for
+ * the task. Each task may have an individual stack size.
+ *   @param startEventMask
+ * The condition under which the task becomes due the very first time is specified in the
+ * same way as at runtime when using the suspend command rtos_waitForEvent: A set of events
+ * to wait for is specified, the Boolean information if any event will activate the task or
+ * if all are required and finally a timeout in case no such events would be posted.\n
+ *   This parameter specifies the set of events as a bit vector.
+ *   @param startByAllEvents
+ * If true, all specified events must be posted before the task is activated. Otherwise the
+ * first event belonging to the specified set will activate the task.
+ *   @param startTimeout
+ * The task will be started at latest after \a startTimeout system timer tics if only the
+ * event #RTOS_EVT_DELAY_TIMER is in the set of specified events. If it is not, the task
+ * will not be activated by a time condition.
+ *   @see void rtos_initRTOS(void)
+ *   @see uint16_t rtos_waitForEvent(uint16_t, bool, uintTime_t)
+ *   @remark
+ */
+
+void rtos_initializeTask( uint8_t idxTask
+                        , rtos_taskFunction_t taskFunction
+                        , uint8_t prioClass
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+                        , uintTime_t timeRoundRobin
+#endif
+                        , uint8_t * const pStackArea
+                        , uint16_t stackSize
+                        , uint16_t startEventMask
+                        , bool startByAllEvents
+                        , uintTime_t startTimeout
+                        )
+{
+    rtos_task_t * const pT = &rtos_taskAry[idxTask];
+    
+    /* Remember task function and stack allocation. */
+    pT->taskFunction = taskFunction;
+    pT->pStackArea   = pStackArea;
+    pT->stackSize    = stackSize; 
+
+    /* To which priority class does the task belong? */
+    pT->prioClass = prioClass;
+    
+    /* Set the start condition. 
+         ++ startTimer: Immediate start with the first timer tic requires an initial
+       counter value of 1. (0 means not to count at all.) */
+    ASSERT(startEventMask != 0);
+    ASSERT((startEventMask & RTOS_EVT_ABSOLUTE_TIMER) == 0);
+    pT->eventMask       = startEventMask;
+    pT->waitForAnyEvent = !startByAllEvents;
+    if((uintTime_t)(startTimeout+1) != 0)
+        ++ startTimeout;
+    pT->cntDelay = startTimeout;
+    
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+    /* The maximum execution time in round robin mode. */
+    pT->timeRoundRobin = timeRoundRobin;
+#endif    
+
+} /* End of rtos_initializeTask */
 
 
 
@@ -1228,7 +1558,7 @@ volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t tim
  * or any other of the tasks defined by your application.\n
  *   This function never returns. No task must ever return, a reset will be the immediate
  * consequence. Your part of the idle task, function \a loop, may and should return, but
- * the actual idle task as a whole won't change neither. Instead it'll repeat to call \a
+ * the actual idle task as a whole won't terminate neither. Instead it'll repeat to call \a
  * loop.
  */
 
@@ -1237,6 +1567,12 @@ void rtos_initRTOS(void)
 {
     uint8_t idxTask, idxClass;
     rtos_task_t *pT;
+
+#ifdef DEBUG
+    /* We add some code to double-check that rtos_initializeTask has been invoked for each
+       of the tasks. */
+    memset(/* dest */ rtos_taskAry, /* val */ 0x00, /* len */ sizeof(rtos_taskAry));
+#endif
 
     /* Give the application the chance to do all its initialization -- regardless of RTOS
        related or whatever else. After return, the task array needs to be properly
@@ -1248,12 +1584,15 @@ void rtos_initRTOS(void)
     {
         pT = &rtos_taskAry[idxTask];
 
+        ASSERT(pT->taskFunction != NULL  &&  pT->pStackArea != NULL  &&  pT->stackSize >= 50);
+
         /* Prepare the stack of the task and store the initial stack pointer value. */
         pT->stackPointer = (uint16_t)prepareTaskStack( pT->pStackArea
                                                      , pT->stackSize
                                                      , pT->taskFunction
                                                      );
-#if 1
+#ifdef DEBUG
+# if false
         {
             uint16_t i;
 
@@ -1276,11 +1615,13 @@ void rtos_initRTOS(void)
             }
             Serial.println("");
         }
+# endif
 #endif
-        /* The delay counter will only be set by some of the suspend commands issued by the
-           task itself. */
-        pT->cntDelay = 0;
 
+        /* The absolute timer is not enabled at the beginning, the value here actually
+           doesn't matter. */
+        pT->timeDueAt = 0;
+        
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
         /* The round robin counter is loaded to its maximum when the tasks becomes due.
            Now, the value doesn't matter. */
@@ -1289,19 +1630,9 @@ void rtos_initRTOS(void)
         /* No events have been posted to this task yet. */
         pT->postedEventVec = 0;
 
-        /* Initially, all tasks are suspended and will be awaked by an absolute time event.
-           This strategy avoids the need for an additional, explicitly invoked context
-           switch. Just start the timer interrupt and let it do a few tics and the task
-           will run. The application can determine how many tics (including the very first)
-           in order to spraed the tasks over the time grid. */
-        /** @todo Consider to have a delay event as initial event. The user would
-            initialize the delay time. This is basically equivalent but could be easier to
-            understand. */
-        pT->eventMask = RTOS_EVT_ABSOLUTE_TIMER;
-
-        /* Mode of waiting doesn't matter as we just set one. */
-        pT->waitForAnyEvent = true;
-
+        /* Initialize overrun counter. */
+        pT->cntOverrun = 0;
+        
         /* Any task is suspended at the beginning. No task is active, see before. */
         _suspendedTaskIdAry[idxTask] = idxTask;
 
@@ -1314,13 +1645,20 @@ void rtos_initRTOS(void)
        function defined. We mainly need to storage location for the stack pointer. */
     pT = &rtos_taskAry[IDLE_TASK_ID];
     pT->stackPointer = 0;           /* Used only at de-activation. */
+    pT->timeDueAt = 0;              /* Not used at all. */
     pT->cntDelay = 0;               /* Not used at all. */
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
     pT->cntRoundRobin = 0;          /* Not used at all. */
 #endif
-    pT->postedEventVec = 0;         /* Not used at all. */
+
+    /* The next element always needs to be 0. Otherwise any interrupt or a call of setEvent
+       would corrupt the stack assuming that a suspend command would require a return
+       code. */
+    pT->postedEventVec = 0;
+    
     pT->eventMask = 0;              /* Not used at all. */
     pT->waitForAnyEvent = false;    /* Not used at all. */
+    pT->cntOverrun = 0;             /* Not used at all. */
 
     /* Any task is suspended at the beginning. No task is active, see before. */
     for(idxClass=0; idxClass<RTOS_NO_PRIO_CLASSES; ++idxClass)
@@ -1330,6 +1668,14 @@ void rtos_initRTOS(void)
 
     /* All data is prepared. Let's start the IRQ which clocks the system time. */
     rtos_enableIRQTimerTic();
+    
+    /* Call the application to let it configure its interrupt sources. */
+#if RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON
+    rtos_enableIRQUser00();
+#endif
+#if RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON
+    rtos_enableIRQUser01();
+#endif
 
     /* From here, all further code implicitly becomes the idle task. */
     while(true)
@@ -1338,13 +1684,8 @@ void rtos_initRTOS(void)
 } /* End of rtos_initRTOS */
 
 
-/* setEvent: Needs to push all, as it doesn't suspend a task. It can however yield a task
-   switch as the set event may release a task of higher priority. */
-
-
 /*
-TODO: Implement basic suspend (absolute timer)
-      Implement initialization of data structures
-      ... and we can already make it run.
-      Implement other suspends and postEvent
+TODO: implement waitForEventsUntillTime
+              , EnterLeaveCriticalSection (cli/sei and only TIMER2)
+              , get/setRoundRobin?
 */
