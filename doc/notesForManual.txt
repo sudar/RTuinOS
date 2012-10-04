@@ -144,3 +144,5 @@ taskReadADC()
         globalY = antiAliasFilter(x);
     }        
 }
+
+DEBUG compilation and particularly ASSERT requires initialization of Serial

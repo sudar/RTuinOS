@@ -34,22 +34,53 @@
 /** Switch to make feature selecting defines readable. Here: Feature is disabled. */
 #define RTOS_FEATURE_OFF    0
 
-/** Some global, general purpose events and the two timer events. Used to specify the
-    resume condition when suspending a task. */
-#define RTOS_EVT_EVENT_00       (0x0001<<00)
-#define RTOS_EVT_EVENT_01       (0x0001<<01)
-#define RTOS_EVT_EVENT_02       (0x0001<<02)
-#define RTOS_EVT_EVENT_03       (0x0001<<03)
-#define RTOS_EVT_EVENT_04       (0x0001<<04)
-#define RTOS_EVT_EVENT_05       (0x0001<<05)
-#define RTOS_EVT_EVENT_06       (0x0001<<06)
-#define RTOS_EVT_EVENT_07       (0x0001<<07)
-#define RTOS_EVT_EVENT_08       (0x0001<<08)
-#define RTOS_EVT_EVENT_09       (0x0001<<09)
+/* Some global, general purpose events and the two timer events. Used to specify the
+   resume condition when suspending a task.
+     Conditional definition: If the application defines an interrupt which triggers an
+   event, the same event gets a deviating name. */
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_00       (0x0001<<0)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_01       (0x0001<<1)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_02       (0x0001<<2)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_03       (0x0001<<3)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_04       (0x0001<<4)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_05       (0x0001<<5)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_06       (0x0001<<6)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_07       (0x0001<<7)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_08       (0x0001<<8)
+/** General purpose event, posted explicitly by rtos_setEvent. */
+#define RTOS_EVT_EVENT_09       (0x0001<<9)
+/** General purpose event, posted explicitly by rtos_setEvent. */
 #define RTOS_EVT_EVENT_10       (0x0001<<10)
+/** General purpose event, posted explicitly by rtos_setEvent. */
 #define RTOS_EVT_EVENT_11       (0x0001<<11)
-#define RTOS_EVT_EVENT_12       (0x0001<<12)
-#define RTOS_EVT_EVENT_13       (0x0001<<13)
+
+/* The name of the next event depends on the configuration of RTuinOS. */
+#if RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON
+/** This event is posted by the application defined ISR 00. */
+# define RTOS_EVT_ISR_USER_00   (0x0001<<12)
+#else
+/** General purpose event, posted explicitly by rtos_setEvent. */
+# define RTOS_EVT_EVENT_12      (0x0001<<12)
+#endif
+
+/* The name of the next event depends on the configuration of RTuinOS. */
+#if RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON
+/** This event is posted by the application defined ISR 01. */
+# define RTOS_EVT_ISR_USER_01   (0x0001<<13)
+#else
+/** General purpose event, posted explicitly by rtos_setEvent. */
+# define RTOS_EVT_EVENT_13      (0x0001<<13)
+#endif
+
 /** Real time clock is elapsed for the task. */
 #define RTOS_EVT_ABSOLUTE_TIMER (0x0001<<14)
 /** The relative-to-start clock is elapsed for the task */
@@ -100,10 +131,6 @@ typedef struct
         function is invoked the first time the task becomes active and must never end. A
         return statement would cause an immediate reset of the controller. */
     rtos_taskFunction_t taskFunction;
-    
-    /** The parameter of the task function. */
-// @todo Remove, not used
-    uint16_t taskFunctionParam;
     
     /** The timer value triggering the task local absolute-timer event.\n
           This settings has to be preset by the application at compile time or in function
@@ -173,6 +200,16 @@ typedef struct
     /** The saved stack pointer of this task whenever it is not active. */
     uint16_t stackPointer;
     
+    /** All recognized overruns of the timing of this task are recorded in this variable.
+        The access to this variable is considered atomic by the implementation, therefore
+        no other type than 8 Bit must be used.\n
+          Task overruns are defined only in the (typical) use case of regular real time
+        tasks. In all other applications of a task this value is useless and undefined.\n
+          @remark Even for regular real time tasks, overruns can only be recognized with a
+        certain probablity, which depends on the range of the cyclic system timer. Find a
+        discussion in the documentation of type uintTime_t. */
+    uint8_t cntOverrun;
+    
     //uint8_t fillToPowerOfTwoSize[32-18];
     
 } rtos_task_t;
@@ -195,21 +232,54 @@ extern rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1];
  * Global prototypes
  */
 
-/** Initialization of the internal data structures of RTuinOS and start of the timer
-    interrupt (@see void rtos_enableIRQTimerTic(void)). This function does not return but
-    forks into the configured tasks. */
+/* Initialze all application parameters of one task. To be called for each of the tasks in
+   setup(). */
+void rtos_initializeTask( uint8_t idxTask
+                        , rtos_taskFunction_t taskFunction
+                        , uint8_t prioClass
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+                        , uintTime_t timeRoundRobin
+#endif
+                        , uint8_t * const pStackArea
+                        , uint16_t stackSize
+                        , uint16_t startEventMask
+                        , bool startByAllEvents
+                        , uintTime_t startTimeout
+                        );
+
+#if RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON
+/** An application supplied callback, which contains the code to set up the hardware to
+    generate application interrupt 0. */
+extern void rtos_enableIRQUser00(void);
+#endif
+
+#if RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON
+/** An application supplied callback, which contains the code to set up the hardware to
+    generate application interrupt 1. */
+extern void rtos_enableIRQUser01(void);
+#endif
+
+/* Initialization of the internal data structures of RTuinOS and start of the timer
+   interrupt (see void rtos_enableIRQTimerTic(void)). This function does not return but
+   forks into the configured tasks.
+     This function is not called by the application (but only from main()). */
 void rtos_initRTOS(void);
 
-/** Suspend a task untill a specified point in time. Used to implement regular real time
-    tasks. */
+/* Suspend a task untill a specified point in time. Used to implement regular real time
+   tasks. */
 volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
 
-/** Post a set of events to all suspended tasks. Suspend the current task if the events
-    release another task of higher priority. */
+/* Post a set of events to all suspended tasks. Suspend the current task if the events
+   release another task of higher priority. */
 volatile void rtos_setEvent(uint16_t eventVec);
 
-/** Suspend task until a combination of events appears or a timeout elapses. */
+/* Suspend task until a combination of events appears or a timeout elapses. */
 volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
 
+/* How often could a real time task not be reactivated timely? */
+uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, bool doReset);
+
+/* How many bytes of the stack of a task are still unsed? */
+uint16_t rtos_getStackReserve(uint8_t idxTask);
 
 #endif  /* RTOS_INCLUDED */
