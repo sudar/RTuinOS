@@ -74,8 +74,6 @@ static uint8_t _taskStack00_C0[STACK_SIZE_TASK00_C0]
              , _taskStack01_C0[STACK_SIZE_TASK01_C0]
              , _taskStack00_C1[STACK_SIZE_TASK00_C1];
 
-rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1]; 
-
 static volatile uint16_t noLoopsTask00_C0 = 0;
 static volatile uint16_t noLoopsTask01_C0 = 0;
 static volatile uint16_t noLoopsTask00_C1 = 0;
@@ -327,9 +325,6 @@ void setup(void)
                        , /* startTimeout */     0
                        );
 
-    Serial.print("sizeof(rtos_task_t): "); 
-    Serial.println(sizeof(rtos_task_t)); 
-    
 } /* End of setup */
 
 

@@ -1,6 +1,7 @@
 /**
  * @file tc01_idleTaskOnly.c
- *   Test case 01 or RTuinoOS. No task is defined, only the idle task is running. System
+ *
+ * Test case 01 or RTuinoOS. No task is defined, only the idle task is running. System
  * behaves like an ordinary Arduino sketch.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
@@ -54,7 +55,6 @@
 /*
  * Data definitions
  */
-rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1];
  
  
 /*

@@ -1,6 +1,6 @@
 /**
  * @file tc04_2Task1PrioClass.c
- *   Test case 03 of RTuinOS. Two tasks of same priority class are defined besides the idle
+ *   Test case 04 of RTuinOS. Two tasks of same priority class are defined besides the idle
  * task.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
@@ -54,8 +54,8 @@
  * Local prototypes
  */
  
-static void task01_class00(uint16_t taskParam);
-static void task02_class00(uint16_t taskParam);
+static void task01_class00(uint16_t initCondition);
+static void task02_class00(uint16_t initCondition);
  
  
 /*
@@ -64,72 +64,7 @@ static void task02_class00(uint16_t taskParam);
  
 static uint8_t _taskStack1[STACK_SIZE_TASK00];
 static uint8_t _taskStack2[STACK_SIZE_TASK00];
-
-rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1] =
-{ /* Task 1 */
-  { /* prioClass */	        0
-  , /* taskFunction */	    task01_class00
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        5
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack1[0]   
-  , /* stackSize */	        STACK_SIZE_TASK00
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  , /* fillToPowerOfTwoSize */ {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-  } /* End Task 1 */
-  
-, /* Task 2 */
-  { /* prioClass */	        0
-  , /* taskFunction */	    task02_class00
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        250
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack2[0]   
-  , /* stackSize */	        STACK_SIZE_TASK00
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  , /* fillToPowerOfTwoSize */ {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-  } /* End Task 2 */
-  
-, /* Idle Task */
-  { /* prioClass */	        0
-  , /* taskFunction */      NULL
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        255
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    NULL
-  , /* stackSize */	        0
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  , /* fillToPowerOfTwoSize */ {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
-  } /* End Task 1 */
-  
-}; /* End of initialization of task array. */
+static volatile uint16_t _t1=0, _t2=0, _id=0;
  
  
 /*
@@ -178,13 +113,31 @@ void setup(void)
        operability of code. */
     pinMode(LED, OUTPUT);
     
-    Serial.print("sizeof(rtos_task_t): "); 
-    Serial.println(sizeof(rtos_task_t)); 
+    /* Task 1 of priority class 0 */
+    rtos_initializeTask( /* idxTask */          0
+                       , /* taskFunction */     task01_class00
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStack1[0]
+                       , /* stackSize */        sizeof(_taskStack1)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     5
+                       );
+
+    /* Task 2 of priority class 0 */
+    rtos_initializeTask( /* idxTask */          1
+                       , /* taskFunction */     task02_class00
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStack2[0]
+                       , /* stackSize */        sizeof(_taskStack2)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     250
+                       );
     
 } /* End of setup */
 
 
-volatile uint16_t t1=0, t2=0, id=0;
 
 
 /**
@@ -195,65 +148,34 @@ volatile uint16_t t1=0, t2=0, id=0;
  * A task function must never return; this would cause a reset.
  */ 
 
-static void task01_class00(uint16_t taskParam) __attribute((used, noinline));
-static void task01_class00(uint16_t taskParam)
+static void task01_class00(uint16_t initCondition) __attribute((used, noinline));
+static void task01_class00(uint16_t initCondition)
 
 {
     uint16_t u;
-    uint16_t sp1, sp2, spId;
     uint32_t ti0, ti1;
     
     Serial.print("task01_class00: Activated by 0x");
-    Serial.println(taskParam, HEX);
+    Serial.println(initCondition, HEX);
 
-//    for(u=0; u<1; ++u)
-//        blink(2);
+    for(u=0; u<1; ++u)
+        blink(2);
     
     for(;;)
     {
-        uint8_t noSusT, susTIdAry[RTOS_NO_TASKS+5], noDue=9;
-        extern volatile uint8_t _noSuspendedTasks, _suspendedTaskIdAry[RTOS_NO_TASKS], _noDueTasksAry[RTOS_NO_PRIO_CLASSES];
+        ++ _t1;
+        Serial.print("_t1: "); Serial.print(_t1);
+        Serial.print(", _t2: "); Serial.print(_t2);
+        Serial.print(", _id: "); Serial.println(_id);
         
-        ++ t1;
-        Serial.print("t1: "); Serial.print(t1);
-        Serial.print(", t2: "); Serial.print(t2);
-        Serial.print(", id: "); Serial.println(id);
-        
-#if 1
-        {
-            cli();
-            sp1  = rtos_taskAry[0].stackPointer;
-            sp2  = rtos_taskAry[1].stackPointer;
-            spId = rtos_taskAry[2].stackPointer;
-            sei();
-            Serial.print("sp1: 0x"); Serial.print(sp1, HEX);
-            Serial.print(", sp1: 0x"); Serial.print(sp2, HEX);
-            Serial.print(", spId: 0x"); Serial.println(spId, HEX);
-        }            
-#endif
         Serial.println("task01_class00: rtos_delay(20)");
         ti0 = millis();
         rtos_delay(20);
         ti1 = millis();
         Serial.print("task01_class00: Back from delay after ");
-        Serial.println(ti1-ti0);
+        Serial.print((ti1-ti0)/RTOS_TIC_MS);
+        Serial.println(" tics");
         
-#if 0        
-        cli();
-        noSusT = _noSuspendedTasks;
-        noDue  = _noDueTasksAry[0];
-        sei();
-        Serial.print("noSusT: "); Serial.println(noSusT); 
-        Serial.print("noDue: "); Serial.println(noDue); 
-        cli();
-        for(sp1=0; sp1<RTOS_NO_TASKS; ++sp1)
-            susTIdAry[sp1] = _suspendedTaskIdAry[sp1];
-        sei();
-        for(sp1=0; sp1<RTOS_NO_TASKS; ++sp1)
-        {
-            Serial.print("susTId: "); Serial.println(susTIdAry[sp1]); 
-        }
-#endif
         Serial.print("task01_class00: Suspending at ");
         Serial.println(millis());
 
@@ -268,18 +190,18 @@ static void task01_class00(uint16_t taskParam)
 
 
 
-static void task02_class00(uint16_t taskParam) __attribute((used, noinline));
-static void task02_class00(uint16_t taskParam)
+static void task02_class00(uint16_t initCondition) __attribute((used, noinline));
+static void task02_class00(uint16_t initCondition)
 
 {
     uint16_t u;
     
     for(;;)
     {
-        volatile uint8_t v = 0;
+//        volatile uint8_t v = 0;
         
-        ++ t2;
-        
+        ++ _t2;
+
 //        delay(1000);
 //        for(u=0; u<1000; ++u)
 //            v = 2*v;
@@ -315,12 +237,13 @@ void loop(void)
         }
     }
     
+    /* Try to indicate corruption of stack (if this still works then ...). */
     if(ok)
         blink(2);
     else
         blink(3);
 
-    ++ id;    
+    ++ _id;    
     
 } /* End of loop */
 
