@@ -69,6 +69,41 @@
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
 
 
+/** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in
+    the code and more can be implemented by taking these two as a code template.)\n
+      To install an application interrupt, this define is set to #RTOS_FEATURE_ON.\n
+      Secondary, you will define #RTOS_ISR_USER_00 in order to specify the interrupt
+    source.\n
+      Then, you will implement the callback \a rtos_enableIRQUser00(void) which enables the
+    interrupt, typically by accessing the interrupt control register of some peripheral.\n
+      Now the interrupt is enabled and if it occurs it'll post the event
+    #RTOS_EVT_ISR_USER_00. You will probably have a task of high priority which is waiting
+    for this event in order to handle the interrupt when it is resumed by the event. */
+#define RTOS_USE_APPL_INTERRUPT_00 RTOS_FEATURE_OFF
+
+/** The name of the interrupt vector which is assigned to application interrupt 0. The
+    supported vector names can be derived from table 14-1 on page 105 in the CPU manual,
+    doc2549.pdf (see http://www.atmel.com). */
+#define RTOS_ISR_USER_00    xxx_vect
+
+
+/** Enable the application defined interrupt 1. See #RTOS_USE_APPL_INTERRUPT_00 for
+    details. */
+#define RTOS_USE_APPL_INTERRUPT_01 RTOS_FEATURE_OFF
+
+/** The name of the interrupt vector which is assigned to application interrupt 1. See
+    #RTOS_ISR_USER_00 for details. */
+#define RTOS_ISR_USER_01    xxx_vect
+
+
+/** A macro which expands to the code which defines all types which are related to the
+    system timer. We need the unsigned and the related signed type. The macro is applied
+    just once, see below. */
+#define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(noBits)     \
+    typedef uint##noBits##_t uintTime_t;            \
+    typedef int##noBits##_t intTime_t;                                  
+
+
 /*
  * Global type definitions
  */
@@ -108,11 +143,15 @@
     resume time 223 is 126 tics ahead, which is considered a future time -- no task overrun
     is recognized. The problem appears if the overrun lasts more than half the system time
     cycle. With uint16 this problem becomes negligible.\n
-      This typedef doen't have the meaning of hiding the type. In contrary, the character
+      This typedef doesn't have the meaning of hiding the type. In contrary, the character
     of the time being a simple unsigned integer should be visible to the user. The meaning
     of the typedef only is to have an implementation with user-selectable number of bits
-    for the integer. Therefore we choose a name similar to the common integer types. */
-typedef uint8_t uintTime_t;
+    for the integer. Therefore we choose its name \a uintTime_t similar to the common integer
+    types.\n
+      The argument of the macro, which actually makes the required typedefs is set to
+    either 8, 16 or 32; the meaning is number of bits. */
+RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
+
 
 
 /*

@@ -1,6 +1,7 @@
 /**
  * @file tc02_oneTask.c
- *   Test case 02 or RTuinoOS. One task is defined, which runs alternating with the idle task.
+ *   Test case 02 or RTuinoOS. One task is defined, which runs alternatingly with the idle
+ * task.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -62,49 +63,6 @@ static void task01_class00(uint16_t taskParam);
  
 static uint8_t _taskStack[STACK_SIZE_TASK00];
 
-rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1] =
-{ /* Task 1 */
-  { /* prioClass */	        0
-  , /* taskFunction */	    task01_class00
-  , /* taskFunctionParam */	10
-  , /* timeDueAt */	        5
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack[0]   
-  , /* stackSize */	        STACK_SIZE_TASK00
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-, /* Idle Task */
-  { /* prioClass */	        0
-  , /* taskFunction */      NULL
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        255
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    NULL
-  , /* stackSize */	        0
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-}; /* End of initialization of task array. */
- 
  
 /*
  * Function implementation
@@ -138,19 +96,21 @@ static void blink(uint8_t noFlashes)
 
 /**
  * The only task in this test case (besides idle).
- *   @param initParam
+ *   @param initCondition
  * The task gets an initialization parameter for whatever configuration purpose.
  *   @remark
  * A task function must never return; this would cause a reset.
  */ 
 
-static void task01_class00(uint16_t taskParam)
+static void task01_class00(uint16_t taskCondition)
 
 {
     uint16_t u;
+    uint32_t ti = millis()
+           , tiCycle;
     
     Serial.print("task01_class00: Activated by 0x");
-    Serial.println(taskParam, HEX);
+    Serial.println(taskCondition, HEX);
 
     for(u=0; u<3; ++u)
         blink(2);
@@ -158,14 +118,25 @@ static void task01_class00(uint16_t taskParam)
     for(;;)
     {
         Serial.println("task01_class00: rtos_delay...");
-        u = rtos_delay(255);
+        u = rtos_delay(55);
         Serial.print("task01_class00: Released with ");
         Serial.println(u, HEX);
         
         Serial.println("task01_class00: Suspending...");
         u = rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 125);
+        tiCycle = millis();
         Serial.print("task01_class00: Released with ");
         Serial.println(u, HEX);
+        
+        /* The system timer tic has a frequency of 490.1961 Hz.
+             Caution: The compiler fails to recognize the constant floating point
+           expression if there's no explicit, superfluous pair of parenthesis around it.
+           With parenthesis it compiles just one product, without it uses several products
+           and divisions. */
+        Serial.print("Accuracy: ");
+        Serial.print((tiCycle-ti) * (100.0/1000.0 / (125.0/490.1961)));
+        Serial.println("%");
+        ti = tiCycle;
     }
 } /* End of task01_class00 */
 
@@ -189,9 +160,16 @@ void setup(void)
        operability of code. */
     pinMode(LED, OUTPUT);
     
-    Serial.print("sizeof(rtos_task_t): "); 
-    Serial.println(sizeof(rtos_task_t)); 
-    
+    /* Configure task 1 of priority class 0 */
+    rtos_initializeTask( /* idxTask */          0
+                       , /* taskFunction */     task01_class00
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStack[0]
+                       , /* stackSize */        sizeof(_taskStack)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     5
+                       );
 } /* End of setup */
 
 
@@ -209,7 +187,7 @@ void setup(void)
 void loop(void)
 {
     delay(1000);
-    blink(4);
+    blink(3);
     
 } /* End of loop */
 

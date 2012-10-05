@@ -69,90 +69,8 @@ static uint8_t _taskStack00_C0[STACK_SIZE_TASK00_C0]
              , _taskStack01_C0[STACK_SIZE_TASK01_C0]
              , _taskStack00_C1[STACK_SIZE_TASK00_C1];
 
-rtos_task_t rtos_taskAry[RTOS_NO_TASKS+1] =
-{ /* Task 0 of priority class 0 */
-  { /* prioClass */	        0
-  , /* taskFunction */	    task00_class00
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        5
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack00_C0[0]   
-  , /* stackSize */	        sizeof(_taskStack00_C0)
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-, /* Task 1 of priority class 0 */
-  { /* prioClass */	        0
-  , /* taskFunction */	    task01_class00
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        15
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack01_C0[0]   
-  , /* stackSize */	        sizeof(_taskStack01_C0)
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-, /* Task 0 of priority class 1 */
-  { /* prioClass */	        1
-  , /* taskFunction */	    task00_class01
-  , /* taskFunctionParam */	10
-  , /* timeDueAt */	        5
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    &_taskStack00_C1[0]   
-  , /* stackSize */	        sizeof(_taskStack00_C1)
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-, /* Idle Task */
-  { /* prioClass */	        0
-  , /* taskFunction */      NULL
-  , /* taskFunctionParam */	0
-  , /* timeDueAt */	        255
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* timeRoundRobin */	0
-#endif
-  , /* pStackArea */	    NULL
-  , /* stackSize */	        0
-  , /* cntDelay */	        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-  , /* cntRoundRobin */	    0
-#endif
-  , /* postedEventVec */	0
-  , /* eventMask */	        0
-  , /* waitForAnyEvent */	0
-  , /* stackPointer */	    0
-  } /* End Task 1 */
-  
-}; /* End of initialization of task array. */
- 
- 
+
+
 /*
  * Function implementation
  */
@@ -191,13 +109,13 @@ static void blink(uint8_t noFlashes)
  * A task function must never return; this would cause a reset.
  */ 
 
-static uint16_t noLoopsTask00_C0 = 0;
+static volatile uint16_t _noLoopsTask00_C0 = 0;
 static void task00_class00(uint16_t initCondition)
 
 {
     for(;;)
     {
-        ++ noLoopsTask00_C0;
+        ++ _noLoopsTask00_C0;
 
         /* This tasks cycles with about 200ms. */
         rtos_delay(80);
@@ -217,13 +135,13 @@ static void task00_class00(uint16_t initCondition)
  * A task function must never return; this would cause a reset.
  */ 
 
-static uint16_t noLoopsTask01_C0 = 0;
+static volatile uint16_t _noLoopsTask01_C0 = 0;
 static void task01_class00(uint16_t initCondition)
 
 {
     for(;;)
     {
-        ++ noLoopsTask01_C0;
+        ++ _noLoopsTask01_C0;
 
         /* For test purpose only: This task consumes the CPU for most of the cycle time. */
         delay(80 /*ms*/);
@@ -245,15 +163,15 @@ static void task01_class00(uint16_t initCondition)
  * A task function must never return; this would cause a reset.
  */ 
 
-static uint16_t noLoopsTask00_C1 = 0;
+static volatile uint16_t _noLoopsTask00_C1 = 0;
 static void task00_class01(uint16_t initCondition)
 
 {
     for(;;)
     {
-        ++ noLoopsTask00_C1;
+        ++ _noLoopsTask00_C1;
 
-        /* This tasks cycles with about 10ms. */
+        /* This tasks cycles with about 2 ms. */
         //u = rtos_delay(255);
         rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 1);
     }
@@ -269,18 +187,48 @@ static void task00_class01(uint16_t initCondition)
 
 void setup(void)
 {
-    /* All tasks are set up by using a compile-time expression. */    
-    
     /* Start serial port at 9600 bps. */
     Serial.begin(9600);
     Serial.println("RTuinOS starting up");
 
+    /* All tasks are set up. */
+    
+    /* Task 0 of priority class 0 */
+    rtos_initializeTask( /* idxTask */          0
+                       , /* taskFunction */     task00_class00
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStack00_C0[0]
+                       , /* stackSize */        sizeof(_taskStack00_C0)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     5
+                       );
+
+    /* Task 1 of priority class 0 */
+    rtos_initializeTask( /* idxTask */          1
+                       , /* taskFunction */     task01_class00
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStack01_C0[0]
+                       , /* stackSize */        sizeof(_taskStack01_C0)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     15
+                       );
+
+    /* Task 0 of priority class 1 */
+    rtos_initializeTask( /* idxTask */          2
+                       , /* taskFunction */     task00_class01
+                       , /* prioClass */        1
+                       , /* pStackArea */       &_taskStack00_C1[0]
+                       , /* stackSize */        sizeof(_taskStack00_C1)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     5
+                       );
+    
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
     pinMode(LED, OUTPUT);
-    
-    Serial.print("sizeof(rtos_task_t): "); 
-    Serial.println(sizeof(rtos_task_t)); 
     
 } /* End of setup */
 
@@ -299,9 +247,9 @@ void setup(void)
 void loop(void)
 {
     Serial.println("RTuinOS is idle");
-    Serial.print("noLoopsTask00_C0: "); Serial.println(noLoopsTask00_C0);
-    Serial.print("noLoopsTask01_C0: "); Serial.println(noLoopsTask01_C0);
-    Serial.print("noLoopsTask00_C1: "); Serial.println(noLoopsTask00_C1);
+    Serial.print("_noLoopsTask00_C0: "); Serial.println(_noLoopsTask00_C0);
+    Serial.print("_noLoopsTask01_C0: "); Serial.println(_noLoopsTask01_C0);
+    Serial.print("_noLoopsTask00_C1: "); Serial.println(_noLoopsTask00_C1);
     blink(4);
     
 } /* End of loop */
