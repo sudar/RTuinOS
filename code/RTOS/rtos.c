@@ -64,8 +64,9 @@
 
 /** A pattern byte, which is used as prefill byte of any task stack area. A simple and
     unexpensive stack usage check at runtime can be implemented by looking for up to where
-    this pattern has been destroyed. Any value which is improbable to be a true stack
-    contents byte can be used -- whatever this value might be. */
+    this pattern has been destroyed. Any value which is not the null and which is
+    improbable to be a true stack contents byte can be used -- whatever this value might
+    be. */
 #define UNUSED_STACK_PATTERN 0x29
 
 /** An important code pattern, which is used in every interrupt routine, which can result
@@ -201,18 +202,17 @@
     command is put onto the stack. From there it'll be loaded into the CPU when ending the
     interrupt routine.\n
       Side effects: The left task and the new task are read from the global variables
-    _suspendedTaskId and _activeTaskId.\n
+    _pSuspendedTask and _pActiveTask.\n
       Prerequisites: The use of the macro needs to be followed by a use of macro
     PUSH_RET_CODE_OF_SWITCH_CONTEXT. (Both macros have not been yoined to a single one only
     for sake of comprehensibility of the code using the code patterns.)\n
       The routine depends on a reset global interrupt flag.\n
       The implementation must be compatible with a naked function. In particular, it must
     not define any local data! */
-// @todo For sake of readability, this could become two macros - although they will always be used as a pair, SWITCH_CONTEXT and PUSH_FUNCTION_RETURN_CODE
 #define SWITCH_CONTEXT                                                                      \
 {                                                                                           \
     /* Switch the stack pointer to the (saved) stack pointer of the new active task. */     \
-    _tmpVarCToAsm_u16 = _taskAry[_activeTaskId].stackPointer;                               \
+    _tmpVarCToAsm_u16 = _pActiveTask->stackPointer;                                         \
     asm volatile                                                                            \
     ( "in r0, __SP_L__ /* Save current stack pointer at known, fixed location */ \n\t"      \
       "sts _tmpVarAsmToC_u16, r0 \n\t"                                                      \
@@ -223,7 +223,7 @@
       "lds r0, _tmpVarCToAsm_u16+1 \n\t"                                                    \
       "out __SP_H__, r0 /* Write h-byte of new stack pointer content */ \n\t"               \
     );                                                                                      \
-    _taskAry[_suspendedTaskId].stackPointer = _tmpVarAsmToC_u16;                            \
+    _pSuspendedTask->stackPointer = _tmpVarAsmToC_u16;                                      \
                                                                                             \
 } /* End of macro SWITCH_CONTEXT */
 
@@ -235,7 +235,7 @@
     been inactivated by a timer interrupt or by a suspend command. (Only) in the latter
     case the return value of the suspend command is put onto the stack. From there it'll be
     loaded into the CPU when ending the interrupt routine.\n
-      Side effects: The ID of the new task is read from the global variable _activeTaskId.\n
+      Side effects: The ID of the new task is read from the global variable _pActiveTask.\n
       Prerequisites: The use of the macro needs to be preceeded by a use of macro
     SWITCH_CONTEXT.\n
       The routine depends on a reset global interrupt flag.\n
@@ -250,14 +250,15 @@
          If this is the first activation after state suspended, we need to return the       \
        cause for release from suspended state as function return code to the task. When     \
        a task is suspended it always pauses inside the suspend command. */                  \
-    _tmpVarCToAsm_u16 = _taskAry[_activeTaskId].postedEventVec;                             \
-    if(_tmpVarCToAsm_u16 > 0)                                                               \
+    if(_pActiveTask->postedEventVec > 0)                                                    \
     {                                                                                       \
+        _tmpVarCToAsm_u16 = _pActiveTask->postedEventVec;                                   \
+                                                                                            \
         /* Neither at state changes active -> ready, and nor at changes ready ->            \
            active, the event vector is touched. It'll be set only at state changes          \
            suspended -> ready. If we reset it now, we will surely not run into this if      \
            clause again after later changes active -> ready -> active. */                   \
-        _taskAry[_activeTaskId].postedEventVec = 0;                                         \
+        _pActiveTask->postedEventVec = 0;                                                   \
                                                                                             \
         /* Yes, the new context was suspended before, i.e. it currently pauses inside a     \
            suspend command, waiting for its completion and expecting its return value.      \
@@ -298,11 +299,14 @@
     objects -- the chance to cause a crash is very close to one. */
 typedef struct
 {
+    /** The saved stack pointer of this task whenever it is not active.\n
+          For optimization reasons, this element should come first. It's most often used in
+        the core routines and can be addressed with less machine code if it has offset 0
+        inside the struct. */
+    uint16_t stackPointer;
+    
     /** The priority class this task belongs to. Priority class 255 has the highest
-        possible priority and the lower the value the lower the priority.\n
-          This settings has to be preset by the application at compile time or in function
-        \a setup. After initialization it must never be touched any more, any change will
-        result in a crash. */
+        possible priority and the lower the value the lower the priority. */
     uint8_t prioClass;
     
     /** The task function as a function pointer. It is used once and only once: The task
@@ -310,15 +314,7 @@ typedef struct
         return statement would cause an immediate reset of the controller. */
     rtos_taskFunction_t taskFunction;
     
-    /** The timer value triggering the task local absolute-timer event.\n
-          This settings has to be preset by the application at compile time or in function
-        \a setup. After initialization it must never be touched any more, any change will
-        result in a crash.\n
-          The initial value determines at which system timer tic the task becomes due the
-        very first time. This may always by 0 (task becomes due immediately). In the use
-        case of regular tasks it may however pay off to distribute the tasks on the time
-        grid in order to avoid too many due tasks regularly at specific points in time. See
-        documentation for more. */
+    /** The timer value triggering the task local absolute-timer event. */
     uintTime_t timeDueAt;
     
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
@@ -328,37 +324,26 @@ typedef struct
           Remark: Round robin like behavior is given only if there are several tasks in the
         same priority class and all tasks of this class have the round-robin mode
         activated. Otherwise it's just the limitation of execution time for an individual
-        task.\n
-          This settings has to be preset by the application at compile time or in function
-        \a setup. After initialization it must never be touched any more, a change could
-        result in a crash. */
+        task. */
     uintTime_t timeRoundRobin;
 #endif
 
     /** The pointer to the preallocated stack area of the task. The area needs to be
-        available all the RTOS runtime. Therfore dynamic allocation won't pay off. Consider
+        available all the RTOS runtime. Therefore dynamic allocation won't pay off. Consider
         to use the address of any statically defined array. There's no alignment
-        constraint.\n
-          This settings has to be preset by the application at compile time or in function
-        \a setup. After initialization it must never be touched any more, a change could
-        result in a crash. */
+        constraint. */
     uint8_t *pStackArea;
     
     /** The size in Byte of the memory area \a *pStackArea, which is reserved as stack for
-        the task. Each task may have an individual stack size.\n
-          This settings has to be preset by the application at compile time or in function
-        \a setup. After initialization it must never be touched any more, a change could
-        result in a crash. */
+        the task. Each task may have an individual stack size. */
     uint16_t stackSize;
     
-    /*
-     * Internal fields start here. The application provided initialization values don't
-     * matter.
-     */
-    /** @todo This part of the struct could be hidden in an anonymous type. Two arrays, one
-        local to RTOS.c */
-
-    /** The timer tic decremented counter triggering the task local delay-timer event. */
+    /** The timer tic decremented counter triggering the task local delay-timer event.\n
+          The initial value determines at which system timer tic the task becomes due the
+        very first time. This may always by 1 (task becomes due immediately). In the use
+        case of regular tasks it may however pay off to distribute the tasks on the time
+        grid in order to avoid too many due tasks regularly at specific points in time. See
+        documentation for more. */
     uintTime_t cntDelay;
     
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
@@ -375,9 +360,6 @@ typedef struct
     /** Do we need to wait for the first posted event or for all events? */
     bool waitForAnyEvent;
 
-    /** The saved stack pointer of this task whenever it is not active. */
-    uint16_t stackPointer;
-    
     /** All recognized overruns of the timing of this task are recorded in this variable.
         The access to this variable is considered atomic by the implementation, therefore
         no other type than 8 Bit must be used.\n
@@ -388,8 +370,6 @@ typedef struct
         discussion in the documentation of type uintTime_t. */
     uint8_t cntOverrun;
     
-    //uint8_t fillToPowerOfTwoSize[32-18];
-    
 } task_t;
 
 
@@ -397,15 +377,18 @@ typedef struct
 /*
  * Local prototypes
  */
- 
-// @todo Consider to use macros for the two used attribute function decorations
-static __attribute__((used, noinline)) bool onTimerTic(void);
-volatile  __attribute__((naked, noinline)) uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
-static __attribute__((used, noinline)) void suspendTaskTillTime(uintTime_t);
-static __attribute__((used, noinline)) bool setEvent(uint16_t eventVec);
-volatile __attribute__((naked, noinline)) void rtos_setEvent(uint16_t eventVec);
-static void __attribute__((used, noinline)) waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
-volatile uint16_t __attribute__((naked, noinline)) rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+
+void RTOS_DEFAULT_FCT rtos_enableIRQTimerTic(void);
+static RTOS_TRUE_FCT bool onTimerTic(void);
+volatile  RTOS_NAKED_FCT uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
+static RTOS_TRUE_FCT void suspendTaskTillTime(uintTime_t);
+static RTOS_TRUE_FCT bool setEvent(uint16_t eventVec);
+volatile RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
+static void RTOS_TRUE_FCT waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+volatile uint16_t RTOS_NAKED_FCT rtos_waitForEvent( uint16_t eventMask
+                                                  , bool all
+                                                  , uintTime_t timeout
+                                                  );
 
 
 /*
@@ -420,33 +403,37 @@ volatile uint16_t __attribute__((naked, noinline)) rtos_waitForEvent(uint16_t ev
     which is transparent and predictable for the application. */
 static uintTime_t _time = (uintTime_t)-1;
 
+/** Array of all the task objects. The array has one additional element to store the
+    information about the implictly defined idle task. (Although most fields of the task
+    object are irrelevant for the idle task. Here potential to save meory space.)\n
+      The array is partly initialized by the application repeatedly calling \a
+    rtos_initializeTask. The rest of the initialization and the initialization of the idle
+    task element is done in \a rtos_initRTOS. */
+task_t _taskAry[RTOS_NO_TASKS+1];
+
+/** Pointer to the idle task object. */
+static task_t * const _pIdleTask = &_taskAry[IDLE_TASK_ID];
+
 /** The one and only active task. This may be the only internally seen idle task which does
-    nothing. */
-static uint8_t _activeTaskId = IDLE_TASK_ID;
+    nothing. Implemented as pointer to the task object. */
+static task_t *_pActiveTask = _pIdleTask;
 
 /** The task which is to be suspended because of a newly activated one. Only temporarily
     used in the instance of a task switch. */
-static uint8_t _suspendedTaskId;
+static task_t *_pSuspendedTask = _pIdleTask;
 
 /** Array holding all due (but not active) tasks. Ordered according to their priority
     class. */
-static uint8_t _dueTaskIdAryAry[RTOS_NO_PRIO_CLASSES][RTOS_MAX_NO_TASKS_IN_PRIO_CLASS];
+static task_t *_pDueTaskAryAry[RTOS_NO_PRIO_CLASSES][RTOS_MAX_NO_TASKS_IN_PRIO_CLASS];
 
 /** Number of due tasks in the different priority classes. */
 static uint8_t _noDueTasksAry[RTOS_NO_PRIO_CLASSES];
 
 /** Array holding all currently suspended tasks. */
-static uint8_t _suspendedTaskIdAry[RTOS_NO_TASKS];
+static task_t *_pSuspendedTaskAry[RTOS_NO_TASKS];
 
 /** Number of currently suspended tasks. */
 static uint8_t _noSuspendedTasks;
-
-/** Array of all the task objects. The array has one additional element to store the
-    information about the implictly defined idle task.\n
-      The array is partly initialized by the application repeatedly calling \a
-    rtos_initializeTask. The rest of the initialization and the initialization of the idle
-    task element is done in \a rtos_initRTOS. */
-task_t _taskAry[RTOS_NO_TASKS+1];
 
 /** Temporary data, internally used to pass information between assembly and C code. */
 volatile uint16_t _tmpVarAsmToC_u16, _tmpVarCToAsm_u16;
@@ -603,8 +590,8 @@ void rtos_enableIRQTimerTic(void)
  *   @return
  * The Boolean information wheather the active task now is another task is returned.\n
  *   If the function returns true, the old and the new active task's IDs are reported by
- * side effect: They are written into the global variables _suspendedTaskId and
- * _activeTaskId.
+ * side effect: They are written into the global variables _pSuspendedTask and
+ * _pActiveTask.
  */ 
 
 static bool checkForTaskActivation()
@@ -614,7 +601,7 @@ static bool checkForTaskActivation()
 
     while(idxSuspTask<_noSuspendedTasks)
     {
-        task_t *pT = &_taskAry[_suspendedTaskIdAry[idxSuspTask]];
+        task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
         uint16_t eventVec;
         
         /* Check if the task becomes due because of the events posted prior to calling this
@@ -643,10 +630,10 @@ static bool checkForTaskActivation()
             
             /* Move the task from the list of suspended tasks to the list of due tasks of
                its priority class. */
-            _dueTaskIdAryAry[prio][_noDueTasksAry[prio]++] = _suspendedTaskIdAry[idxSuspTask];
+            _pDueTaskAryAry[prio][_noDueTasksAry[prio]++] = _pSuspendedTaskAry[idxSuspTask];
             -- _noSuspendedTasks;
             for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
-                _suspendedTaskIdAry[u] = _suspendedTaskIdAry[u+1];
+                _pSuspendedTaskAry[u] = _pSuspendedTaskAry[u+1];
             
             /* Since a task became due there might be a change of the active task. */
             isNewActiveTask = true;
@@ -675,14 +662,14 @@ static bool checkForTaskActivation()
         {
             if(_noDueTasksAry[idxPrio] > 0)
             {
-                _suspendedTaskId = _activeTaskId;
-                _activeTaskId    = _dueTaskIdAryAry[idxPrio][0];
+                _pSuspendedTask = _pActiveTask;
+                _pActiveTask    = _pDueTaskAryAry[idxPrio][0];
 
                 /* If we only entered the outermost if clause we made at least one task
                    due; these statements are thus surely reached. As the due becoming task
                    might however be of lower priority it can easily be that we nonetheless
                    don't have a task switch. */
-                isNewActiveTask = _activeTaskId != _suspendedTaskId;
+                isNewActiveTask = _pActiveTask != _pSuspendedTask;
 
                 break;
             }
@@ -712,7 +699,7 @@ static bool checkForTaskActivation()
  * invokations we won't have and therefore it's worth to optimize the code for this case:
  * Don't do the expensive switch of the stack pointers.\n
  *   The most important result of the function, the ID of the active task after leaving the
- * function, is returned by side effect: The global variable _activeTaskId is updated.
+ * function, is returned by side effect: The global variable _pActiveTask is updated.
  */
 
 static bool onTimerTic(void)
@@ -725,7 +712,7 @@ static bool onTimerTic(void)
     /* Check for all suspended tasks if a timer event has to be posted. */
     for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
     {
-        task_t *pT = &_taskAry[_suspendedTaskIdAry[idxSuspTask]];
+        task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
 
         /* Check for absolute timer event. */
         if(_time == pT->timeDueAt)
@@ -766,7 +753,7 @@ static bool onTimerTic(void)
          The function has side effects: If there's a task which was suspended before and
        which is released because of the timer events and which is of higher priority than
        the one being active so far, the ID of the old and newly active task are written
-       into global variables _suspendedTaskId and _activeTaskId. */
+       into global variables _pSuspendedTask and _pActiveTask. */
     return checkForTaskActivation();
 
 } /* End of onTimerTic. */
@@ -815,13 +802,12 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
     /* Save context onto the stack of the interrupted active task. */
     PUSH_CONTEXT_ONTO_STACK
 
-	/* We must not exclude that the zero_reg is temporarily altered in the calling,
-       arbitrarily interrupted code. To make the local code here running, we need
-       to aniticpate this situation and clear the register. */
-// @todo use __zero_reg__
+	/* We must not exclude that the zero_reg is temporarily altered in the arbitrarily
+       interrupted code. To make the local code here running, we need to aniticpate this
+       situation and clear the register. */
     asm volatile 
     ("LabClrR0InOnTi: \n\t"
-     "clr r1 \n\t"
+     "clr __zero_reg__ \n\t"
     );
 
     /* Check for all suspended tasks if this change in time is an event for them. */
@@ -842,7 +828,7 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
        tics less of responsiveness of the system). */
     /* @todo It's worth a consideration if too many task switches at a time can really
        happen: While restoring the new context is running, the only source for those task
-       switches would be a new timer tic and this comes determinitically far in the
+       switches would be a new timer tic and this comes deterministically far in the
        future.*/
 
     /* The stack pointer points to the now active task (which will often be still the same
@@ -874,7 +860,7 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
  * implementation of saving/restoring the task context).
  *   @return
  * The function determines which task is to be activated and records which task is left in
- * the global variables _activeTaskId and _suspendedTaskId.
+ * the global variables _pActiveTask and _pSuspendedTask.
  *   @param deltaTimeTillRelease
  * See software interrupt \a rtos_suspendTaskTillTime.
  *   @see
@@ -893,14 +879,14 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     uint8_t idxTask;
     
     /* Take the active task out of the list of due tasks. */
-    task_t *pT = &_taskAry[_activeTaskId];
+    task_t * const pT = _pActiveTask;
     uint8_t prio = pT->prioClass;
     uint8_t noDueNow = -- _noDueTasksAry[prio];
     for(idxTask=0; idxTask<noDueNow; ++idxTask)
-        _dueTaskIdAryAry[prio][idxTask] = _dueTaskIdAryAry[prio][idxTask+1];
+        _pDueTaskAryAry[prio][idxTask] = _pDueTaskAryAry[prio][idxTask+1];
     
-    /* This suspend command want a reactivation at a certain time. The new time is assigned
-       by the += in the conditional expression.
+    /* This suspend command wants a reactivation at a certain time. The new time is
+       assigned by the += in the conditional expression.
          Task overrun detection: The new time must not more than half a cycle in the
        future. The test uses a signed comparison. The unsigned comparison >= 0x80 would be
        equivalent but probably less performant (TBC). */
@@ -909,7 +895,7 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
         if(pT->cntOverrun < 0xff)
             ++ pT->cntOverrun;
         
-        /* The wanted point in time is over. We do the best recocery which is possible: Let
+        /* The wanted point in time is over. We do the best recovery which is possible: Let
            the task become due in the very next timer tic. */
         pT->timeDueAt = _time+1;
     }
@@ -917,21 +903,21 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     pT->waitForAnyEvent = true;
     
     /* Put the task in the list of suspended tasks. */
-    _suspendedTaskIdAry[_noSuspendedTasks++] = _activeTaskId;
+    _pSuspendedTaskAry[_noSuspendedTasks++] = _pActiveTask;
 
     /* Record which task suspends itself for the assembly code in the calling function
        which actually switches the context. */
-    _suspendedTaskId = _activeTaskId;
+    _pSuspendedTask = _pActiveTask;
     
     /* Look for the task we will return to. It's the first entry in the highest non-empty
        priority class. The loop requires a signed index.
          It's not guaranteed that there is any due task. Idle is the fallback. */
-    _activeTaskId = IDLE_TASK_ID;
+    _pActiveTask = _pIdleTask;
     for(idxPrio=RTOS_NO_PRIO_CLASSES-1; idxPrio>=0; --idxPrio)
     {
         if(_noDueTasksAry[idxPrio] > 0)
         {
-            _activeTaskId = _dueTaskIdAryAry[idxPrio][0];
+            _pActiveTask = _pDueTaskAryAry[idxPrio][0];
             break;
         }
     }
@@ -1011,9 +997,9 @@ volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
        active task. */ 
     PUSH_CONTEXT_WITHOUT_R24R25_ONTO_STACK
 
-    /* Here, we could double-check _activeTaskId for the idle task ID and return without
+    /* Here, we could double-check _pActiveTask for the idle task and return without
        context switch if it is active. (The idle task has illicitly called a suspend
-       command.). However, all implementation rates performance higher than failure
+       command.) However, all implementation rates performance higher than failure
        tolerance, and so do we here. */
        
     /* The actual implementation of the task switch logic is placed into a sub-routine in
@@ -1058,11 +1044,11 @@ volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
  * implementation of saving/restoring the task context).
  *   @return
  * The function determines which task is to be activated and records which task is left
- * (i.e. the task calling this routine) in the global variables _activeTaskId and
- * _suspendedTaskId.\n
+ * (i.e. the task calling this routine) in the global variables _pActiveTask and
+ * _pSuspendedTask.\n
  *   If there is a task switch the function reports this by a return value true. If there
- * is no task switch it returns false and the global variables _activeTaskId and
- * _suspendedTaskId are not touched.
+ * is no task switch it returns false and the global variables _pActiveTask and
+ * _pSuspendedTask are not touched.
  *   @param postedEventVec
  * See software interrupt \a rtos_setEvent.
  *   @see
@@ -1085,7 +1071,7 @@ static bool setEvent(uint16_t postedEventVec)
     /* Post events on all suspended tasks which are waiting for it. */
     for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
     {
-        task_t *pT = &_taskAry[_suspendedTaskIdAry[idxSuspTask]];
+        task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
 
         pT->postedEventVec |= (postedEventVec & pT->eventMask);
     }
@@ -1094,7 +1080,7 @@ static bool setEvent(uint16_t postedEventVec)
          The function has side effects: If there's a task which was suspended before and
        which is released because of the timer events and which is of higher priority than
        the one being active so far, the ID of the old and newly active task are written
-       into global variables _suspendedTaskId and _activeTaskId. */
+       into global variables _pSuspendedTask and _pActiveTask. */
     return checkForTaskActivation();
 
 } /* End of setEvent */
@@ -1269,7 +1255,7 @@ volatile void rtos_setEvent(uint16_t eventVec)
 
 
 /**
- * Actual implentation of task suspension routine \a rtos_waitForEvent. The task is
+ * Actual implementation of task suspension routine \a rtos_waitForEvent. The task is
  * suspended until a specified event occurs.\n
  *   The action of this SW interrupt is placed into an own function in order to let the
  * compiler generate the stack frame required for all local data. (The stack frame
@@ -1277,8 +1263,8 @@ volatile void rtos_setEvent(uint16_t eventVec)
  * implementation of saving/restoring the task context).
  *   @return
  * The function determines which task is to be activated and records which task is left
- * (i.e. the task calling this routine) in the global variables _activeTaskId and
- * _suspendedTaskId.
+ * (i.e. the task calling this routine) in the global variables \a _pActiveTask and \a
+ * _pSuspendedTask.
  *   @param eventMask
  * See software interrupt \a rtos_waitForEvent.
  *   @param all
@@ -1301,15 +1287,15 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
     uint8_t idxTask;
     
     /* Take the active task out of the list of due tasks. */
-    task_t *pT = &_taskAry[_activeTaskId];
+    task_t * const pT = _pActiveTask;
     uint8_t prio = pT->prioClass;
     uint8_t noDueNow = -- _noDueTasksAry[prio];
     for(idxTask=0; idxTask<noDueNow; ++idxTask)
-        _dueTaskIdAryAry[prio][idxTask] = _dueTaskIdAryAry[prio][idxTask+1];
+        _pDueTaskAryAry[prio][idxTask] = _pDueTaskAryAry[prio][idxTask+1];
     
     /* This suspend command wants a reactivation by a combination of events (which may
        include the timeout event).
-         ++timeout: The call of the suspend function is in no way synchronized with the
+         ++ timeout: The call of the suspend function is in no way synchronized with the
        system clock. We define the delay to be a minimum and implement the resolution
        caused uncertainty as an additional delay. */
     if((uintTime_t)(timeout+1) != 0)
@@ -1319,21 +1305,21 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
     pT->waitForAnyEvent = !all;
     
     /* Put the task in the list of suspended tasks. */
-    _suspendedTaskIdAry[_noSuspendedTasks++] = _activeTaskId;
+    _pSuspendedTaskAry[_noSuspendedTasks++] = _pActiveTask;
 
     /* Record which task suspends itself for the assembly code in the calling function
        which actually switches the context. */
-    _suspendedTaskId = _activeTaskId;
+    _pSuspendedTask = _pActiveTask;
     
     /* Look for the task we will return to. It's the first entry in the highest non-empty
        priority class. The loop requires a signed index.
          It's not guaranteed that there is any due task. Idle is the fallback. */
-    _activeTaskId = IDLE_TASK_ID;
+    _pActiveTask = _pIdleTask;
     for(idxPrio=RTOS_NO_PRIO_CLASSES-1; idxPrio>=0; --idxPrio)
     {
         if(_noDueTasksAry[idxPrio] > 0)
         {
-            _activeTaskId = _dueTaskIdAryAry[idxPrio][0];
+            _pActiveTask = _pDueTaskAryAry[idxPrio][0];
             break;
         }
     }
@@ -1394,7 +1380,7 @@ volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t tim
        active task. */ 
     PUSH_CONTEXT_WITHOUT_R24R25_ONTO_STACK
 
-    /* Here, we could double-check _activeTaskId for the idle task ID and return without
+    /* Here, we could double-check _pActiveTask for the idle task and return without
        context switch if it is active. (The idle task has illicitly called a suspend
        command.) However, all implementation rates performance higher than failure
        tolerance, and so do we here. */
@@ -1461,14 +1447,15 @@ uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, bool doReset)
 {
     if(doReset)
     {
-        uint8_t retCode;
+        uint8_t retCode
+              , * const pCntOverrun = &_taskAry[idxTask].cntOverrun;
         
         /* Read and reset should be atomic for data consistency if the application wants to
            accumulate the counter values in order to extend the counter's range. */
         cli();
         {
-            retCode = _taskAry[idxTask].cntOverrun;    
-            _taskAry[idxTask].cntOverrun = 0;
+            retCode = *pCntOverrun;
+            *pCntOverrun = 0;
         }
         sei();
         
@@ -1749,7 +1736,7 @@ void rtos_initRTOS(void)
         pT->cntOverrun = 0;
         
         /* Any task is suspended at the beginning. No task is active, see before. */
-        _suspendedTaskIdAry[idxTask] = idxTask;
+        _pSuspendedTaskAry[idxTask] = pT;
 
     } /* for(All tasks to initialize) */
 
@@ -1757,8 +1744,8 @@ void rtos_initRTOS(void)
     _noSuspendedTasks = RTOS_NO_TASKS;
 
     /* The idle task is stored in the last array entry. It differs, there's e.g. no task
-       function defined. We mainly need to storage location for the stack pointer. */
-    pT = &_taskAry[IDLE_TASK_ID];
+       function defined. We mainly need the storage location for the stack pointer. */
+    pT = _pIdleTask;
     pT->stackPointer = 0;           /* Used only at de-activation. */
     pT->timeDueAt = 0;              /* Not used at all. */
     pT->cntDelay = 0;               /* Not used at all. */
@@ -1772,14 +1759,14 @@ void rtos_initRTOS(void)
     pT->postedEventVec = 0;
     
     pT->eventMask = 0;              /* Not used at all. */
-    pT->waitForAnyEvent = false;    /* Not used at all. */
+    pT->waitForAnyEvent = true;     /* Not used at all. */
     pT->cntOverrun = 0;             /* Not used at all. */
 
     /* Any task is suspended at the beginning. No task is active, see before. */
     for(idxClass=0; idxClass<RTOS_NO_PRIO_CLASSES; ++idxClass)
         _noDueTasksAry[idxClass] = 0;
-    _activeTaskId = IDLE_TASK_ID;
-    _suspendedTaskId = IDLE_TASK_ID;
+    _pActiveTask    = _pIdleTask;
+    _pSuspendedTask = _pIdleTask;
 
     /* All data is prepared. Let's start the IRQ which clocks the system time. */
     rtos_enableIRQTimerTic();

@@ -21,6 +21,7 @@
  *
  * Module interface
  *   setup
+ *   rtos_enableIRQTimerTic
  *   loop
  * Local functions
  *   blink
@@ -123,7 +124,7 @@ static void blink(uint8_t noFlashes)
 
 static volatile uint8_t _touchedBySubRoutine; /* To discard removal of recursion by
                                                  optimization. */
-static __attribute__((used, noinline)) void subRoutine(uint8_t);
+static RTOS_TRUE_FCT void subRoutine(uint8_t);
 static void subRoutine(uint8_t nestedCalls)
 {
     volatile uint8_t stackUsage[43];
@@ -141,6 +142,35 @@ static void subRoutine(uint8_t nestedCalls)
         stackUsage[sizeof(stackUsage)-1] = nestedCalls;
     }
 } /* End of subRoutine */
+
+
+
+
+
+/**
+ * Test of redefining the central interrupt of RTuinOS. The default implementation of the
+ * interrupt configuration function is overridden by redefining the same function.\n
+ */ 
+
+void rtos_enableIRQTimerTic(void)
+{
+    Serial.println("Overloaded interrupt initialization rtos_enableIRQTimerTic in " __FILE__);
+    
+#ifdef __AVR_ATmega2560__
+    /* Initialization of the system timer: Arduino (wiring.c, init()) has initialized
+       timer2 to count up and down (phase correct PWM mode) with prescaler 64 and no TOP
+       value (i.e. it counts from 0 till MAX=255). This leads to a call frequency of
+       16e6Hz/64/510 = 490.1961 Hz, thus about 2 ms period time.
+         Here, we found on this setting (in order to not disturb any PWM related libraries)
+       and just enable the overflow interrupt. */
+    TIMSK2 |= _BV(TOIE2);
+#else
+# error Modifcation of code for other AVR CPU required
+#endif
+    
+} /* End of rtos_enableIRQTimerTic */
+
+
 
 
 

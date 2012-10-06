@@ -146,3 +146,13 @@ taskReadADC()
 }
 
 DEBUG compilation and particularly ASSERT requires initialization of Serial
+
+Potential to optimize: Less memory by compact arrays, pointers to vectors
+of individual size (if classes contain strongly differing numbers of
+tasks)
+  Idle task object only uses three fields. Consider to pack these into
+separate struct and have this n+1 time whereas the rest is used only n
+times.
+
+makefile: Switch of application/TC always requires a clean as the
+configuration of rtos.c (no tasks) differs
