@@ -60,12 +60,11 @@
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This
     interrupt (like all others which possibly result in a context switch) need to be
-    inhibited by rtos_enterCriticalSection. */
-/** @todo Declare external function void rtos_enableIRQTimerTic(void) which
-    initializes/releases the IRQ to be used to clock the system. If the IRQ can be chosen
-    by means of a macro it makes no sense not to be able to implement its details.
-    Internally, the function could be implemented as weak, it as as kind of default
-    implementation. */
+    inhibited by rtos_enterCriticalSection.\n
+      If an application redefines the interrupt source, it'll probably have to implement
+    the code to configure this interrupt (e.g. set the interrupt enable bit in the
+    according peripheral). If so, this needs to be done by reimplementing void
+    rtos_enableIRQTimerTic(void), which is an overridable default implementation. */
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
 
 
