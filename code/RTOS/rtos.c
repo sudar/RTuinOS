@@ -592,12 +592,22 @@ void rtos_enableIRQTimerTic(void)
  *   If the function returns true, the old and the new active task's IDs are reported by
  * side effect: They are written into the global variables _pSuspendedTask and
  * _pActiveTask.
+ *   @param isNewActiveTask
+ * For compilation with round robin only: This flag signals that there's probably a change
+ * of the active task. Normally, looking for the active task is skipped if no task changed
+ * its state from suspended to due. If this flag is set, this step is never skipped.
  */ 
 
-static bool checkForTaskActivation()
+static bool checkForTaskActivation(
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+                                   bool isNewActiveTask
+#endif
+                                  )
 {
     uint8_t idxSuspTask = 0;
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_OFF
     bool isNewActiveTask = false;
+#endif
 
     while(idxSuspTask<_noSuspendedTasks)
     {
@@ -628,9 +638,14 @@ static bool checkForTaskActivation()
                the next suspend operation in the next active state. */
             pT->eventMask = 0;
             
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+            /* If a round robin task voluntarily suspends it gets the right for a complete
+               new time slice. Reload the counter. */
+            pT->cntRoundRobin = pT->timeRoundRobin;
+#endif
             /* Move the task from the list of suspended tasks to the list of due tasks of
                its priority class. */
-            _pDueTaskAryAry[prio][_noDueTasksAry[prio]++] = _pSuspendedTaskAry[idxSuspTask];
+            _pDueTaskAryAry[prio][_noDueTasksAry[prio]++] = pT;
             -- _noSuspendedTasks;
             for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
                 _pSuspendedTaskAry[u] = _pSuspendedTaskAry[u+1];
@@ -745,17 +760,54 @@ static bool onTimerTic(void)
     /* Round-robin: Applies only to the active task. It can become inactive, however not
        undue. If its time slice is elapsed it is put at the end of the due list in its
        priority class. */
-    // @todo Implement round-robin. Shortcut isNewActiveTask if the active task is made undue: Now we just have to take the first one from the known list of due tasks in the given prio class - after having rotated the list contents.
-# error Round robin is not yet implemented
+    bool isNewActiveTask = false;
+    if(_pActiveTask->cntRoundRobin > 0)
+    {
+        if(--_pActiveTask->cntRoundRobin == 0)
+        {
+            /* Time slice of active task has elapsed. Reload the counter. */
+            _pActiveTask->cntRoundRobin = _pActiveTask->timeRoundRobin;
+            
+            uint8_t prio = _pActiveTask->prioClass
+                  , noTasks = _noDueTasksAry[prio];
+            
+            /* If there are more due tasks in the same class the next one will be made the
+               acitive one by a cyclic move of the positions in the list. */
+            if(noTasks-- > 1)
+            {
+                uint8_t idxTask;
+                
+                /* The list of due tasks in the active priority class is rolled by one task.
+                   The next due task will become active.
+                     Note: noTasks has been decremented before in the if. */
+                for(idxTask=0; idxTask<noTasks; ++idxTask)
+                    _pDueTaskAryAry[prio][idxTask] = _pDueTaskAryAry[prio][idxTask+1];
+                _pDueTaskAryAry[prio][idxTask] = _pActiveTask;
+            
+                /* Force check for new active task - even if no suspended task should have been
+                   released. */
+                isNewActiveTask = true;
+                
+            } /* if(Did the task loose against another due one?) */
+            
+        } /* if(Did the round robin time of the task elapse?) */
+        
+    } /* if(Do we have a round robin task?) */
 #endif
 
     /* Check if the task becomes due because of the possibly occured timer events.
+         isNewActiveTask: Enforce the search for a new active task. Normally we do this
+       only if a suspended task was released. If round robin is compiled it depends. Always
+       look for a new active task if the round robin time has elapsed.
          The function has side effects: If there's a task which was suspended before and
        which is released because of the timer events and which is of higher priority than
        the one being active so far, the ID of the old and newly active task are written
        into global variables _pSuspendedTask and _pActiveTask. */
-    return checkForTaskActivation();
-
+    return checkForTaskActivation(
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+                                  isNewActiveTask
+#endif
+                                 );
 } /* End of onTimerTic. */
 
 
@@ -1081,8 +1133,11 @@ static bool setEvent(uint16_t postedEventVec)
        which is released because of the timer events and which is of higher priority than
        the one being active so far, the ID of the old and newly active task are written
        into global variables _pSuspendedTask and _pActiveTask. */
-    return checkForTaskActivation();
-
+    return checkForTaskActivation(
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+                                   /* isNewActiveTask */ false
+#endif
+                                 );
 } /* End of setEvent */
 
 
