@@ -1,0 +1,21 @@
+Test case for AND combination of events but a timeout at the same time.
+Has been implemented in r233 but never been tested at that time.
+
+Test case for user interrupts. They have never been tested when comitted
+in r227.
+
+Implementation of waitForEventsUntillTime:
+  Done as part of waitForEvent.
+Now we have the situation that rtos_suspendTaskTillTime is a code copy of
+most of rtos_waitForEvent and its functionality actually is a subset of
+the functionality of rtos_waitForEvent. It could therefore become a macro
+calling rtos_waitForEvent.
+  Consider to do: Advantage is more straight forward implementation,
+drawback is somewhat less performant implementation of relevant use case
+of regular tasks. However, replacing suspendTaskTillTime by waitForEvent
+has already been a step in the same direction.
+  CAUTION: The documentation of rtos_suspendTaskTillTime is surely worth
+it.
+
+Implement EnterLeaveCriticalSection (cli/sei and only TIMER2)
+        , get/setRoundRobin?

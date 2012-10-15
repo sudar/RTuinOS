@@ -901,7 +901,7 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
 
 
 
-
+#if 0
 /**
  * Suspend operation of software interrupt rtos_suspendTaskTillTime.\n
  *   The action of this SW interupt is placed into an own function in order to let the
@@ -972,7 +972,7 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
         }
     }
 } /* End of suspendTaskTillTime */
-
+#endif
 
 
 
@@ -1057,7 +1057,11 @@ volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
        this naked function we must not have declared any). The call of the function is
        immediately followed by some assembly code which processes the return value of the
        function, found in register pair r24/25. */
-    suspendTaskTillTime(deltaTimeTillRelease);
+    //suspendTaskTillTime(deltaTimeTillRelease);
+    waitForEvent( /* eventMask */ RTOS_EVT_ABSOLUTE_TIMER
+                , /* all */       false
+                , /* timeout */   deltaTimeTillRelease
+                );
     
     /* Switch the stack pointer to the (saved) stack pointer of the new active task and
        push the function result onto the new stack - from where it is loaded into r24/r25
@@ -1347,13 +1351,41 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
         _pDueTaskAryAry[prio][idxTask] = _pDueTaskAryAry[prio][idxTask+1];
     
     /* This suspend command wants a reactivation by a combination of events (which may
-       include the timeout event).
-         ++ timeout: The call of the suspend function is in no way synchronized with the
-       system clock. We define the delay to be a minimum and implement the resolution
-       caused uncertainty as an additional delay. */
-    if((uintTime_t)(timeout+1) != 0)
-        ++ timeout;
-    pT->cntDelay = timeout;
+       include the timeout event). Save the resume condition. */
+    
+    /* Depending on the event mask we either load the one or the other timer. Default is
+       the less expensive delay counter. */
+    if((eventMask & RTOS_EVT_ABSOLUTE_TIMER) != 0)
+    {   
+        /* This suspend command wants a reactivation at a certain time. The new time is
+           assigned by the += in the conditional expression.
+             Task overrun detection: The new time must not more than half a cycle in the
+           future. The test uses a signed comparison. The unsigned comparison >= 0x80 would be
+           equivalent but probably less performant (TBC). */
+        if((intTime_t)((pT->timeDueAt+=timeout) - _time) <= 0)
+        {
+            if(pT->cntOverrun < 0xff)
+                ++ pT->cntOverrun;
+
+            /* The wanted point in time is over. We do the best recovery which is possible: Let
+               the task become due in the very next timer tic. */
+            pT->timeDueAt = _time+1;
+        }
+    }
+    else
+    {
+        /* The timeout counter is reloaded. We could do this conditionally if the bit is
+           set, but in all normal use cases it'll and if not it doesn't harm. We will the
+           just decrement the delay counter in onTimerTic once but not set the event.
+             ++ timeout: The call of the suspend function is in no way synchronized with the
+           system clock. We define the delay to be a minimum and implement the resolution
+           caused uncertainty as an additional delay. */
+        if((uintTime_t)(timeout+1) != 0)
+            ++ timeout;
+        pT->cntDelay = timeout;
+        
+    } /* if(Wich timer is addressed for the timeout condition?) */
+    
     pT->eventMask = eventMask;
     pT->waitForAnyEvent = !all;
     
@@ -1390,24 +1422,35 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  *   The idle task can't be suspended. If it calls this function a crash would be the
  * immediate result.
  *   @return
- * The event mask of resuming events is returned. See \a rtos.h for a list of known events.
+ * The set of actually resuming events is returned as a bit vector which corresponds
+ * bitwise to eventMask. See \a rtos.h for a list of known events.
  *   @param eventMask
- * The bit vector of events to wait for. Needs to include the delay timer event
- * RTOS_EVT_DELAY_TIMER, if a timeout is required.
+ * The bit vector of events to wait for. Needs to include either the delay timer event
+ * RTOS_EVT_DELAY_TIMER or RTOS_EVT_ABSOLUTE_TIMER, if a timeout is required, but not both
+ * of them.\n
+ *   The normal use case will probably be the delay timer. However, a regular task may also
+ * specify the absolute timer with the next regular task time as parameter so that it
+ * surely becomes due outermost at its usual task time.
  *   @param all
  *   If false, the task is made due as soon as the first event mentioned in \a eventMask is
  * seen.\n
- *   If true, the task is made due only if all events are posted - except for timer event
- * RTOS_EVT_DELAY_TIMER, which is still OR combined. If you say "all" but the event mask
- * contains RTOS_EVT_DELAY_TIMER, the task will resume when either the timer elapsed or
- * when all other events in the mask were seen.
+ *   If true, the task is made due only if all events are posted - except for the timer
+ * events, which are still OR combined. If you say "all" but the event mask contains either
+ * RTOS_EVT_DELAY_TIMER or RTOS_EVT_ABSOLUTE_TIMER, the task will resume when either the
+ * timer elapsed or when all other events in the mask were seen.
  *   @param timeout
- * The number of system timer tics from now on until the timeout elapses. One should be
- * aware the resolution of any timing is the tic of the system timer. A timeout of n may
- * actually mean any delay in the range n..n+1 tics.\n
+ * If \a eventMask contains RTOS_EVT_DELAY_TIMER: The number of system timer tics from now
+ * on until the timeout elapses. One should be aware of the resolution of any timing being
+ * the tic of the system timer. A timeout of n may actually mean any delay in the range
+ * n..n+1 tics.\n
  *   Even specifying 0 will suspend the task a short time and give others the chance to
  * become active.\n
- *   If RTOS_EVT_DELAY_TIMER is not set in the event mask, this parameter doesn't matter.
+ *   If \a eventMask contains RTOS_EVT_ABSOLUTE_TIME: The absolute time the task becomes
+ * due again at latest. The time designation is relative; it refers to the last recent
+ * absolute time at which this task had been resumed. See rtos_suspendTaskTillTime for
+ * details.\n
+ *   If neither RTOS_EVT_DELAY_TIMER nor RTOS_EVT_ABSOLUTE_TIMER is set in the event mask,
+ * this parameter should be zero.
  *   @remark
  * It is absolutely essential that this routine is implemented as naked and noinline. See
  * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
@@ -1837,10 +1880,3 @@ void rtos_initRTOS(void)
         loop();
 
 } /* End of rtos_initRTOS */
-
-
-/*
-TODO: implement waitForEventsUntillTime
-              , EnterLeaveCriticalSection (cli/sei and only TIMER2)
-              , get/setRoundRobin?
-*/
