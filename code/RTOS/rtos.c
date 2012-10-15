@@ -616,18 +616,22 @@ static bool checkForTaskActivation(
         
         /* Check if the task becomes due because of the events posted prior to calling this
            function. The optimally supported case is the more probable OR combination of
-           events. */
-        /* @todo The AND operation has been specified bad: AND must only refer to the
-           postable events but not include the timer events. All postable events need to be
-           set in either the mask and the vector of posted events OR any of the timer
-           events in the mask are set in the vector of posted events. Consider if it still
-           makes sense to have all events uniquely in a single vector: This decision was
-           mainly taken because of the homegenous implementation -- which is no longer
-           given with this specification change. */
+           events.
+             The AND operation is less straight forward as the timeout character of the
+           timer events needs to be retained: AND only refers to the postable events but
+           does not include the timer events. All postable events need to be set in either
+           the mask and the vector of posted events OR any of the timer events in the mask
+           are set in the vector of posted events. */
+#define TIMER_EVT_MASK (RTOS_EVT_ABSOLUTE_TIMER | RTOS_EVT_DELAY_TIMER)
         eventVec = pT->postedEventVec;
-        if( (pT->waitForAnyEvent &&  eventVec != 0)
-            ||  (!pT->waitForAnyEvent &&  eventVec == pT->eventMask)
+        if((pT->waitForAnyEvent &&  eventVec != 0)
+           ||  (!pT->waitForAnyEvent
+                &&  (((eventVec ^ pT->eventMask) & ~TIMER_EVT_MASK) == 0
+                     ||  (eventVec & pT->eventMask & TIMER_EVT_MASK) != 0
+                    )
+               )
           )
+#undef TIMER_EVT_MASK
         {
             uint8_t u
                   , prio = pT->prioClass;
@@ -733,16 +737,10 @@ static bool onTimerTic(void)
         if(_time == pT->timeDueAt)
         {
             /* Setting the absolute timer event when it already is set looks like a task
-               overrun indication. It isn't for two reasons. First, by means of available
-               API calls the absolute timer event can't be AND combined with other events,
-               so the event will immediately change the status to due (see below), so that
-               setting it a second time will never occur. Secondary, an AND combination is
-               basically possible by the kernel and would work fine, and if it would be
-               used setting the timer event here multiple times could be an obvious
-               possible consequence, but not an indication of a task overrun - as it were
-               the other event which blocks the task.
-                 For these reasons, the code doesn't double check for repeatedly setting the
-               same event. */
+               overrun indication. It isn't for the following reason. The absolute timer
+               event can't be AND combined with other events, so the event will immediately
+               change the status to due (see checkForTaskActivation), so that setting it a
+               second time will never occur. */
             pT->postedEventVec |= (RTOS_EVT_ABSOLUTE_TIMER & pT->eventMask);
         }
 
@@ -1397,12 +1395,12 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * The bit vector of events to wait for. Needs to include the delay timer event
  * RTOS_EVT_DELAY_TIMER, if a timeout is required.
  *   @param all
- * If true, the task is made due only if all events are posted.\n
- *   CAUTION: Due to a specification error, this flag can be reasonable set in only in
- * combination of \a not specifying a timeout. Otherwise the activation condition would be
- * to wait for all events and to wait for the timeout being elapsed -- which is surely not
- * what you mean with a timeout. Waiting for any event with timeout is obviously not a
- * problem.
+ *   If false, the task is made due as soon as the first event mentioned in \a eventMask is
+ * seen.\n
+ *   If true, the task is made due only if all events are posted - except for timer event
+ * RTOS_EVT_DELAY_TIMER, which is still OR combined. If you say "all" but the event mask
+ * contains RTOS_EVT_DELAY_TIMER, the task will resume when either the timer elapsed or
+ * when all other events in the mask were seen.
  *   @param timeout
  * The number of system timer tics from now on until the timeout elapses. One should be
  * aware the resolution of any timing is the tic of the system timer. A timeout of n may
