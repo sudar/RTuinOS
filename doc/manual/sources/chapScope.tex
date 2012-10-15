@@ -1,4 +1,51 @@
 \chapter{Scope}
 \label{secScope}
 
-TODO Describe what the document is about and to whom it may concern
+Arduino\footnote{See www.arduino.cc} is a popular \uC{} platform for
+various purposes, mainly located in leisure time projects. The \rtos{}
+project adds the programming paradigm of a real time operating system to
+the Arduino world. Real time operating systems characterize the
+professional use of \uCs{}.
+
+Real time operating systems, or RTOS, strongly simplify the implementation
+of technical applications which typically do things in a quite regular
+way, e.g. checking inputs and reacting in an appropriate way every tenth
+of a second. The same for the outputs, which are served in the same or
+another regular time grid; this way it is pretty simple to e.g. record the
+environmental temperature and to control the Arduino LED at the same time
+very regularly and without the need of CPU consuming waiting loops as
+in Arduinos library function \ident{delay}.
+
+The traditional Arduino sketch has two entry points; the function
+\ident{setup}, which is the place to put the initialization code required
+to run your sketch and function \ident{loop}, which is periodically
+called. The frequency of looping is not deterministic but depends on
+the execution time of the code inside the loop.
+
+Using \rtos{}, the two mentioned functions continue to exist and continue to
+have the same meaning. However, as part of the code initialization in
+\ident{setup} you may define a number of tasks having individual
+properties. The most relevant property of a task is a C code
+function\footnote{The GNU C compiler is quite uncomplicated in mixing C
+and C++ files. Although \rtos{} is written in C it's no matter do implement
+task functions in C++ if only the general rules of combining C and C++ and
+the considerations about using library functions (particularly
+\ident{new}) in a multithreading environment are obyed. Class member
+functions are obviously no candidates for a task function.}, which becomes
+the so called task function. Once entering the traditional Arduino loop,
+all of these task functions are executed in parallel to the repeated
+execution of function \ident{loop}. We say, \ident{loop} becomes the idle
+task of the RTOS.
+
+This document introduces the basic ideas of \rtos{} to those of you who are
+not familar with the usage of an RTOS and gives anybody else an overview
+what the possibilities and limits of \rtos{} are.
+
+Some core considerations of the implementation are highlighted, but the
+relevant documentation of the implementation is the code itself. It is
+heavily commented using doxygen\footnote{See http://www.doxygen.org} tags.
+The compiled doxygen documentation is part of this project but will
+contain only the documentation of the global objects of \rtos. To
+understand the implementation you will have to inspect the source code
+itself, please refer to \refRTOS_c.
+

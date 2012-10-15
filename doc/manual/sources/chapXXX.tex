@@ -1,7 +1,7 @@
-\chapter{About \rtos}
+\chapter{About \rtos{}}
 \label{secAbout}
 
-\rtos is a small real time operating system (RTOS) for the Arduino
+\rtos{} is a small real time operating system (RTOS) for the Arduino
 environment. It is simple to use and fits well into the existing Arduino
 code environment. It adds the concept of pseudo-parallel execution threads
 to your sketches. These threads may be preemptive or non-premptive.
@@ -9,14 +9,401 @@ Deliberate, cooperative switching between the tasks is supported or time
 based switching. Events can be sent and received by tasks as a simple kind
 of communication.
 
-\rtos is provided as a single source code file which is compiled together
-with your other code, which becomes an \rtos-application. In the most
-simple case, if you do not define any task, your application will strongle
+\rtos{} is provided as a single source code file which is compiled together
+with your other code, which now becomes an \rtos-application. In the most
+simple case, if you do not define any task, your application will strongly
 resemble a traditional sketch: You implement your \ident{setup} and your
 \ident{loop} function; the former will be run once at the beginning and
 the latter repeatedly.
 
-Timer: Is also resolution for delay and waitForEvent. If run-time optimal
+\rtos{} on its own can't be compiled, there need to be an application.
+\rtos{} is organized as a package which combines the \rtos{} source file
+with some sample applications which are the test cases at the same time.
+The source code of each sample application is held in a separate folder,
+named tc\textless nn\textgreater. Any of these can be selected for
+compilation. You may add more folders, holding the source code of your
+\rtos{} application. A starting point of your application folder can be a
+copy of any of the folders tc\textless nn\textgreater. The compilation
+always is the same. Run the makefile, where the name of the folder (which
+doesn't need to be tc\textless nn\textgreater) is an option of the
+command line. See below for more.
+
+A characteristic of \rtos{} is that the behavior of a task is not
+predetermined or fixed at runtime. \rtos{} supports regular,
+time-controlled tasks as well as purely event controlled ones. It supports
+preemptive tasks and non-preemptive ones. Task scheduling can be done
+cooperatively or time based, and round robin like time slices are also
+possible. Moreover, many of these modes can be mixed. A task is not per-se
+regular, its implementing code decides what happens and this can be
+decided context or situation dependent. This flexibility is achieved by
+the basic idea of having an event controlled scheduler, where typical RTOS
+use cases are supported by providing according events, e.g.
+absolute-point-in-time-reached. If the task's code decides to always wait
+for the same absolute-point-in-time-reached event, then it becomes a
+regular task. However, situation dependent the same task could decide to
+wait for an application sent event -- and give up its regular behavior. In
+many RTOS implementation the basic characteristic of a task is determined
+at compile time, in \rtos{} this is done partly at compile time and partly
+at runtime.
+
+
+\chapter{How does \rtos{} work?}
+
+In a traditional sketch, the function \ident{loop} defines all actions
+which have to be excuted. The execution of the code is strictly
+sequential. \ident{loop} may of course call any sub-routines, which may
+call others, but this does not change the strictly sequential character of
+the execution of the statements. Therefore it is difficult to execute
+specific actions at specific points in time. For example toggle the state
+of a LED every seconds. This might still be easy to do if your sketch does
+nothing else -- see Arduino's standard example \ident{blink} --, but if
+you're in the middle of a skecth, which e.g. transfers some data via the
+USB port, it becomes ugly: You will have to merge some specific, the LED
+serving statements, into your USB handling code. And the accuracy of the
+yielded timing will not be perfect.
+
+Imagine, you could simply write two sketches. The USB comunication stays
+as it is but a second sketch, e.g. the sample sketch \ident{blink}, is
+defined at the same time and will be executed, too. Now the USB code is no
+longer spoiled with double-checking the state of the LED but nonetheless
+the LED will blink as desired.
+
+This actually is what \rtos{} offers. It's however no a complete sketch
+but just a function -- which can of course be stored in a separate C
+source file --, which is executed in parallel. Write two such functions,
+make them so called tasks and you get what you want.
+
+How would this work? The Arduino board continues to have a single main
+CPU, which is solely available to execute any piece of code. The trick is
+to use it alternatingly to proceed with the one task and then with the
+other. If this switching between the tasks happens fast enough, than it's
+the same as if both would run at the same time -- only with limited
+execution speed.
+
+Does alternating between the tasks happen regularly? It depends. Different
+patterns of alternating between tasks are possible. The most simple is to
+share the CPU in fixed portions between the tasks. The ratio can be
+chosen. If we assume in our example that serving the USB port is more
+challenging than flashing an LED, it would be reasonable to share the CPU
+by 95:5 rather than by 50:50. This pattern is called Round Robin and fits
+well if the tasks are completely independent of each other (as in our
+example) and if all of them continuously require the CPU -- which is not
+the case in our example!
+
+Toggling the LED state can be done by permanently observing a watch and
+switching the LED output when it reaches the next mark. A traditional
+Arduino implementation of this strategy requires the CPU indeed permanent
+and this is indeed how the sample sketch \ident{blink} is implemented. In
+an RTOS you can do it better. Tell the system when you want to toggle the
+LED state the next time and do nothing untill. Your task is inactive, does
+not require the CPU any more and is nonetheless executed again exactely at
+the desired point in time. Two advantages arise. Your task does barely
+consume CPU power and the regularity of the execution is very good. This
+pattern is the appropriate solution for our example. The LED is blinking
+very regular, and nearly all of the CPU performance can still be spend on
+the USB task, which therefore behaves the same way as if there was no
+blinking LED at all.
+
+The next pattern of sharing the CPU between different tasks is direct
+coupling of tasks. By means of so called events a task can indicate a
+specific situation to any other task, which will then react on this
+situation. For example, the LED should not constantly blink. It is now
+used to indicate the state of the USB communication by flashing a number
+of times if a significant state change occurs. The number of flashes will
+notify what happened. The LED task will now use an event to become active
+and subsequently it'll use the execute-at-time pattern a number of times
+to realize the sequence of flashes. The LED stays dark as long as the
+event is not posted to the task. After the blink sequence the task will
+again start to wait for the next ocurrance of the event. The active time of
+this task is still close to zero: Every time it is executed it'll just use
+a few statements to toggle the LED state and to inform the RTOS about the
+next condition under which to become active again. The main task, which
+implements the communication can proceed nearly as if there was no LED
+task. There's however an extension to its implementation. In case of a
+significant status change it has to indicate the number of according
+flashes and to post the event. The former can be done by a write to a
+global variable and the latter is a simple call of an \rtos{} API
+function. The global variable is shared by both tasks, the LED task will
+read it when being activated by the event.
+
+If there are more tasks the scenario becomes more complicated, we need a
+new term. If two tasks tell the RTOS the time they want to be activated
+again, there is a certain chance, that it is the same time. In this
+situation, if this time is reached, \rtos{} decides that both tasks are
+due -- but only one of them can get the CPU, i.e. can be activated. Which
+one is decided by priority. The priority of a task is a static,
+predetermined property of a task. At compilation time, you will decide
+which of tasks has the higher priority and which would get the CPU in the
+mentioned situation. 
+
+Similar: The tasks do not specify the same point in time but nearly the
+same. Obviously, the task becoming due earlier will get the CPU. And when
+the other one becomes due a bit later it might still desire to have the
+CPU. Will it continue to have it? It depends again on the priority of the
+tasks. If the later due task has the higher priority, it'll take over the
+CPU from the earlier task. The earlier task is still due (as it didn't
+return the CPU voluntarily so far) but no longer active. The later task is
+both, due (it's point in time has reached) and active (it got the CPU).
+
+When the active, later task tells \rtos{} to not longer need the CPU, the
+earlier still due task will again get the CPU and continue to execute.
+
+If a task tells the system to no longer require the CPU (by notifying:
+"Continue my execution at/when") we say it is suspended. If it becomes due
+again, we say it is resumed. If it is executed again, we say it is
+activated.
+
+There's always one and only one active task. What if all tasks in the
+system did suspend themselves because they are waiting for a point in time
+or an event? Now, there is a single task which must never suspend itself.
+This task is called the idle task and \rtos{} can't be compiled without
+such a task being present.\footnote{Caution, if the idle task would ever
+try to suspend itself, a crash of the system would result.} The idle task
+doesn't need to be defined in the code. \rtos{} uses the function
+\ident{loop} as idle task. All the code in function \ident{loop} makes up
+task idle. If you don't need an idle task (as all your code is time or
+event controlled) just implement \ident{loop} as an empty function body.
+
+Not implementing the idle task is however a waste of time. \rtos{} spends
+all time in \ident{loop} when none of the other tasks is due. So if there
+are any operations in your application which can or should be done
+occasionally it's good practice to put them into the idle task. There's no
+drawback, if any task needs the CPU, idle is just waiting until the task
+has finished. The execution speed of task idle is directly determined by
+the CPU consumption of the other tasks. Idle will never slow down the
+tasks, but the tasks will slow down idle. Idle is a task of priority lower
+than all other priorities in the system. Idle is a task which is never
+suspended but always due and sometimes active.
+
+
+\section{Implementation of \rtos' Scheduler}
+\label{secScheduler}
+
+The set of rules how to share the CPU between the different tasks is
+called the scheduler. Actually, \rtos{} is nothing else than the
+implementation of a scheduler.\footnote{From the world of personal
+computers you will associate much more with the term operating system than
+just a task scheduler. In fact, in this environment, the scheduler is just
+the most important part of the operating system, therefore referred to as
+kernel, but surrounded by tons of uitilities, mostly to support various
+I/O operations. In the embedded world an RTOS typically doesn't offer
+anything else than a scheduler and so does \rtos{}.} Understanding the
+details of the decision rules implemented in \rtos{} is essential for
+writing applications that behave as desired. (An RTOS can easily show
+effects which are neither expected nor desired.) The rules of \rtos'
+scheduler will become clear in the following documentation of its
+implementation. Please refer to figure \ref{figRTuinOSScheduler}.
+
+\incFigFile{rtuinosScheduler}{Scheduler of \rtos}{0.8}
+
+In \rtos{}, a task is represented by a task object. All objects are
+statically allocated, there's no dynamic creation or
+deletion.\footnote{Please, refer to section \ref{labOutlook} for more
+detailed considerations about this.} The objects are configured in
+Arduino's function \ident{setup} and stay unchanged from now (besides the
+continuous update of the runtime information by the scheduler, see below).
+
+\rtos{} manages all tasks in lists. There's one list per priority. All
+tasks having a specific priority form a priority class and this class is
+managed with the associated list. The number of different priorities is
+determined at compile time by the application.
+
+An additional list holds all tasks (of any priority) which are currently
+suspended.
+
+Within a task object there are a few members which express a condition
+under which a suspended task is resumed. (These members are empty or in a
+don't care state when a task is due or active.) More concrete, \rtos{}
+knows about a limited number of distinct events\footnote{For good reasons
+the events are implemented by bits in an unsigned integer word. Currently,
+type \ident{uint16\_t} is used as it is a good trade off between number
+of events and performance. A change to \ident{uint8\_t} or
+\ident{uint32\_t} is possible but not trivial as assembler code is
+affected. We thus have 16 such events.} and the mentioned condition is a
+sub-set of these plus the following Boolean choice: will the task be
+resumed as soon as any event of the sub-set is seen or does the task stay
+suspended untill all events have been seen? Moreover, three of the known
+events have a specific meaning; they are all timing related and have a
+parameter of kind \emph{when}.
+
+At system initialization time all tasks are put in state suspended.
+Consequently, the initial resume condition is part of the task
+initialization. Typically, this condition is weak, like "resume
+immediately". However, a delayed resume or a resume by an application
+event is also possible. 
+
+
+\section{Time based Events}
+\label{secTimeBasedEvents}
+
+The most relevant events of \rtos{} are absolute and relative time events.
+An absolute time event means "resume task at given time". A relative time
+event means "resume task after a given time span counted from now". You
+see, the latter -- probably with time span zero -- is the most typical
+initial resume condition for a task. It'll start immediately.
+
+In the implementation a time event results from a system timer tic. The
+core of the scheduler is a clock based interrupt. In \rtos{} this clock
+has a default clock rate of about 2~ms, but this can be altered by the
+application code. In the interrupt service routine (ISR), a variable
+holding the absolute, current system time is incremented. (The rate of the
+interrupt is the unit of all timing operations regardless of the actual
+physical value.) The new value of the system time is compared against the
+\emph{when} parameter of all suspended tasks which suspended with a
+resume-at condition. If there's equality, the absolute time event is
+notified to this task. For all tasks which had suspended with a
+resume-after condition, the \emph{when} parameter of this condition is
+decremented. If it reaches null, the desired suspend time has elapsed and
+the relative time event is notified to the task.
+
+The third time based event is available only if the system compiled with
+round robin feature. Now a task may have a time slice defined. The time
+slice is the maximum time the task may continuously be active. This event
+is implemented directly, not as a bit, not as notification to the task. A
+round robin task has a counter which is loaded with the time slice
+duration at activation time. In each system timer tic it is decremented
+for the one and only active task (if it is a round robin task and whatever
+task it currently is). When the counter reaches null is is reloaded and
+the task is immediately taken from the head of its due list and put at the
+end of this list. This means the task stays due but will become inactive.
+Another task, the new head of the list, is a more promising candidate for
+the new, active task.
+
+The next step is to check the conditions of all suspended tasks. For each
+such task it is checked if its resume condition is fullfilled, i.e. if all
+events it is waiting for have been posted to it meanwhile. If so, it is
+taken out of the list of suspended tasks and placed at the end of the due
+list of the priority class the task belongs to.
+
+Now, after reordering the tasks in the several lists, the ISR finishes
+with looking for the new, active task. The decision is easy. It loops
+over all due lists, beginning with the highest priority. The head of the
+first found non-empty list is the new, active task. If all due lists are
+empty, the idle task is chosen. The seletced task is made active and the
+ISR ends.
+
+
+\section{Explicitly posted Events}
+\label{secManualEvents}
+
+Besides the system timer tic, the scheduler becomes active in two other
+situations. The first one is the event explicitly posted by an application
+task. \rtos{} knows a predefined number of general purpose events, which
+can be posted by one task and which another task can wait for. The latter
+task suspends itself and specifies the event as resume condition. Under
+application determined conditions, the
+former task calls the \rtos{} API function \ident{setEvent} and the latter
+task will resume. 
+
+In this situation it depends on the priorities of the two tasks how
+\ident{setEvent} returns. If the event-setting task has the same or higher
+priority \ident{setEvent} will immediately return like an ordinary
+sub-routine. The other task becomes due but not active. If the
+event-receiving task has the higher priority, \ident{setEvent} leads to
+temporary inactivation of the calling task and will return only when this
+task is activated again.
+
+More in general, \ident{setEvent} is implemented as a software interrupt
+(SWI) and behaves similar to the system timer ISR. It notifies the event
+to all currently suspended tasks, which are waiting for it. The rest is
+done exactely as the sytem timer ISR does. \ident{setEvent} checks the
+resume condition of all suspended tasks. Those tasks the condition of
+which is fullfilled are moved to the end of their due list. Then, the new
+active task is selected. This might be the same or another task. The SWI
+ends with continuing the new, active task.
+
+As a matter of fact, a call of \ident{setEvent} will never make the
+calling task undue (i.e. suspended), outermost inactive. This is the
+reason, why \ident{setEvent} may even be called by the idle task.
+
+Side note: There is a crosswise relationship between \ident{setEvent} and
+the suspend commands. From the perspective of the task code switching
+tasks appears as follows: The suspend function is invoked but it returns
+out of the suspend command or call of \ident{setEvent} of another task
+which became due meanwhile. If a task calls \ident{setEvent} it doesn't
+need to return but could for example return out of the initially mentioned
+suspend command.
+
+
+\section{External Interrupts}
+\label{secInterruptEvents}
+
+The last situation where the scheduler gets active is an external
+interrupt. (Here, the term external means "external to \rtos{}" as opposed
+to "external to the \uC{}".) By compile switch, you can bind any true
+interrupt to the \ident{setEvent} function. The ISR of the interrupt
+source will call \ident{setEvent}. The event which is posted is no longer
+a general purpose event but dedicated to this interrupt. 
+
+The actions are exactely the same as described for \ident{setEvent} in
+section \ref{secManualEvents}. Obviously, the ISR is asynchronous to the
+task execution. If the posted event makes a task due which has a higher
+priority than the interrupted task, the interrupted task is made inactive
+(but it remains still due) and the other task will become active.
+
+Typically, there will be such a task waiting for the event and having a
+higher priority. Thus causing a task switch. There's only one use case for
+this kind of scheduler invokation: The interrupt triggers a dedicated task
+-- indirectly via the hidden call of \ident{setEvent} --, which actually
+serves as interrupt handler, doing all sort of things which are needed by
+the interrupt. This tasks will be implemented as an infinite
+\ident{while}-loop, where the \ident{while}-condition is the suspend
+command that waits for the interrupt event and where the body of the loop
+is the actual handler of the interrupt.
+
+
+\section{Return from a Suspend Command}
+\label{secReturnFromSuspend}
+
+An important detail of the implementation of \rtos{} is the way
+information is passed back from the scheduler to the appliction code. The
+direct interaction of this code with the scheduler is done with the
+suspend commands and function \ident{setEvent} in the \rtos{} API.
+
+\ident{setEvent} takes a parameter -- the set of events to be posted to
+the suspended tasks -- but doesn't return anything. Here, the only
+complexity to understand is, that it won't immediately return. It triggers
+a scheduler act and won't return until the calling task is the due task
+with highest priority. Which can be the case between immediately and never
+in case of starvation.
+
+The suspend commands take some parameters which specify the condition
+under which the task will become due again, e.g. an absolute-time-event.
+While the task is suspended, the different scheduler acts repeatedly double
+check whether a sufficient set of events has been posted to the task (see
+above). Each posted event is stored in the task object. As soon as the
+posted set suffices, the task is moved from the suspended list to the end
+of the due list of given priority class. From now on, since the task is no
+longer suspended, no further events will be posted to this task and nor
+will they be stored in the task object. Thus, the very set of events, which
+made the task due is now frozen in the task object. When the task, which
+is due now, becomes the active task again, the code flow of the task
+returns from the suspend command it had initially invoked. At this
+occasion, the stored, frozen set of events, which had made the task due is
+returned as return value of the suspend command.
+
+By simply evaluating the return code a task can react dependent on which
+events it had made due. This is of particular interest if a task suspends
+waiting for a combination of events. In practice this will most often be
+the combination of an application event and a relative-time event, which
+this way gets the meaning of a timeout. Obviously, the task needs to
+behave differently whether it received the expected event or if there was
+a timeout.
+
+By the way, what has been said for the return from a suspend command also
+holds true for the initial entry into a task function. Any task is
+initialized in suspended state. The first time it is realeased the code
+flow enters the task function. What's otherwise the return code of a
+suspend command is now passed to the task function as function parameter.
+This way the task knows by which condition it has been initially
+activated.
+
+
+\chapter{Collected Notes}
+
+What is real time? Round Robin isn't. Jitter is accepted.
+
+Timer: Is also resolution for delay and waitForEvent. If runtime optimal
 (tic=fastest task time) than the fastest task has no chance to use other
 delay than with limit to next regular task due time
 
@@ -165,14 +552,88 @@ taskReadADC()
 }
 \end{lstlisting}
 
+
+\chapter{How to write an Application}
+\label{secHowToWriteApp}
+
+Copy a test case folder. Explain all settings in rtos.config.h which have
+to be touched.
+
+Why is \rtos{} a C source file? Will we ever change this file? Yes for
+development of \rtos{} itself but never to write an application!
+
+Explain how to use the makefile. Hint: Switch of application/TC always
+requires a clean as the configuration of rtos.c (number of tasks) differs.
+
 DEBUG compilation and particularly ASSERT requires initialization of Serial
 
-Potential to optimize: Less memory by compact arrays, pointers to vectors
-of individual size (if classes contain strongly differing numbers of
-tasks)
-  Idle task object only uses three fields. Consider to pack these into
-separate struct and have this n+1 time whereas the rest is used only n
-times.
 
-makefile: Switch of application/TC always requires a clean as the
-configuration of rtos.c (no tasks) differs
+
+\chapter{Outlook}
+\label{secOutlook}
+
+The lists which hold the due tasks are implemented as arrays of fixed
+length. All priority classes use a list of identical length. This has been
+decided jsut because of the limitations of constant compile time
+expressions and macros. The code would run without any change if the
+rectangular array holding all lists would be replaced by a linear array of
+pointer, which are initialized to point to class-individual linear arrays.
+This construction would save RAM space in applications which have priority
+classes of significantly differing size. Besides some saved RAM and the
+less transparent initialization on application side\footnote{We don't like
+to do dynamic initialization using a loop and a call of \ident{malloc}
+inside in an embbeded environment. This would probably consume RAM space
+on the heap in the same magnitude than what can be saved by the changed
+layout of the data structure.} there's absolutely no difference of
+both approaches and therefore the importance for this change is not high
+enough to actually do it.
+
+Currently, the idle task is described by an additional element in the task
+array -- although it lacks most of the properties of a true task.
+Actually, only the stack pointer save location and the (always zero)
+vector of received events are in use. If the task object is split into two
+such objects (holding the properties of all tasks and holding the
+properties of true tasks only) some currently wasted bytes of RAM could be
+saved.
+
+The priority of a task could be switched at runtime if only the arrays are
+large enough -- but this is anyway in the responsibility of the
+application. (Condensed array implementation by pointers to individual
+arrays became impossible in this scenario.) The implementation is simple
+as it was close to existing code. The API function would be implemented as
+software interrupt similar to the suspend commands. The active task would
+be taken aout of its class list and put at the end of the targeted class
+list. The list lengths would be adapted accordingly. Then the normal step
+of looking for the now most due task and making this the active one would
+end the operation. \ident{setEvent} would probably be the best fitting
+starting point of the implementation. This idea has not been implemented
+as we don't see a use case for it.
+
+Currently, the round robin time (including round robin mode on/off by
+setting the time to 0) is predetermined at compile time -- but without any
+technical need. It would easily possbible to change it by API call at
+runtime. If we specify that a change won't affect the running time slice
+it's very easy as the call of this function won't cause a task switch. A
+software interrupt is not required, just touch the reload value of the
+round robin counter.
+
+There's no strong technical reason, why a task should not end. At the
+moment the return address of a task function is the reset address of the
+\uC{}. By modifying \ident{prepareTaskStack} it could become any other
+address, e.g. the address of a function implemented similar to the suspend
+commands. It would not put active the task into the list of suspended
+tasks but in a new list of terminated tasks. This list is required as task
+termination makes sense only if there's also a chance to create new ones.
+The terminated task list would be the free-list of objects to reuse
+whenever a new task is created at runtime.
+
+Starting a new task at runtime would mean to let \ident{prepareTaskStack}
+operate on a currently unused task object and to place the object in a
+critical section into the list of suspended tasks. As currently, the
+application is responsible for obyeing the size of the lists, in
+particular if there's still room in the priority class.
+
+Since we do not want to introduce dynamic memory allocation into the
+application, any started task needs to be preconfigured. It has to be
+decided if under these circumstances terminating/restarting a task has a
+big advantage against just suspending existing 
