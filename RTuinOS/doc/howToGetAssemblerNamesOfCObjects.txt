@@ -1,0 +1,6 @@
+The tool c++filt writes the names and types of C objects to stdout if the
+name as used on asssembler level are passed to the tool. Use this tool to
+validate object names used in assembler code if they should be shared (in
+either direction) between assember and C code. Example:
+  avr-c++filt -n _ZL12waitForEventjbh
+  ==> waitForEvent(unsigned int, bool, unsigned char)
