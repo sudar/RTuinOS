@@ -59,7 +59,7 @@
  */
 
 /** The ID of the idle task. The ID of a task is identical with the index into the task
-    array and the array of stack pointers. */
+    array. */
 #define IDLE_TASK_ID    (RTOS_NO_TASKS)
 
 /** A pattern byte, which is used as prefill byte of any task stack area. A simple and
@@ -380,7 +380,7 @@ typedef struct
 
 void RTOS_DEFAULT_FCT rtos_enableIRQTimerTic(void);
 static RTOS_TRUE_FCT bool onTimerTic(void);
-volatile  RTOS_NAKED_FCT uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
+//volatile  RTOS_NAKED_FCT uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
 static RTOS_TRUE_FCT void suspendTaskTillTime(uintTime_t);
 static RTOS_TRUE_FCT bool setEvent(uint16_t eventVec);
 volatile RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
@@ -409,7 +409,7 @@ static uintTime_t _time = (uintTime_t)-1;
       The array is partly initialized by the application repeatedly calling \a
     rtos_initializeTask. The rest of the initialization and the initialization of the idle
     task element is done in \a rtos_initRTOS. */
-task_t _taskAry[RTOS_NO_TASKS+1];
+static task_t _taskAry[RTOS_NO_TASKS+1];
 
 /** Pointer to the idle task object. */
 static task_t * const _pIdleTask = &_taskAry[IDLE_TASK_ID];
@@ -436,7 +436,9 @@ static task_t *_pSuspendedTaskAry[RTOS_NO_TASKS];
 static uint8_t _noSuspendedTasks;
 
 /** Temporary data, internally used to pass information between assembly and C code. */
-volatile uint16_t _tmpVarAsmToC_u16, _tmpVarCToAsm_u16;
+volatile uint16_t _tmpVarAsmToC_u16;
+/** Temporary data, internally used to pass information between assembly and C code. */
+volatile uint16_t _tmpVarCToAsm_u16;
 
 
 /*
@@ -972,7 +974,9 @@ static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
         }
     }
 } /* End of suspendTaskTillTime */
-#endif
+
+
+
 
 
 
@@ -1057,12 +1061,8 @@ volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
        this naked function we must not have declared any). The call of the function is
        immediately followed by some assembly code which processes the return value of the
        function, found in register pair r24/25. */
-    //suspendTaskTillTime(deltaTimeTillRelease);
-    waitForEvent( /* eventMask */ RTOS_EVT_ABSOLUTE_TIMER
-                , /* all */       false
-                , /* timeout */   deltaTimeTillRelease
-                );
-    
+    suspendTaskTillTime(deltaTimeTillRelease);
+
     /* Switch the stack pointer to the (saved) stack pointer of the new active task and
        push the function result onto the new stack - from where it is loaded into r24/r25
        by the subsequent pop-context command. */
@@ -1085,6 +1085,8 @@ volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
     return 0;
     
 } /* End of rtos_suspendTaskTillTime. */
+#endif
+
 
 
 
@@ -1444,10 +1446,10 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * the tic of the system timer. A timeout of n may actually mean any delay in the range
  * n..n+1 tics.\n
  *   Even specifying 0 will suspend the task a short time and give others the chance to
- * become active.\n
+ * become active - particularly other tasks belonging to the same priority class.\n
  *   If \a eventMask contains RTOS_EVT_ABSOLUTE_TIME: The absolute time the task becomes
  * due again at latest. The time designation is relative; it refers to the last recent
- * absolute time at which this task had been resumed. See rtos_suspendTaskTillTime for
+ * absolute time at which this task had been resumed. See #rtos_suspendTaskTillTime for
  * details.\n
  *   If neither RTOS_EVT_DELAY_TIMER nor RTOS_EVT_ABSOLUTE_TIMER is set in the event mask,
  * this parameter should be zero.
@@ -1455,9 +1457,29 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * It is absolutely essential that this routine is implemented as naked and noinline. See
  * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
  *   @remark
- * In optimization level 0 GCC has a problem with code generation for naked functions. See
- * function \a rtos_suspendTaskTillTime for details.
- *   @see uint16_t rtos_suspendTaskTillTime(uintTime_t)
+ * It is absolutely essential that this routine is implemented as naked and noinline. See
+ * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
+ *   @remark
+ * GCC doesn't create a stack frame for naked functions. For normal functions, the calling
+ * parameter of the function is stored in such a stack frame. In the combination naked and
+ * having local function parameters, GCC has a problem when generating code without
+ * optimization: It doesn't generate a stack frame but still does save the local parameter
+ * into the (not existing) stack frame as very first assembly operation of the function
+ * code. There's absolutely no work around; when the earliest code, we can write inside
+ * the function is executed, the stack is already corrupted in a harzardous way. A crash is
+ * unavoidable.\n
+ *   A (less helpful) discussion of the issue can be found at
+ * http://lists.gnu.org/archive/html/avr-gcc-list/2012-08/msg00014.html.\n
+ *   To avoid this problem we forbid to compile the code with optimization off.
+ * Nonetheless, who will ever know or understand under which circumstances, e.g. which
+ * combination of optimization flags, GCC will again generate this crash-code. This issue
+ * remains a severe risk! Consequently, at any change of a compiler setting you will need
+ * to inspect the assembly listing file and double-check that it is proper with respect of
+ * using (better not using) the stack frame for this function (and rtos_setEvent).\n
+ *   Another idea would be the implementation of this function completely in assembly code.
+ * Doing so, we have the new problem of calling assembly code as C functions. Find an
+ * example of how to do in
+ * file:///M:/SVNMainRepository/Arduino/RTuinOS/trunk/RTuinOS/code/RTOS/rtos.c, revision 215.
  */
 #ifndef __OPTIMIZE__
 # error This code must not be compiled with optimization off. See source code comments for more
@@ -1528,13 +1550,14 @@ volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t tim
  *   @return
  * Get the current value of the overrun counter.
  *   @param idxTask
- * The index of the task the overrun counter if which is to be returned. The index is the
+ * The index of the task the overrun counter of which is to be returned. The index is the
  * same as used when initializing the tasks (see rtos_initializeTask).
  *   @param doReset
  * Boolean flag, which tells whether to reset the value.\n
  *   Caution, when setting this to true, reading and resetting the value needs to become an
  * atomic operation, which requires a critical section. This is significantly more
- * expensive than just reading the value.
+ * expensive than just reading the value and it globally enables the interrupts finally.
+ * Therefore this call may destroy a surrounding critical section.
  *   @see
  * void rtos_initializeTask()
  */
