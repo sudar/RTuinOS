@@ -100,7 +100,76 @@
     just once, see below. */
 #define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(noBits)     \
     typedef uint##noBits##_t uintTime_t;            \
-    typedef int##noBits##_t intTime_t;                                  
+    typedef int##noBits##_t intTime_t;
+
+
+#ifdef __AVR_ATmega2560__
+/**
+ * This routine in cooperation with rtos_leaveCriticalSection makes the code sequence
+ * located between the two functions atomic with respect to operations of the RTuinOS task
+ * scheduler.\n
+ *   Any access to data shared between different tasks should be placed inside this pair of
+ * functions in order to avoid data inconsistencies due to task switches during the access
+ * time. A exception are trivial access operations which are atomic as such, e.g. read or
+ * write of a single byte.\n
+ *   The function implementation disables the interrupt source for the system timer, which
+ * is the only unforeseen, random cause of a task switch in the default configuration of
+ * RTuinOS. The implementation of this pair of functions need to be changed if this
+ * standard configuration is changed also. Examples of a changed configuration are:\n
+ *   The system timer is bound to another interrupt source.\n
+ *   External interrupts are enabled and implemented.\n
+ * In any case, the functions need to disable all interrupts, which could lead to a task
+ * switch. It is not the intention -- although it would work -- to simply lock all
+ * interrupts globally. The responsiveness of the system would be degraded without need.\n
+ *   The use of the function pair cli() and sei() is an alternative to
+ * rtos_enter/leaveCriticalSection. Globally locking the interrupts is less expensive than
+ * inhibiting a specific set but degrades the responsiveness of the system. cli/sei should
+ * preferrably be used if the data accessing code is rather short so that the global lock
+ * time of all interrupts stays very brief.
+ *   @remark
+ * The implementation does not permit recursive invokation of the function pair. The status
+ * of the interrupt lock is not saved. If two pairs of the functions are nested, the task
+ * switches are re-enabled as soon as the inner pair is left -- the remaining code in the
+ * outer pair of function would no longer be protected agianst unforeseen task switches.
+ * This is the same as if using nested pairs of cli/sei.
+ *   @remark
+ * This pair of functions is implemented as a macro in the application owned copy of the
+ * RTuinOS configuration file. Changing the implementation means to edit this file.
+ *   @see #RTOS_ISR_SYSTEM_TIMER_TIC
+ *   @see #RTOS_USE_APPL_INTERRUPT_00
+ *   @see #RTOS_USE_APPL_INTERRUPT_01
+ */
+# define rtos_enterCriticalSection()                                        \
+{                                                                           \
+    cli();                                                                  \
+    TIMSK2 &= ~_BV(TOIE2);                                                  \
+    sei();                                                                  \
+                                                                            \
+} /* End of macro rtos_enterCriticalSection */
+#else
+# error Modification of code for other AVR CPU required
+#endif
+
+
+
+
+
+#ifdef __AVR_ATmega2560__
+/**
+ * This macro is the counterpart of #rtos_enterCriticalSection. Please refer to
+ * #rtos_enterCriticalSection for deatils.
+ */
+# define rtos_leaveCriticalSection()                                        \
+{                                                                           \
+    TIMSK2 |= _BV(TOIE2);                                                   \
+                                                                            \
+} /* End of macro rtos_leaveCriticalSection */
+#else
+# error Modifcation of code for other AVR CPU required
+#endif
+
+
+
 
 
 /*
@@ -131,7 +200,7 @@
     implementing the use case mentioned before: Due to the cyclic character of the time
     definition a time in the past is seen as a time in the future, if it is past more than
     half the maximum integer number. Example: Data type is uint8. A task is implemented as
-    regular task of 100 units. Thus, at the end of the functional code it suspends itself with 
+    regular task of 100 units. Thus, at the end of the functional code it suspends itself with
     time increment 100 units. Let's say it had been resumed at time 123. In normal
     operation, no task overrun it will end e.g. 87 tics later, i.e. at 210. The demanded
     resume time is 123+100 = 223, which is seen as +13 in the future. If the task execution
