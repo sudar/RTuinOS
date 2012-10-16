@@ -227,10 +227,6 @@ extern void rtos_enableIRQUser01(void);
      This function is not called by the application (but only from main()). */
 void rtos_initRTOS(void);
 
-/* Suspend a task untill a specified point in time. Used to implement regular real time
-   tasks. */
-//volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
-
 /* Post a set of events to all suspended tasks. Suspend the current task if the events
    release another task of higher priority. */
 volatile void rtos_setEvent(uint16_t eventVec);

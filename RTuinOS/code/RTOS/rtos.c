@@ -28,7 +28,6 @@
  *   rtos_enableIRQUser00 (callback without default implementation)
  *   rtos_enableIRQUser00 (callback without default implementation)
  *   ISR(RTOS_ISR_SYSTEM_TIMER_TIC)
- *   rtos_suspendTaskTillTime
  *   ISR(RTOS_ISR_USER_00)
  *   ISR(RTOS_ISR_USER_01)
  *   rtos_setEvent
@@ -39,8 +38,8 @@
  *   prepareTaskStack
  *   checkForTaskActivation
  *   onTimerTic
- *   suspendTaskTillTime
  *   setEvent
+ *   storeResumeCondition
  *   waitForEvent
  */
 
@@ -380,8 +379,6 @@ typedef struct
 
 void RTOS_DEFAULT_FCT rtos_enableIRQTimerTic(void);
 static RTOS_TRUE_FCT bool onTimerTic(void);
-//volatile  RTOS_NAKED_FCT uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
-static RTOS_TRUE_FCT void suspendTaskTillTime(uintTime_t);
 static RTOS_TRUE_FCT bool setEvent(uint16_t eventVec);
 volatile RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
 static void RTOS_TRUE_FCT waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
@@ -574,7 +571,7 @@ void rtos_enableIRQTimerTic(void)
         of the interrupt vector in use. Modify #RTOS_ISR_SYSTEM_TIMER_TIC to do so. */
     TIMSK2 |= _BV(TOIE2);
 #else
-# error Modifcation of code for other AVR CPU required
+# error Modification of code for other AVR CPU required
 #endif
 
 } /* End of rtos_enableIRQTimerTic */
@@ -837,7 +834,7 @@ static bool onTimerTic(void)
  * The cycle time of the system time can be influenced by the typedef of uintTime_t. Find a
  * discussion of pros and cons at the location of this typedef.
  *   @see bool onTimerTic(void)
- *   @see void enterCriticalSection(void)
+ *   @see #rtos_enterCriticalSection
  */
 
 ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
@@ -901,191 +898,6 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
 
 } /* End of ISR to increment the system time by one tic. */
 
-
-
-#if 0
-/**
- * Suspend operation of software interrupt rtos_suspendTaskTillTime.\n
- *   The action of this SW interupt is placed into an own function in order to let the
- * compiler generate the stack frame required for all local data. (The stack frame
- * generation of the SW interupt needs to be inhibited in order to permit the
- * implementation of saving/restoring the task context).
- *   @return
- * The function determines which task is to be activated and records which task is left in
- * the global variables _pActiveTask and _pSuspendedTask.
- *   @param deltaTimeTillRelease
- * See software interrupt \a rtos_suspendTaskTillTime.
- *   @see
- * uint16_t rtos_suspendTaskTillTime(uintTime_t)
- *   @remark
- * This function and particularly passing the return code via a global variable will
- * operate only if all interrupts are disabled.
- */ 
-
-static void suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
-{
-    /* Avoid inlining under all circumstances. */
-    asm("");
-    
-    int8_t idxPrio;
-    uint8_t idxTask;
-    
-    /* Take the active task out of the list of due tasks. */
-    task_t * const pT = _pActiveTask;
-    uint8_t prio = pT->prioClass;
-    uint8_t noDueNow = -- _noDueTasksAry[prio];
-    for(idxTask=0; idxTask<noDueNow; ++idxTask)
-        _pDueTaskAryAry[prio][idxTask] = _pDueTaskAryAry[prio][idxTask+1];
-    
-    /* This suspend command wants a reactivation at a certain time. The new time is
-       assigned by the += in the conditional expression.
-         Task overrun detection: The new time must not more than half a cycle in the
-       future. The test uses a signed comparison. The unsigned comparison >= 0x80 would be
-       equivalent but probably less performant (TBC). */
-    if((intTime_t)((pT->timeDueAt+=deltaTimeTillRelease) - _time) <= 0)
-    {
-        if(pT->cntOverrun < 0xff)
-            ++ pT->cntOverrun;
-        
-        /* The wanted point in time is over. We do the best recovery which is possible: Let
-           the task become due in the very next timer tic. */
-        pT->timeDueAt = _time+1;
-    }
-    pT->eventMask = RTOS_EVT_ABSOLUTE_TIMER;
-    pT->waitForAnyEvent = true;
-    
-    /* Put the task in the list of suspended tasks. */
-    _pSuspendedTaskAry[_noSuspendedTasks++] = _pActiveTask;
-
-    /* Record which task suspends itself for the assembly code in the calling function
-       which actually switches the context. */
-    _pSuspendedTask = _pActiveTask;
-    
-    /* Look for the task we will return to. It's the first entry in the highest non-empty
-       priority class. The loop requires a signed index.
-         It's not guaranteed that there is any due task. Idle is the fallback. */
-    _pActiveTask = _pIdleTask;
-    for(idxPrio=RTOS_NO_PRIO_CLASSES-1; idxPrio>=0; --idxPrio)
-    {
-        if(_noDueTasksAry[idxPrio] > 0)
-        {
-            _pActiveTask = _pDueTaskAryAry[idxPrio][0];
-            break;
-        }
-    }
-} /* End of suspendTaskTillTime */
-
-
-
-
-
-
-/**
- * Suspend the current task (i.e. the one which invokes this method) until a specified
- * point in time.\n
- *   Although specified as a increment in time, the time is meant absolute. The meant time
- * is the time of the last recent call of this function by this task plus the now specified
- * increment. This way of specifying the desired time of resume supports the intended use
- * case, which is the implementation of regular real time tasks: A task will suspend itself
- * at the end of the infinite loop which contains its functional code with a constant time
- * value. This (fixed) time value becomes the sample time of the task. This behavior is
- * opposed to a delay or sleep function: The execution time of the task is no time which
- * additionally elapses between two task resumes.\n
- *   The idle task can't be suspended. If it calls this function a crash would be the
- * immediate result.
- *   @return
- * The event mask of resuming events is returned. Since no combination with other events
- * than the elapsed system time is possible, this will always be RTOS_EVT_ABSOLUTE_TIMER.
- *   @param deltaTimeTillRelease
- * \a deltaTimeTillRelease specifies a time in the future at which the task will become due
- * again. To support the most relevant use case of this function, the implementation of
- * regular real time tasks, the time designation is relative. It refers to the last recent
- * absolute time at which this task had been resumed. This time is defined by the last
- * recent call of either this function or waitForEventTillTime. In the very first call of
- * the function it refers to the point in time the task was started.
- *   @see waitForEventTillTime
- *   @remark
- * It is absolutely essential that this routine is implemented as naked and noinline. See
- * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
- *   @remark
- * GCC doesn't create a stack frame for naked functions. For normal functions, the calling
- * parameter of the function is stored in such a stack frame. In the combination naked and
- * having local function parameters, GCC has a problem when generating code without
- * optimization: It doesn't generate a stack frame but still does save the local parameter
- * into the (not existing) stack frame as very first assembly operation of the function
- * code. There's absolutely no work around; when the earliest code, we can write inside
- * the function is executed, the stack is already corrupted in a harzardous way. A crash is
- * unavoidable.\n
- *   A (less helpful) discussion of the issue can be found at
- * http://lists.gnu.org/archive/html/avr-gcc-list/2012-08/msg00014.html.\n
- *   An imaginable work around is to pass data to the function by global objects.
- * This data would be task related so that filling the data object and calling this
- * function needed to be an atomic operation. A macro resetting the global interrupt flag,
- * filling the data object and calling the function would be required to do this.\n
- *   So far, we do not use this very, very ugly work around. Instead, we forbid to compile
- * the code with optimization off. Nonetheless, who will ever know or understand under
- * which circumstances, e.g. which combination of optimization flags, GCC will again
- * generate this trash-code. This issue remains a severe risk! Consequently, at any change
- * of a compiler setting you will need to inspect the assembly listing file and
- * double-check that it is proper with respect of using (better not using) the stack frame
- * for this function (and all other suspend functions).\n
- *   Another idea would be the implementation of this function completely in assembly code.
- * Doing so, we have the new problem of calling assembly code as C functions. Find an
- * example of how to do in
- * file:///M:/SVNMainRepository/Arduino/RTuinOS/trunk/RTuinOS/code/RTOS/rtos.c, revision 215.
- */
-#ifndef __OPTIMIZE__
-# error This code must not be compiled with optimization off. See source code comments for more
-#endif
-
-volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease)
-{
-    /* This function is a pseudo-software interrupt. A true interrupt had reset the global
-       interrupt enable flag, we inhibit any interrupts now. */
-    asm volatile
-    ( "cli \n\t"
-    );
-    
-    /* The program counter as first element of the context is already on the stack (by
-       calling this function). Save rest of context onto the stack of the interrupted
-       active task. */ 
-    PUSH_CONTEXT_WITHOUT_R24R25_ONTO_STACK
-
-    /* Here, we could double-check _pActiveTask for the idle task and return without
-       context switch if it is active. (The idle task has illicitly called a suspend
-       command.) However, all implementation rates performance higher than failure
-       tolerance, and so do we here. */
-       
-    /* The actual implementation of the task switch logic is placed into a sub-routine in
-       order to benefit from the compiler generated stack frame for local variables (in
-       this naked function we must not have declared any). The call of the function is
-       immediately followed by some assembly code which processes the return value of the
-       function, found in register pair r24/25. */
-    suspendTaskTillTime(deltaTimeTillRelease);
-
-    /* Switch the stack pointer to the (saved) stack pointer of the new active task and
-       push the function result onto the new stack - from where it is loaded into r24/r25
-       by the subsequent pop-context command. */
-    SWITCH_CONTEXT
-    PUSH_RET_CODE_OF_CONTEXT_SWITCH
-
-    /* The stack pointer points to the now active task (which will often be still the same
-       as at function entry). The CPU context to continue with is popped from this stack. If
-       there's no change in active task the entire routine call is just like any ordinary
-       interrupt. */
-    POP_CONTEXT_FROM_STACK
-    
-    /* The global interrupt enable flag is not saved across task switches, but always set
-       on entry into the new or same context by using a reti rather than a ret. */
-    asm volatile
-    ( "reti \n\t"
-    );
-    
-    /* This statement is never reached. Just to avoid the warning. */
-    return 0;
-    
-} /* End of rtos_suspendTaskTillTime. */
-#endif
 
 
 
@@ -1250,7 +1062,7 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
  * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
  *   @remark
  * In optimization level 0 GCC has a problem with code generation for naked functions. See
- * function \a rtos_suspendTaskTillTime for details.
+ * function #rtos_suspendTaskTillTime for details.
  *   @remark
  * The implementation of this function is reused on machine code level by the
  * implementation of the application interrupt service routines \a ISR(RTOS_ISR_USER_nn).
@@ -1314,6 +1126,76 @@ volatile void rtos_setEvent(uint16_t eventVec)
 
 
 /**
+ * This is a code pattern (inline function) which is saves the resume condition of a task,
+ * which is going to be suspended into its task object. This pattern is mainly used in the
+ * suspend function rtos_waitForEvent but also at task initialization time, when the
+ * initial task start condition is specified by the application code.
+ *   @param pT
+ * Pointer to the task object of the suspend task.
+ *   @param eventMask
+ * See function \a rtos_waitForEvent for details.
+ *   @param all
+ * See function \a rtos_waitForEvent for details.
+ *   @param timeout
+ * See function \a rtos_waitForEvent for details.
+ *   @see
+ * void rtos_waitForEvent(uint16_t, bool, uintTime_t)
+ *   @remark
+ * For performance reasons this function needs to be inlined. A macro would be an
+ * alternative.
+ */ 
+ 
+static inline void storeResumeCondition( task_t * const pT
+                                       , uint16_t eventMask
+                                       , bool all
+                                       , uintTime_t timeout
+                                       )
+{
+    /* The timing parameter may refer to different timers. Depending on the event mask we
+       either load the one or the other timer. Default is the less expensive delay
+       counter. */
+    if((eventMask & RTOS_EVT_ABSOLUTE_TIMER) != 0)
+    {   
+        /* This suspend command wants a reactivation at a certain time. The new time is
+           assigned by the += in the conditional expression.
+             Task overrun detection: The new time must not more than half a cycle in the
+           future. The test uses a signed comparison. The unsigned comparison >= 0x80 would be
+           equivalent but probably less performant (TBC). */
+        if((intTime_t)((pT->timeDueAt+=timeout) - _time) <= 0)
+        {
+            if(pT->cntOverrun < 0xff)
+                ++ pT->cntOverrun;
+
+            /* The wanted point in time is over. We do the best recovery which is possible: Let
+               the task become due in the very next timer tic. */
+            pT->timeDueAt = _time+1;
+        }
+    }
+    else
+    {
+        /* The timeout counter is reloaded. We could do this conditionally if the bit is
+           set, but in all normal use cases it'll and if not it doesn't harm. We will the
+           just decrement the delay counter in onTimerTic once but not set the event.
+             ++ timeout: The call of the suspend function is in no way synchronized with the
+           system clock. We define the delay to be a minimum and implement the resolution
+           caused uncertainty as an additional delay. */
+        if((uintTime_t)(timeout+1) != 0)
+            ++ timeout;
+        pT->cntDelay = timeout;
+        
+    } /* if(Wich timer is addressed for the timeout condition?) */
+    
+    pT->eventMask = eventMask;
+    pT->waitForAnyEvent = !all;
+    
+} /* End of storeResumeCondition */
+
+
+
+
+
+
+/**
  * Actual implementation of task suspension routine \a rtos_waitForEvent. The task is
  * suspended until a specified event occurs.\n
  *   The action of this SW interrupt is placed into an own function in order to let the
@@ -1353,43 +1235,10 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
         _pDueTaskAryAry[prio][idxTask] = _pDueTaskAryAry[prio][idxTask+1];
     
     /* This suspend command wants a reactivation by a combination of events (which may
-       include the timeout event). Save the resume condition. */
-    
-    /* Depending on the event mask we either load the one or the other timer. Default is
-       the less expensive delay counter. */
-    if((eventMask & RTOS_EVT_ABSOLUTE_TIMER) != 0)
-    {   
-        /* This suspend command wants a reactivation at a certain time. The new time is
-           assigned by the += in the conditional expression.
-             Task overrun detection: The new time must not more than half a cycle in the
-           future. The test uses a signed comparison. The unsigned comparison >= 0x80 would be
-           equivalent but probably less performant (TBC). */
-        if((intTime_t)((pT->timeDueAt+=timeout) - _time) <= 0)
-        {
-            if(pT->cntOverrun < 0xff)
-                ++ pT->cntOverrun;
-
-            /* The wanted point in time is over. We do the best recovery which is possible: Let
-               the task become due in the very next timer tic. */
-            pT->timeDueAt = _time+1;
-        }
-    }
-    else
-    {
-        /* The timeout counter is reloaded. We could do this conditionally if the bit is
-           set, but in all normal use cases it'll and if not it doesn't harm. We will the
-           just decrement the delay counter in onTimerTic once but not set the event.
-             ++ timeout: The call of the suspend function is in no way synchronized with the
-           system clock. We define the delay to be a minimum and implement the resolution
-           caused uncertainty as an additional delay. */
-        if((uintTime_t)(timeout+1) != 0)
-            ++ timeout;
-        pT->cntDelay = timeout;
-        
-    } /* if(Wich timer is addressed for the timeout condition?) */
-    
-    pT->eventMask = eventMask;
-    pT->waitForAnyEvent = !all;
+       include the timeout event). Save the resume condition in the task object. The
+       operation is implemented as inline function to be able to resuse the code in the
+       task initialization routine. */
+    storeResumeCondition(pT, eventMask, all, timeout);
     
     /* Put the task in the list of suspended tasks. */
     _pSuspendedTaskAry[_noSuspendedTasks++] = _pActiveTask;
@@ -1428,7 +1277,7 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * bitwise to eventMask. See \a rtos.h for a list of known events.
  *   @param eventMask
  * The bit vector of events to wait for. Needs to include either the delay timer event
- * RTOS_EVT_DELAY_TIMER or RTOS_EVT_ABSOLUTE_TIMER, if a timeout is required, but not both
+ * #RTOS_EVT_DELAY_TIMER or #RTOS_EVT_ABSOLUTE_TIMER, if a timeout is required, but not both
  * of them.\n
  *   The normal use case will probably be the delay timer. However, a regular task may also
  * specify the absolute timer with the next regular task time as parameter so that it
@@ -1438,20 +1287,20 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * seen.\n
  *   If true, the task is made due only if all events are posted - except for the timer
  * events, which are still OR combined. If you say "all" but the event mask contains either
- * RTOS_EVT_DELAY_TIMER or RTOS_EVT_ABSOLUTE_TIMER, the task will resume when either the
+ * #RTOS_EVT_DELAY_TIMER or #RTOS_EVT_ABSOLUTE_TIMER, the task will resume when either the
  * timer elapsed or when all other events in the mask were seen.
  *   @param timeout
- * If \a eventMask contains RTOS_EVT_DELAY_TIMER: The number of system timer tics from now
+ * If \a eventMask contains #RTOS_EVT_DELAY_TIMER: The number of system timer tics from now
  * on until the timeout elapses. One should be aware of the resolution of any timing being
  * the tic of the system timer. A timeout of n may actually mean any delay in the range
  * n..n+1 tics.\n
  *   Even specifying 0 will suspend the task a short time and give others the chance to
  * become active - particularly other tasks belonging to the same priority class.\n
- *   If \a eventMask contains RTOS_EVT_ABSOLUTE_TIME: The absolute time the task becomes
+ *   If \a eventMask contains #RTOS_EVT_ABSOLUTE_TIME: The absolute time the task becomes
  * due again at latest. The time designation is relative; it refers to the last recent
  * absolute time at which this task had been resumed. See #rtos_suspendTaskTillTime for
  * details.\n
- *   If neither RTOS_EVT_DELAY_TIMER nor RTOS_EVT_ABSOLUTE_TIMER is set in the event mask,
+ *   If neither #RTOS_EVT_DELAY_TIMER nor #RTOS_EVT_ABSOLUTE_TIMER is set in the event mask,
  * this parameter should be zero.
  *   @remark
  * It is absolutely essential that this routine is implemented as naked and noinline. See
@@ -1691,15 +1540,17 @@ uint16_t rtos_getStackReserve(uint8_t idxTask)
  * if all are required and finally a timeout in case no such events would be posted.\n
  *   This parameter specifies the set of events as a bit vector.
  *   @param startByAllEvents
- * If true, all specified events must be posted before the task is activated. Otherwise the
- * first event belonging to the specified set will activate the task.
+ * If true, all specified events (except for a timer event) must be posted before the task
+ * is activated. Otherwise the first event belonging to the specified set will activate the
+ * task. See rtos_waitForEvent for details.
  *   @param startTimeout
  * The task will be started at latest after \a startTimeout system timer tics if only the
- * event #RTOS_EVT_DELAY_TIMER is in the set of specified events. If it is not, the task
- * will not be activated by a time condition.
+ * event #RTOS_EVT_DELAY_TIMER is in the set of specified events. If none of the timer
+ * events #RTOS_EVT_DELAY_TIMER and #RTOS_EVT_ABSOLUTE_TIMER are set in \a startEventMask,
+ * the task will not be activated by a time condition. Do not set both timer events at
+ * once! See rtos_waitForEvent for details.
  *   @see void rtos_initRTOS(void)
  *   @see uint16_t rtos_waitForEvent(uint16_t, bool, uintTime_t)
- *   @remark
  */
 
 void rtos_initializeTask( uint8_t idxTask
@@ -1725,16 +1576,15 @@ void rtos_initializeTask( uint8_t idxTask
     /* To which priority class does the task belong? */
     pT->prioClass = prioClass;
     
-    /* Set the start condition. 
-         ++ startTimer: Immediate start with the first timer tic requires an initial
-       counter value of 1. (0 means not to count at all.) */
+    /* Set the start condition. */
     ASSERT(startEventMask != 0);
-    ASSERT((startEventMask & RTOS_EVT_ABSOLUTE_TIMER) == 0);
-    pT->eventMask       = startEventMask;
-    pT->waitForAnyEvent = !startByAllEvents;
-    if((uintTime_t)(startTimeout+1) != 0)
-        ++ startTimeout;
-    pT->cntDelay = startTimeout;
+    pT->cntDelay = 0;
+    pT->timeDueAt = 0;
+    storeResumeCondition( pT
+                        , startEventMask
+                        , startByAllEvents
+                        , startTimeout
+                        );
     
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
     /* The maximum execution time in round robin mode. */
@@ -1839,10 +1689,6 @@ void rtos_initRTOS(void)
 # endif
 #endif
 
-        /* The absolute timer is not enabled at the beginning, the value here actually
-           doesn't matter. */
-        pT->timeDueAt = 0;
-        
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
         /* The round robin counter is loaded to its maximum when the tasks becomes due.
            Now, the value doesn't matter. */
