@@ -101,7 +101,7 @@
     implementation of the required functionality. The application code can redefine the
     function and override the default implementation.\n
       We use this type decoration for the initialization of the system timer interrupt --
-    an RTuinOS application my use any other interrupts source than the default
+    an RTuinOS application may use any other interrupts source than the default
     TIMER2_OVF. */ 
 #define RTOS_DEFAULT_FCT __attribute__((weak))
 /** Function prototype decoration which ensures that a function is implemented without stack
@@ -129,6 +129,41 @@
     idle task, which can't be suspended. A crash would be the immediate consequence. */
 #define rtos_delay(delayTime)                                               \
                 rtos_waitForEvent(RTOS_EVT_DELAY_TIMER, false, delayTime)
+
+
+/**
+ * Suspend the current task (i.e. the one which invokes this method) until a specified
+ * point in time.\n
+ *   Although specified as a increment in time, the time is meant absolute. The meant time
+ * is the time specified at the last recent call of this function by this task plus the now
+ * specified increment. This way of specifying the desired time of resume supports the
+ * intended use case, which is the implementation of regular real time tasks: A task will
+ * suspend itself with a constant time value at the end of the infinite loop which contains
+ * its functional code. This (fixed) time value becomes the sample time of the task. This
+ * behavior is opposed to a delay or sleep function: The execution time of the task is no
+ * time which additionally elapses between two task resumes.\n
+ *   The idle task can't be suspended. If it calls this function a crash would be the
+ * immediate result.
+ *   @return
+ * The event mask of resuming events is returned. Since no combination with other events
+ * than the elapsed system time is possible, this will always be RTOS_EVT_ABSOLUTE_TIMER.
+ *   @param deltaTimeTillRelease
+ * \a deltaTimeTillRelease specifies a time in the future at which the task will become due
+ * again. To support the most relevant use case of this function, the implementation of
+ * regular real time tasks, the time designation is relative. It refers to the last recent
+ * absolute time at which this task had been resumed. This time is defined by the last
+ * recent call of either this function or rtos_waitForEvent. In the very first call of
+ * the function it refers to the point in time the task was started.
+ *   @see rtos_waitForEvent
+ *   @remark
+ * This function actually is a macro calling rtos_waitForEvent using fixed parameters.
+ */
+#define rtos_suspendTaskTillTime(/* uintTime_t */ deltaTimeTillRelease)     \
+    rtos_waitForEvent( /* eventMask */ RTOS_EVT_ABSOLUTE_TIMER              \
+                     , /* all */       false                                \
+                     , /* timeout */   deltaTimeTillRelease                 \
+                     )
+                
 
 
 /*
@@ -194,7 +229,7 @@ void rtos_initRTOS(void);
 
 /* Suspend a task untill a specified point in time. Used to implement regular real time
    tasks. */
-volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
+//volatile uint16_t rtos_suspendTaskTillTime(uintTime_t deltaTimeTillRelease);
 
 /* Post a set of events to all suspended tasks. Suspend the current task if the events
    release another task of higher priority. */
