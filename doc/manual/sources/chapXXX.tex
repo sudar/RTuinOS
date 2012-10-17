@@ -192,13 +192,12 @@ details of the decision rules implemented in \rtos{} is essential for
 writing applications that behave as desired. (An RTOS can easily show
 effects which are neither expected nor desired.) The rules of \rtos'
 scheduler will become clear in the following documentation of its
-implementation. Please refer to figure \ref{figRTuinOSScheduler}.
-
-\incFigFile{rtuinosScheduler}{Scheduler of \rtos}{0.8}
+implementation. Please refer to figure \ref{figRTuinOSScheduler} on page
+\pageref{figRTuinOSScheduler}.
 
 In \rtos{}, a task is represented by a task object. All objects are
 statically allocated, there's no dynamic creation or
-deletion.\footnote{Please, refer to section \ref{labOutlook} for more
+deletion.\footnote{Please, refer to section \ref{secOutlook} for more
 detailed considerations about this.} The objects are configured in
 Arduino's function \ident{setup} and stay unchanged from now (besides the
 continuous update of the runtime information by the scheduler, see below).
@@ -230,7 +229,9 @@ At system initialization time all tasks are put in state suspended.
 Consequently, the initial resume condition is part of the task
 initialization. Typically, this condition is weak, like "resume
 immediately". However, a delayed resume or a resume by an application
-event is also possible. 
+event is also possible. Starting some tasks with differing delays may of
+course be advantageous to avoid having too many regular tasks becoming due
+all at the same time.
 
 
 \section{Time based Events}
@@ -263,7 +264,7 @@ is implemented directly, not as a bit, not as notification to the task. A
 round robin task has a counter which is loaded with the time slice
 duration at activation time. In each system timer tic it is decremented
 for the one and only active task (if it is a round robin task and whatever
-task it currently is). When the counter reaches null is is reloaded and
+task it currently is). When the counter reaches null it is reloaded and
 the task is immediately taken from the head of its due list and put at the
 end of this list. This means the task stays due but will become inactive.
 Another task, the new head of the list, is a more promising candidate for
@@ -384,7 +385,7 @@ returned as return value of the suspend command.
 
 By simply evaluating the return code a task can react dependent on which
 events it had made due. This is of particular interest if a task suspends
-waiting for a combination of events. In practice this will most often be
+waiting for a combination of events. In practice this will be most often
 the combination of an application event and a relative-time event, which
 this way gets the meaning of a timeout. Obviously, the task needs to
 behave differently whether it received the expected event or if there was
@@ -397,6 +398,67 @@ flow enters the task function. What's otherwise the return code of a
 suspend command is now passed to the task function as function parameter.
 This way the task knows by which condition it has been initially
 activated.
+
+\section{Summarizing the Scheduler Actions}
+
+\incFigFile{RTuinOSScheduler}{Scheduler of \rtos}{0.8}
+
+The different actions of the scheduler are depicted in figure
+\ref{figRTuinOSScheduler}. The solid arrows indicate how task objects are
+moved within and across the lists in different situations. The dashed
+arrows represent pointers to particular task objects.
+
+Under all circumstances, the active task -- highlighted in green -- is the
+head of the top most non-empty list, i.e. the first due task in the order
+of falling priority. Because of the particular importance of this task the
+schedule permanently holds a pointer to this task object. One could say,
+that maintaining this pointer actually is all the scheduler has to do.
+
+The idle task object can be considered the only member of the due list of
+lowest possible priority. This task is needed as fallback if no due task
+is found in any of the priority classes and the scheduler has a constant
+pointer to this specific task object. If \rtos{} is idle, both pointers have
+the same value; they point to the idle task object.
+
+Arrow 1 depicts the round robin action. Round robin activities can only
+apply to the currently active task. If its time slice is elapsed, it is
+taken from the head of the due list and placed at the end of this list.
+Naturally -- and indicated by arrow 2 -- the next object in the list
+becomes the new head of the list and will therefore be the new active
+task.\footnote{This is not fully correct: If the round robin action takes
+place in the due list which has not the highest priority, it can
+occasionally happen that a task of higher priority becomes due -- and
+active -- in the same timer tic.} If all tasks in this list are configured
+to have time slices (and if there were no other resume conditions), the
+list is cycled and all tasks get the CPU for a predefined amount of time.
+
+Arrow 3 shows the effect of a suspend command. If the active tasks issues
+such a command, it is moved from the head of its due list to the end of
+the list of suspended tasks.\footnote{It's just for simplicity of the
+implementation that we place it at the end. The list of suspended tasks is
+not ordered; actually it is not a list but a pool of task objects.} Again,
+arrow 2 shows how the next task in the due list will become the new head
+and active task. However, if there was not second task in this list, the
+head of a due list of lower priority would become the new active task. In
+our figure, this could then be the head of priority list 1.
+
+Arrows 4 and 5 show how a suspended task becomes due again. In any call of
+either the system timer ISR or \ident{setEvent} all suspended tasks are
+checked if their resume condition became true. If so, the task object is
+moved from the list of suspended tasks to the end of their due list. The
+due list a task belongs to is predetermined at compile time, when the task
+priority is chosen. Actions 4 and 5 might appear in the same timer tic or
+call of \ident{setEvent} or in different ones.
+
+Arrow 5 shows the resume of a task of the highest known priority: Here, we
+have an example where an event causes the interruption of a running task.
+The due list of the resumed task was empty before this action. Thus the
+resume creates a due task object of new maximum priority -- higher than
+that of the task which was active so far. This less prior task is
+inactivated. From the perspective of the task execution its code flow is
+interrupted. Note, that the inactivated task object is not moved! It
+remains the head of its due list. The task is inactive but still due and
+still the first candidate for reactivation within its priority class.
 
 
 \chapter{Collected Notes}
@@ -602,7 +664,7 @@ application. (Condensed array implementation by pointers to individual
 arrays became impossible in this scenario.) The implementation is simple
 as it was close to existing code. The API function would be implemented as
 software interrupt similar to the suspend commands. The active task would
-be taken aout of its class list and put at the end of the targeted class
+be taken out of its class list and put at the end of the targeted class
 list. The list lengths would be adapted accordingly. Then the normal step
 of looking for the now most due task and making this the active one would
 end the operation. \ident{setEvent} would probably be the best fitting
