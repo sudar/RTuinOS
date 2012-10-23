@@ -5,7 +5,9 @@
 % your document you may write "please refer to \refL2Kurz2, page 23"
 % instead of writing the title. Your document will then contain "please
 % refer to [1], page 23".
-\def\refRTOS_c{[1]}
+\def\refRTOSC{[1]}
+\def\refRTOSH{[2]}
+\def\refRTOSConfigH{[3]}
 % TODO Add a new reference here
 
 \begin{longtable}[c]{|c|p{6.5cm}|p{7cm}|}
@@ -21,7 +23,11 @@ ID & Document & Explanation \\ \hline
 \caption{References} \label{tabDocReferences}
 \endlastfoot
 \hline
-\refRTOS_c & rtos.c & C source code file of \rtos
+\refRTOSC & rtos.c & C source code file of \rtos{}
+\\ \hline
+\refRTOSH & rtos.h & Header file of \rtos{}, declaring the API
+\\ \hline
+\refRTOSConfigH & rtos.config.h & Compile time configuration of \rtos{}
 \\ \hline
 % TODO: Add a new document title here
 \end{longtable}
