@@ -95,8 +95,7 @@ SHELL = cmd
 .SHELLFLAGS = /c
 
 # The name of the project is used for several build products.
-#   TODO Choose your project's name
-project := RTuinOS
+project = RTuinOS_$(APP)
 
 # The target micro controller the code is to be compiled for. The Setting is used in the
 # command line of compiler, linker and flash tool. Please be aware, that changing this
@@ -110,18 +109,20 @@ COM_PORT ?= \\.\COM8
 
 # RTuinOS can't be linked without an application. Select which one. Here, all applications
 # are considered test cases.
-ifndef TEST_CASE
-    $(error Please select a test case. Add TEST_CASE=\<myTestCase\> to the command line)
+APP ?= TC01
+ifneq ($(origin APP), command line)
+    $(warning Please select an RTuinOS application. Add APP=<myRTuinOSApp> to the command line, otherwise $(APP) will be used)
 endif
 
 # Access help as default target or by several names. This target needs to be the first one
 # in this file.
 .PHONY: h help targets usage
 h help targets usage:
-	$(info Usage: make TEST_CASE=\<myRTuinOSApplication\> [CONFIGURATION=\<configuration\>] [COM_PORT=\<portName\>] {\<target\>})
-	$(info where \<configuration\> is one out of DEBUG (default) or PRODUCTION.)
-	$(info and \<portName\> is an a USB port identifying string to be used for the download.)
-	$(info See help of avrdude for more.)
+	$(info Usage: make APP=<myRTuinOSApplication> [CONFIGURATION=<configuration>] [COM_PORT=<portName>] {<target>})
+	$(info where <myRTuinOSApplication> is the name of the source code folder of your application, located at code\applications)
+	$(info and where <configuration> is one out of DEBUG (default) or PRODUCTION)
+	$(info and <portName> is an a USB port identifying string to be used for the download.)
+	$(info The default port is configured in the makefile. See help of avrdude for more.)
 	$(info Available targets are:)
 	$(info   - build: Build the hex files for flashing onto uC. Includes all others but help)
 	$(info   - compile: Compile all C(++) source files, but no linkage etc.)
@@ -129,7 +130,7 @@ h help targets usage:
 	$(info   - cleanCore: Delete the compilation core.a of the Arduino standard library files)
 	$(info   - makeDir: Create folder structure for generated files. Needs to be called first)
 	$(info   - rebuild: Same as clean and build together)
-	$(info   - bin/\<configuration\>/obj/\<cFileName\>.o: Compile a single C module)
+	$(info   - bin/<configuration>/obj/<cFileName>.o: Compile a single C(++) module)
 	$(info   - download: Build first, then flash the device)
 	$(info   - help: Print this help)
 	$(error)
@@ -183,10 +184,10 @@ $(coreDir)\obj:
 	-mkdir $(coreDir)\obj 2> nul
 
 # Determine the list of files to be compiled.
-#   Specify a blank separated list of directories holding source
-srcDirList := code\RTOS\ code\sampleApp\$(TEST_CASE)\ #
+#   Specify a blank separated list of directories holding source files.
+srcDirList := code\RTOS code\applications\$(APP) #
 # Create a blank separated list file patterns matching possible source files.
-srcPatternList := $(foreach path, $(srcDirList), $(addprefix $(path), *.c *.cpp))
+srcPatternList := $(foreach path, $(srcDirList), $(addprefix $(path), \*.c \*.cpp))
 # Get all files matching the source file patterns in the directory list. Caution: The
 # wildcard function will not accept Windows style paths.
 cFileList := $(wildcard $(subst \,/, $(srcPatternList)))
@@ -210,7 +211,7 @@ objListWithPath := $(addprefix $(targetDir)\obj\, $(objList))
 
 # Blank separated search path for source files and their prerequisites permit to use auto
 # rules for compilation.
-VPATH := code\RTOS code\sampleApp\$(TEST_CASE)                                      \
+VPATH := $(srcDirList) 																\
          $(targetDir)                                                               \
          $(ARDUINO_HOME)\hardware\arduino\cores\arduino                             \
          $(ARDUINO_HOME)\libraries\LiquidCrystal
@@ -221,7 +222,7 @@ cFlags =  $(cDefines) -c -g -Os -Wall -fno-exceptions -ffunction-sections       
           -fdata-sections -mmcu=$(targetMicroController) -DF_CPU=16000000L -MMD     \
           -DUSB_VID=null -DUSB_PID=null -DARDUINO=101                               \
           -Wa,-a=$(patsubst %.o,%.lst,$@)                                           \
-          -Icode\RTOS -Icode\sampleApp\$(TEST_CASE)                                 \
+          $(foreach path, $(srcDirList), -I$(path))                                 \
           -I$(ARDUINO_HOME)\hardware\arduino\cores\arduino                          \
           -I$(ARDUINO_HOME)\hardware\arduino\variants\mega                          \
           -I$(ARDUINO_HOME)\libraries\LiquidCrystal                                 \

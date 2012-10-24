@@ -894,25 +894,199 @@ to be touched.
 Why is \rtos{} a C source file? Will we ever change this file? Yes for
 development of \rtos{} itself but never to write an application!
 
-Explain how to use the makefile. Hint: Switch of application/TC always
-requires a clean as the configuration of rtos.c (number of tasks) differs.
-
 DEBUG compilation and particularly ASSERT requires initialization of Serial
 
+Note on ASSERT: Serial, wait, reset
 
-\subsection{Usage of Arduino Libraries}
+
+\section{The Makefile}
+
+\rtos{} as such can't be compiled, it's just a C source file which has to
+be compiled with your application. (Without application code you'd end up
+with unresolved externals when linking the code.) However, \rtos{} is
+distributed with some autonomous test cases which are true \rtos{}
+applications. All of these can be build and downloaded using the makefile
+which is part of the distribution.
+
+You can organize your applications similar to the test cases and will then
+be able to use the makefile without changes for your application also. If
+your application grows and needs a more complex folder structure to keep
+the source code as the test cases then you will still be able to use the
+makefile, however with some simple changes.
+
+The makefile explains itself by calling make as follows. The command
+requires that the current working directory is the root directory of
+\rtos{}. Calling make with target help will print a list of all available
+targets to the console with a brief explanation:
+
+\verb+make -s help+
+
+
+\subsection{Prerequisites}
+
+The name of the makefile is GNUmakefile. It is located in the root
+directory of the \rtos{} installation. The makefile is compatible with the
+GNU make of Arduino 1.0.1, which is "GNU Make 3.81".
+
+Caution: There are dozens of derivates of the make tool around and most
+of these are incompatible with respect to the syntax of the makefile. Even
+GNU make 3.80 won't work with \rtos' makefile as it didn't know the
+macro \verb+$(info)+ yet.
+
+To run the make tool it might be required to add the path to the binary to
+\emph{the front of} your Windows search path. Inside your Arduino 1.0.1
+installation, you'll find the make tool as
+arduino-1.0.1\textbackslash\-hard\-ware\textbackslash\-tools\textbackslash\-avr\textbackslash\-utils\textbackslash\-bin\textbackslash\-make.exe.
+
+Another prerequiste of successfully running the makefile is that your
+application doesn't have any two source files of same name -- even if this
+would be basically possible as they are located in different folders.
+
+
+\subsection{Concept of Makefile}
+
+The makefile has a very simple concept. A list of source code directories
+is the starting point of all. All of these directories are searched for C
+and C++ files. The found files are compiled and linked with the Arduino
+library \ident{core.a}.
+
+Post processing steps create the binary files as required for download to
+the Arduino board.
+
+An optional, final rule permitts to download the binary code onto the Arduino
+board. If you have the Arduino IDE (arduino.exe) open, all you still have
+to do to make your application run is a ALT-TAB to switch to the IDE and a
+Ctrl-Shft-m to open the console window.
+
+On the compilation output side, for sake of simplicity of the makefile,
+the folder structure of the source code is not retained. All compilation
+products (*.o, among more) are collected in a single output folder. This
+is the reason, why there must never be two source files of same name. Even
+\ident{myModule.c} and \ident{myModule.cpp} would lead to a clash.
+
+In the Arduino IDE the library \ident{core.a} is source code part of the
+sketch. It is rebuilt from source code after a clean. The \rtos{} makefile
+also contains the rules to build \ident{core.a} but it considers it a
+static part of the software, which is in no way under development. It'll
+be built if it's not up-to-date but it'll neither be deleted and rebuilt
+in case of a rebuild (i.e. target \ident{clean}) and nor does its build
+depent on the compilation configuration.
+
+As said, the compilation is mainly controlled by a list of source code
+directories. This list is implemented as value of macro
+\ident{srcDirList}. The default is to have two directories: The \rtos{}
+source code directory \ident{code\textbackslash\-RTOS\textbackslash} and a
+second, variable directory. This directory is located at
+\ident{code\textbackslash\-applications\textbackslash} but its name is
+provided by macro \ident{APP}. This enables you to select an application
+for compilation simply by stating \verb+APP=myRTuinOSApplication+ on the
+command line of make.
+
+If your application demands more than a simple, flat directory to manage
+all its source files, you can continue to use the makefile with minor
+changes: Explicitly list your source folders in \ident{srcDirList}. Now,
+the macro \ident{APP} probably becomes meaningless. Consider to modify all
+code locations which still reference the macro.
+
+
+\subsection{Compilation Configurations}
+
+The makefile supports different compilation configurations. On makefile
+level, a configuration is nothing else than a set of C preprocessor
+macros, which is passed on to the compiler. The meaning of the
+configurations is completely transparent to the makefile and just depends
+on the usage of the preprocessor macros in the C source code.
+
+Two configurations are predefined (and used by the \rtos{} source code)
+and any additional number of configurations can be created by a simple
+extension of the makefile.
+
+The standard configurations are called \ident{DEBUG} and
+\ident{PRODUCTION}. \ident{DEBUG} defines the C preprocessor macro
+\ident{DEBUG} and configuration \ident{PRODUCTION} defines the C
+preprocessor macros \ident{PRODUCTION} and \ident{NDEBUG}.
+
+Our recommendation is to place some appropriate self-diagnostic code in
+the C/C++ source code, which is surrounded by preprocessor switches like:
+\begin{verbatim}
+#ifdef DEBUG
+    ... /* Some self-diagnostic code */
+#endif
+\end{verbatim}
+
+A specific example of such code is the macro ASSERT, which expands to
+nothing if \ident{DEBUG} is not defined (as in configuration
+\ident{PRODUCTION}) but which double-checks some invariant code conditions
+during development, when configuration \ident{DEBUG} is used.
+
+
+\subsection{Switching Applications}
+
+Any \rtos{} application will use its own configuration; it'll have its own
+customized copy of \ident{rtos.config.h}. The compilation of \rtos{}
+strongly depends on this file. If you switch the application in
+subsequent calls of make you will need to force make to recompile \rtos{}.
+
+Basically, switching work from one application to another, just means to
+change the value of macro \ident{APP} on the command line of make, but
+please, always start your work on another application with a \ident{clean}
+or \ident{rebuild} in order to avoid running ito severe, hard to find trouble!
+
+\subsection{Weaknesses of the Makefile}
+
+\subsubsection{Dependencies}
+
+In the current state, the compiler generated *.d files are not integrated
+into the build process. The *.d files are makefile rules, which describe
+the dependencies of object files on source files. Doing this integration
+is one of the most important TODOs for the makefile as it currently
+disregards all non-trivial dependencies: Only the immediate dependency of
+\ident{myModule.o} on \ident{myModule.c} is considered, or on
+\ident{myModule.cpp} respectively.
+
+Consequently, in all cases of non-trivial changes of header files you
+should always call the rules to rebuild the application. This is also
+mandatory if you switch from compiling one \rtos{} application (or test
+case) to compiling another one.
+
+\subsubsection{Building the required Output Directories}
+
+If you compile an \rtos{} application the very first time, the dircetories
+intended to hold the compilation products will probably not exist on your
+machine yet. The makefile has a rule to create these directories but we
+didn't manage to integrate these rules into the normal rule hierarchy of
+compiling and linking.
+
+Even worse, the error message you get in case of missing folders won't
+lead you to the cause of the problem. Somewhat indirectly, the compiler
+complains about some dependency file which can't be created. This is
+caused by the file-write error because of the missing directories.
+
+To overcome the problem you need to run the makefile with target
+\ident{makeDir}. This has to be repeated for each compilation
+configuration. The required directories are created and the problems
+should disappear. The directories are not deleted by a \ident{clean}  or
+\ident{rebuild} .
+
+
+\section{Usage of Arduino Libraries}
 
 Timing, static data, single instance of device. Mutual exclusion for
 single instance
 
 
-\subsection{Configurating the System Timer}
+\section{Configurating the System Timer}
 
 Discussion of how many bits are required. 
 
 
 \chapter{Outlook}
 \label{secOutlook}
+
+TODO: Events in queues? Useful, application can implemenet only as polled
+queues, significantly widens the implementation, degrades the teaching
+character the implementation curently has - therefore not done, but should
+be possible by anybody who understands the current implementation
 
 The lists which hold the due tasks are implemented as arrays of fixed
 length. All priority classes use a list of identical length. This has been
