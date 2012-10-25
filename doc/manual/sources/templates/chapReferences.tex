@@ -7,10 +7,12 @@
 % refer to [1], page 23".
 \def\refRTOSC{[1]}
 \def\refRTOSH{[2]}
-\def\refRTOSConfigH{[3]}
+\def\refRTOSConfigTemplateH{[3]}
+\def\refRTOSConfigH{[4]}
+\def\refRTOSAssertH{[5]}
 % TODO Add a new reference here
 
-\begin{longtable}[c]{|c|p{6.5cm}|p{7cm}|}
+\begin{longtable}[c]{|c|p{5cm}|p{8.5cm}|}
 \hline
 ID & Document & Explanation \\ \hline
 \endfirsthead
@@ -23,11 +25,21 @@ ID & Document & Explanation \\ \hline
 \caption{References} \label{tabDocReferences}
 \endlastfoot
 \hline
-\refRTOSC & rtos.c & C source code file of \rtos{}
+\refRTOSC & code\textbackslash\-rtos\textbackslash\-rtos.c
+          & C source code file of \rtos{}
 \\ \hline
-\refRTOSH & rtos.h & Header file of \rtos{}, declaring the API
+\refRTOSH & code\textbackslash\-rtos\textbackslash\-rtos.h
+          & Header file of \rtos{}, declaring the API
 \\ \hline
-\refRTOSConfigH & rtos.config.h & Compile time configuration of \rtos{}
+\refRTOSConfigTemplateH & code\textbackslash\-rtos\textbackslash\-rtos.\-config.\-tem\-plate.h 
+                        & Compile time configuration of \rtos{} (template file)
+\\ \hline
+\refRTOSConfigH & rtos.config.h
+                & Application owned compile time configuration of \rtos{}, derived
+                  from \refRTOSConfigTemplateH
+\\ \hline
+\refRTOSAssertH & code\textbackslash\-rtos\textbackslash\-rtos\-\_assert.h
+                & Macro definition supporting code self-diagnosis
 \\ \hline
 % TODO: Add a new document title here
 \end{longtable}

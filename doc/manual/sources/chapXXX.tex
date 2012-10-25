@@ -885,7 +885,7 @@ interrupt tasks
 No suspend: Round Robin of decoupled tasks
 
 
-\chapter{How to write an Application}
+\chapter{Writing an \rtos{} Application}
 \label{secHowToWriteApp}
 
 Copy a test case folder. Explain all settings in rtos.config.h which have
@@ -905,8 +905,9 @@ Note on ASSERT: Serial, wait, reset
 be compiled with your application. (Without application code you'd end up
 with unresolved externals when linking the code.) However, \rtos{} is
 distributed with some autonomous test cases which are true \rtos{}
-applications. All of these can be build and downloaded using the makefile
-which is part of the distribution.
+applications. All of these can be build and downloaded using the make
+processor, which is part of the Arduino installation and the makefile
+which is part of the \rtos{} distribution.
 
 You can organize your applications similar to the test cases and will then
 be able to use the makefile without changes for your application also. If
@@ -914,12 +915,36 @@ your application grows and needs a more complex folder structure to keep
 the source code as the test cases then you will still be able to use the
 makefile, however with some simple changes.
 
+Most often, you will do as follows: Open a Windows Command Prompt (or
+Powershell window) and cd to the root directory of the \rtos{} folder.
+This is where the file GNUmakefile is located. Connect your Arduino MEGA
+board to the USB port, e.g. port number 6.\footnote{Other boards need some
+code customization first.} Now type
+
+\verb+make -s APP=tc05 COM_PORT=\\.\COM6 download+
+
+and test case (or application) \ident{tc05} is compiled and downloaded
+onto the board. The Arduino board is reset and the \rtos{} application is
+started. Now you might consider to open the Arduino IDE and open the
+Serial Monitor (i.e. the console window) to see what's going on. Later,
+you might replace the default COM port in the makefile with your specific
+port number and the command line becomes even shorter.
+
 The makefile explains itself by calling make as follows. The command
 requires that the current working directory is the root directory of
 \rtos{}. Calling make with target help will print a list of all available
 targets to the console with a brief explanation:
 
 \verb+make -s help+
+
+An \rtos{} application can't be developed as sketch in the Arduino IDE. We
+made some minor changes of the Arduino file \ident{main.c}, which would be
+lost when using the IDE. You may however continue to use the IDE for
+console I/O if you use the object \ident{Serial} for communication --
+which is particularly useful during application development and which is
+supported by the makefile process even better than by the IDE as it
+enables you to conditionally have the I/O commands in the code. Their
+presence may restricted to a development configuration.
 
 
 \subsection{Prerequisites}
@@ -932,6 +957,15 @@ Caution: There are dozens of derivates of the make tool around and most
 of these are incompatible with respect to the syntax of the makefile. Even
 GNU make 3.80 won't work with \rtos' makefile as it didn't know the
 macro \verb+$(info)+ yet.
+
+The makefile compiles the Arduino standard source files to the standard
+library core.a. To do so, it needs to know, where the Arduino sources
+-- which are not part of this project -- are located. It expects an
+environment variable \ident{ARDUINO\_HOME} to point to the Arduino
+installation directory, e.g.
+c:\textbackslash{}Program~Files\textbackslash\-arduino-1.0.1. You will
+probably have to add such a variable to your system variables as it is not
+defined by the Arduino standard installation process.
 
 To run the make tool it might be required to add the path to the binary to
 \emph{the front of} your Windows search path. Inside your Arduino 1.0.1
@@ -953,10 +987,11 @@ library \ident{core.a}.
 Post processing steps create the binary files as required for download to
 the Arduino board.
 
-An optional, final rule permitts to download the binary code onto the Arduino
-board. If you have the Arduino IDE (arduino.exe) open, all you still have
-to do to make your application run is a ALT-TAB to switch to the IDE and a
-Ctrl-Shft-m to open the console window.
+An optional, final rule permitts to download the binary code onto the
+Arduino board. If your application makes use of the USB communication with
+\ident{Serial} all you still have to do to make your application visibly
+run is an ALT-TAB to switch to the (open) Arduino IDE and a Ctrl-Shft-m to
+open the console window.
 
 On the compilation output side, for sake of simplicity of the makefile,
 the folder structure of the source code is not retained. All compilation
@@ -975,12 +1010,12 @@ depent on the compilation configuration.
 As said, the compilation is mainly controlled by a list of source code
 directories. This list is implemented as value of macro
 \ident{srcDirList}. The default is to have two directories: The \rtos{}
-source code directory \ident{code\textbackslash\-RTOS\textbackslash} and a
-second, variable directory. This directory is located at
-\ident{code\textbackslash\-applications\textbackslash} but its name is
-provided by macro \ident{APP}. This enables you to select an application
-for compilation simply by stating \verb+APP=myRTuinOSApplication+ on the
-command line of make.
+source code directory \ident{code\textbackslash\-RTOS} and a second,
+variable directory. This directory is located in
+\ident{code\textbackslash\-applications} but its name is provided by macro
+\ident{APP}. This enables you to select an application for compilation
+simply by stating \verb+APP=myRTuinOSApplication+ on the command line of
+make.
 
 If your application demands more than a simple, flat directory to manage
 all its source files, you can continue to use the makefile with minor
@@ -1017,37 +1052,55 @@ the C/C++ source code, which is surrounded by preprocessor switches like:
 A specific example of such code is the macro ASSERT, which expands to
 nothing if \ident{DEBUG} is not defined (as in configuration
 \ident{PRODUCTION}) but which double-checks some invariant code conditions
-during development, when configuration \ident{DEBUG} is used.
+during development, when configuration \ident{DEBUG} is used. Please see
+\refRTOSAssertH.
 
 
 \subsection{Switching Applications}
 
-Any \rtos{} application will use its own configuration; it'll have its own
-customized copy of \ident{rtos.config.h}. The compilation of \rtos{}
-strongly depends on this file. If you switch the application in
-subsequent calls of make you will need to force make to recompile \rtos{}.
-
 Basically, switching work from one application to another, just means to
-change the value of macro \ident{APP} on the command line of make, but
-please, always start your work on another application with a \ident{clean}
-or \ident{rebuild} in order to avoid running ito severe, hard to find trouble!
+change the value of macro \ident{APP} in the command line of make; but
+please, in order to avoid running ito severe, hard to find trouble, always
+start your work on another application with a \ident{clean} or
+\ident{rebuild} as target in the command line.
+
+Why do we need a rebuild all? Any \rtos{} application will use its own
+configuration; it'll have its own customized copy of
+\ident{rtos.config.h}. The compilation of \rtos{} strongly depends on this
+file. If you switch the application by changing the value of macro
+\ident{APP} in the command line make can't safely find out that there's
+another copy of \ident{rtos.config.h} in place. Therefore you need to
+explicitly command make to re-compile everything.
+
+
+\subsection{Selecting the Arduino Board}
+
+The target platform is selected as value of macro
+\ident{targetMicroController} in the makefile. However, not all Arduino
+boards are currently supported by the implementation of \rtos{}. If you
+select a \uC, which is not yet supported, you will run into error
+directives in the source code. Please refer to section
+\ref{secArduinoBoards} for more.
+
 
 \subsection{Weaknesses of the Makefile}
 
-\subsubsection{Dependencies}
+\subsubsection{Unsafe Recognition of Dependencies}
 
-In the current state, the compiler generated *.d files are not integrated
-into the build process. The *.d files are makefile rules, which describe
-the dependencies of object files on source files. Doing this integration
-is one of the most important TODOs for the makefile as it currently
-disregards all non-trivial dependencies: Only the immediate dependency of
-\ident{myModule.o} on \ident{myModule.c} is considered, or on
-\ident{myModule.cpp} respectively.
+The makefile includes the compiler generated *.d files. The *.d files
+contain makefile rules, which describe the dependencies of object files on
+source files. They are created as "side-effect" of the compilation of a
+source file. This means, they are not present at the beginning and after a
+clean and they are invalid after configuration changes which have an
+impact on the acutal tree of nested include statements. Particularly in
+the latter situation the recognition of dependencies is not reliable and
+the compilation result could be bad.
 
-Consequently, in all cases of non-trivial changes of header files you
-should always call the rules to rebuild the application. This is also
-mandatory if you switch from compiling one \rtos{} application (or test
-case) to compiling another one.
+Consequently, in all cases of non-trivial changes of preprocessor macros
+and include statements you should always call the rules to rebuild the
+application. This is also mandatory if you switch from compiling one
+\rtos{} application (or test case) to compiling another one.
+
 
 \subsubsection{Building the required Output Directories}
 
@@ -1077,7 +1130,125 @@ single instance
 
 \section{Configurating the System Timer}
 
-Discussion of how many bits are required. 
+A very central element of \rtos{} is its system time. This time is e.g.
+the parameter of a suspend command, if a task wants to wait until a
+specific point in time (as opposed to wait for a specific while). Many of
+the operations in \rtos{} and its application code deal with the system
+time. Therefore, we decided to make the implementation type of the system
+time subject to the configuration of the application; you have to
+customize the type in your application's copy of \ident{rtos.config.h}. In
+many situations a short one Byte integer will be sufficient, but not in
+general. The intention of this section is to explain all implications to
+enable you to choose the optimal, shortest possible type for your
+application.
+
+The system time is a cyclic integer value. The unit is the period time of
+the main interrupt, which is associated with the system timer. Each
+interrupt will clock the time by one unit. If the use case of the \rtos{}
+is a traditional scheduling of regular tasks of different priorities, it's
+good practice to choose the period time of the fastest regular time as
+unit of the system time. But in general the unit of the system time
+doesn't matter with respect to the function of \rtos{} and the time even
+doesn't need to be regular.
+
+You may define the time to be any unsigned integer considering the
+following trade off:
+
+The shorter the type the less the system overhead -- many operations in
+the kernel are time based.
+
+The shorter the type the earlier does the system time cycle around. This
+has implications on the ratio of period times of slowest and fastest
+regular task and the maximum suspend or delay time of any other task.
+
+The longer the type the larger is the maximum ratio of period times of
+slowest and fastest task. This maximum ratio is half the maxmum number,
+which can be represented by the chosen integer type. If you implement
+regular tasks of e.g. 10~ms, 100~ms and 1000~ms period time, this could be
+handeld with a \ident{uint8\_t} (ratio 1:100). If you want to have an
+additional 1~ms task, \ident{uint8\_t} will no longer suffice (ratio
+1:1000), you need at least \ident{uint16\_t}. (\ident{uint32\_t} is
+probably never useful.)
+
+The longer the type the higher becomes the resolution of timeout timers
+when waiting for events. The resolution is the clock frequency of the
+system time. With a system time of type \ident{uint8\_t}, which cycles
+around very soon, one would probably choose a tic frequency identical to
+the frequency of the fastest task (or at least only higher by a small
+factor). Then, this task can only specify a timeout which ends at the next
+regular due time of the task. (Which might still be alright with respect
+to error handling.)
+
+If the clock frequency of the system time is higher than the frequency of
+the fastest regular task, then the statement made before needs refinement:
+The range of the data type of the system time limits the ratio of the period
+time of the slowest task and the resolution of timeout specifications.
+
+The shorter the type the higher the probability of not recognizing task
+overruns when implementing regular tasks: Due to the cyclic character of
+the time definition a time in the past is seen as a time in the future, if
+it is over more than half the maximum integer number. This leads to the
+wrong decision whether we have a task overrun or not. See the example:
+
+Data type be \ident{uint8\_t} . A task is implemented as regular task of
+100 units period time. Thus, at the end of the functional code it suspends
+itself with time increment 100 units. Let's say it had been resumed at
+time 123. In normal operation -- no task overrun -- it will end e.g. 87
+tics later, i.e. at 210. The demanded resume time is 123+100 = 223, which
+is seen as +13 in the future. If the task execution was too long and ended
+e.g. after 110 tics, the system time was 123+110 = 233. The demanded
+resume time 223 is seen in as 10 tics in the past and a task overrun is
+recognized.\footnote{When a task overrun is recognized this way the task
+becomes due immediately. It is not omitted but activated significantly too
+late.} A problem appears at excessive task overruns. If the execution had
+e.g. taken 230 tics the current time was 123 + 230 = 353 -- or 97 due to
+its cyclic character. The demanded resume time 223 is 126 tics ahead,
+which is considered a future time -- no task overrun is
+recognized.\footnote{One call of the task has been silently omitted and
+the next one is timely again.} The problem appears if the overrun lasts
+more than half the cycle time of the system timer. With \ident{uint16\_t}
+this problem becomes negligible.
+
+The idea is to choose the data type of the system time as short as
+possible. Choosing the type is done with macro
+\ident{RTOS\_DEFINE\_TYPE\_OF\_SYSTEM\_TIME}y, please refer to
+\refRTOSConfigH.
+
+
+\subsection{Configurating the System Timer Interrupt}
+
+TODO weak function, to be overloaded, macro for interrupt vector, register
+programming of peripherals, Arduino standard configuration not changed,
+prescaler: ISR=n*systemTic
+
+
+\section{Support of different Arduino Boards}
+\label{secArduinoBoards}
+
+\rtos{} has been developed on an Arduino Mega board and this is the only
+supported board so far. There are some obvious dependencies on the \uC: 
+\begin{enumerate}
+  \item The size of the program counter is three Byte for an ATmega 2560
+    but only two Byte for some other derivates
+  \item The availability of peripheral devices depends on the \uC{} and
+    moreover,
+  \item the naming of the registers may differ between \uC{} even for the same
+    peripheral.
+\end{enumerate}
+The implementation of \rtos{} uses a preprocessor switch based on the
+macro \ident{\_\_AVR\_ATmega2560\_\_} from the AVR library anywhere we have
+such an obvious platform dependency. The else case is "implemented" as
+error directive so that you are directly pointed to all these code locations
+by simply doing a compilation with another \uC{} selected in the makefile.
+
+All code locations, where such an error directive is placed are easy and
+straight forward to modify. You will find some guidance in the code
+comments close to the error directives. Nonetheless, we decided to not try
+an implementation as it would be not tested.
+
+Unfortunately, there's a remaining risk, that there are more platform
+dependencies than currently anticipated in the code. This can only be
+found out by doing the migration and testing. Feedback is welcome.
 
 
 \chapter{Outlook}

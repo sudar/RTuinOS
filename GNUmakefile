@@ -209,6 +209,10 @@ objList := $(objList:.c=.o)
 objListWithPath := $(addprefix $(targetDir)\obj\, $(objList))
 #$(info objListWithPath := $(objListWithPath))
 
+# Include the dependency files. Do this with a failure tolerant include operation - the
+# files are not available after a clean.
+-include $(patsubst %.o,%.d,$(objListWithPath))
+
 # Blank separated search path for source files and their prerequisites permit to use auto
 # rules for compilation.
 VPATH := $(srcDirList) 																\
@@ -236,6 +240,8 @@ $(targetDir)\obj\\%.o: %.cpp
 	$(info Compiling C++ file $<)
 	avr-g++ $(cFlags) -o $@ $<
 
+
+#-include C:\user\vranken\Arduino\RTuinOS\bin\DEBUG\obj\rtos.d
 
 # Compile and link all (original) Arduino core files into libray core.a. Although not
 # subject to any changes the Arduino code is still referenced as source code for reference.
