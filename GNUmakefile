@@ -47,7 +47,7 @@
 #   For your convenience, the Windows path should contain the location of the GNU make
 # processor. If you name this file either makefile or GNUmakefile you will just have to
 # type "make" in order to get your make process running. Typically, the path to the
-# executable is $(ARDUINO_HOME)\hardware\tools\avr\utils\bin
+# executable is $(ARDUINO_HOME)\hardware\tools\avr\utils\bin.
 #   This makefile does not handle blanks in any paths or file names. Please rename your
 # paths and files accordingly prior to using this makefile.
 #
@@ -118,11 +118,11 @@ endif
 # in this file.
 .PHONY: h help targets usage
 h help targets usage:
-	$(info Usage: make APP=<myRTuinOSApplication> [CONFIGURATION=<configuration>] [COM_PORT=<portName>] {<target>})
+	$(info Usage: make [-s] APP=<myRTuinOSApplication> [CONFIGURATION=<configuration>] [COM_PORT=<portName>] {<target>})
 	$(info where <myRTuinOSApplication> is the name of the source code folder of your application, located at code\applications)
 	$(info and where <configuration> is one out of DEBUG (default) or PRODUCTION)
 	$(info and <portName> is an a USB port identifying string to be used for the download.)
-	$(info The default port is configured in the makefile. See help of avrdude for more.)
+	$(info The default port ($(COM_PORT)) is configured in the makefile. See help of avrdude for more.)
 	$(info Available targets are:)
 	$(info   - build: Build the hex files for flashing onto uC. Includes all others but help)
 	$(info   - compile: Compile all C(++) source files, but no linkage etc.)
@@ -135,7 +135,7 @@ h help targets usage:
 	$(info   - help: Print this help)
 	$(error)
 
-# Concept of compilation configurations: (TBC)
+# Concept of compilation configurations:
 #
 # Configuration PRODCUTION:
 # - no self-test code
@@ -240,8 +240,6 @@ $(targetDir)\obj\\%.o: %.cpp
 	$(info Compiling C++ file $<)
 	avr-g++ $(cFlags) -o $@ $<
 
-
-#-include C:\user\vranken\Arduino\RTuinOS\bin\DEBUG\obj\rtos.d
 
 # Compile and link all (original) Arduino core files into libray core.a. Although not
 # subject to any changes the Arduino code is still referenced as source code for reference.

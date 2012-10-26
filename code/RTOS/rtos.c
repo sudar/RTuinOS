@@ -91,7 +91,7 @@
 /** An important code pattern, which is used in every suspend command. The CPU context
     execpt for the register pair r24/r25 is saved by pushing it onto the stack of the given
     context. (Exception program counter: see macro #PUSH_CONTEXT_ONTO_STACK.)\n
-      When returning to a context which has become un-due by invoking one of the suspend
+      When returning to a context which had become un-due by invoking one of the suspend
     commands, the restore context should still be done with the other macro
     #POP_CONTEXT_FROM_STACK. However, before using this macro, the return code of the
     suspend command needs to be pushed onto the stack so that it is loaded into the CPU's
@@ -143,7 +143,7 @@
     suspend commands, which can be considered pseudo-software interrupts). The CPU context
     except for the program counter is restored by popping it from the stack of the given
     context. The program counter is not popped: This code pattern needs to be used at the
-    very end of a function so that the PC will be restored by the return machine command
+    very end of a function so that the PC will be restored by the machine return command
     (ret or reti).\n
       @remark The function which uses this pattern must not be inlined, otherwise the PC
     would not be part of the restored context and the system would crash.
@@ -197,9 +197,9 @@
     (where its stack pointer value had been saved at initialization time or the last time
     it became inactive.).\n
       The code fragment then decides whether the new task had been inactivated by a timer
-    interrupt or by a suspend command. In the latter case the return value of the suspend
-    command is put onto the stack. From there it'll be loaded into the CPU when ending the
-    interrupt routine.\n
+    or application interrupt or by a suspend command. In the latter case the return value
+    of the suspend command is put onto the stack. From there it'll be loaded into the CPU
+    when ending the interrupt routine.\n
       Side effects: The left task and the new task are read from the global variables
     _pSuspendedTask and _pActiveTask.\n
       Prerequisites: The use of the macro needs to be followed by a use of macro
@@ -230,11 +230,11 @@
 
 /** An important code pattern, which is used in every interrupt routine (including the
     suspend commands, which can be considered pseudo-software interrupts). Immediately
-    after a context switch, the code fragment decides whether the task we had switch to had
-    been inactivated by a timer interrupt or by a suspend command. (Only) in the latter
-    case the return value of the suspend command is put onto the stack. From there it'll be
-    loaded into the CPU when ending the interrupt routine.\n
-      Side effects: The ID of the new task is read from the global variable _pActiveTask.\n
+    after a context switch, the code fragment decides whether the task we had switched to
+    had been inactivated by a timer or application interrupt or by a suspend command.
+    (Only) in the latter case the return value of the suspend command is put onto the
+    stack. From there it'll be loaded into the CPU when ending the interrupt routine.\n
+      Side effects: The new task is read from the global variable _pActiveTask.\n
       Prerequisites: The use of the macro needs to be preceeded by a use of macro
     SWITCH_CONTEXT.\n
       The routine depends on a reset global interrupt flag.\n
@@ -288,14 +288,14 @@
  */
 
 /** The descriptor of any task. Contains static information like task priority class and
-    dynamic information like received events, timer values etc.\n
-      The application will fill an array of objects of this type. Some of the fields are
-    initialized by the application and only read by the RTOS code. These fields are
-    documented accordingly. All other fields can be prefilled by the application with dummy
-    values (e.g. 0) -- the RTOS initialization will overwrite the dummy values with those
-    values it needs for operation.\n
-      After initailization the application must never touch any of the fields in the task
-    objects -- the chance to cause a crash is very close to one. */
+    dynamic information like received events, timer values etc. This type is invisible to
+    the RTuinOS application code.
+      @remark Some members of the struct are not used by the kernel at runtime, e.g. the
+    pointer to the task function or the definition of the stack area. These elements or
+    parts of them could be placed into a second array such that the remaining data
+    structure had a size which is a power of 2. (Maybe with a few padding bytes.) This
+    would speed-up - and maybe significantly - the address computations the kernel often has
+    to do when accessing the task information. */
 typedef struct
 {
     /** The saved stack pointer of this task whenever it is not active.\n
@@ -1126,7 +1126,7 @@ volatile void rtos_setEvent(uint16_t eventVec)
 
 
 /**
- * This is a code pattern (inline function) which is saves the resume condition of a task,
+ * This is a code pattern (inline function) which saves the resume condition of a task,
  * which is going to be suspended into its task object. This pattern is mainly used in the
  * suspend function rtos_waitForEvent but also at task initialization time, when the
  * initial task start condition is specified by the application code.
@@ -1302,9 +1302,6 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * details.\n
  *   If neither #RTOS_EVT_DELAY_TIMER nor #RTOS_EVT_ABSOLUTE_TIMER is set in the event mask,
  * this parameter should be zero.
- *   @remark
- * It is absolutely essential that this routine is implemented as naked and noinline. See
- * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
  *   @remark
  * It is absolutely essential that this routine is implemented as naked and noinline. See
  * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
