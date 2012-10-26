@@ -14,7 +14,7 @@ of a second. The same for the outputs, which are served in the same or
 another regular time grid; this way it is pretty simple to e.g. record the
 environmental temperature and to control the Arduino LED at the same time
 very regularly and without the need of CPU consuming waiting loops as
-in Arduinos library function \ident{delay}.
+in Arduino's library function \ident{delay}.
 
 The traditional Arduino sketch has two entry points; the function
 \ident{setup}, which is the place to put the initialization code required
@@ -30,7 +30,7 @@ function\footnote{The GNU C compiler is quite uncomplicated in mixing C
 and C++ files. Although \rtos{} is written in C it's no matter do implement
 task functions in C++ if only the general rules of combining C and C++ and
 the considerations about using library functions (particularly
-\ident{new}) in a multithreading environment are obyed. Class member
+\ident{new}) in a multi-tasking environment are obeyed. Class member
 functions are obviously no candidates for a task function.}, which becomes
 the so called task function. Once entering the traditional Arduino loop,
 all of these task functions are executed in parallel to the repeated
@@ -38,7 +38,7 @@ execution of function \ident{loop}. We say, \ident{loop} becomes the idle
 task of the RTOS.
 
 This document introduces the basic ideas of \rtos{} to those of you who are
-not familar with the usage of an RTOS and gives anybody else an overview
+not familiar with the usage of an RTOS and gives anybody else an overview
 what the possibilities and limits of \rtos{} are.
 
 Some core considerations of the implementation are highlighted, but the
