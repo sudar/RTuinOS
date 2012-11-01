@@ -166,7 +166,7 @@ C and M files in the scope of this project."
   ; Prepare all frequently used build commands
   (let*
     ( (dsmake-cmd-base (concat "cd /d " project-path-win32 " & dsmake TEST_CASE=tc05 "))
-      (make-cmd-base (concat "cd /d " project-path-win32 " & make -s TEST_CASE=tc05 "))
+      (make-cmd-base (concat "cd /d " project-path-win32 " & make -s APP=tc05 "))
       (doxygen-cmd-base (concat "cd /d " project-path-win32 "doc\\doxygen & "))
       (latex-cmd-base (concat "cd /d " project-path-win32 "doc\\manual & "))
       (history (list (concat make-cmd-base "download")

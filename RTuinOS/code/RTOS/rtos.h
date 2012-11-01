@@ -87,14 +87,18 @@
 #define RTOS_EVT_DELAY_TIMER    (0x0001u<<15)
 
 
-/** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
-    floating point constant. The unit is s. */
-#define RTOS_TIC (2.0399999e-3)
-/** The system timer frequency as floating point constant. The unit is Hz. */
-#define RTOS_TIC_FREQUENCY (490.1961)
+/** The system timer frequency as floating point constant. The unit is Hz.\n
+      The value is derived from  #RTOS_TIC, which is about 2 ms in the RTuinOS standard
+    configuration. The macro is defined in the configuration file rtos.config.h as it might
+    be subject to changes by the application. */
+#define RTOS_TIC_FREQUENCY (1.0/(RTOS_TIC))
+
 /** The scale factor between RTuinOS' system timer tic and Arduinos \a millis() as a
-    floating point constant. Same as tic period in unit ms. */
-#define RTOS_TIC_MS (2.0399999)
+    floating point constant. Same as tic period in unit ms.
+      The value is derived from  #RTOS_TIC, which is about 2 ms in the RTuinOS standard
+    configuration. The macro is defined in the configuration file rtos.config.h as it might
+    be subject to changes by the application. */
+#define RTOS_TIC_MS ((RTOS_TIC)*1000.0)
 
 
 /** Function prototype decoration which declares a function of RTuinOS just a default
@@ -205,8 +209,11 @@ void rtos_initializeTask( uint8_t idxTask
 /** Configure and enable the interrupt which clocks the system time of RTuinOS. This
     function has a default implementation, the application may but need not to implement
     it.\n
-      If the application decides to set up it specific system timer interrupt, it'll
-    probable have to alter also the interrupt vector name, see #RTOS_ISR_SYSTEM_TIMER_TIC. */
+      If the application decides to set up its specific system timer interrupt, it'll
+    probably have to alter also the interrupt vector name, see
+    #RTOS_ISR_SYSTEM_TIMER_TIC.\n
+      If the application decides to set up its specific system timer interrupt, it'll
+    probably have to state the new system clock frequency, see #RTOS_TIC. */
 void rtos_enableIRQTimerTic(void);
 
 #if RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON
