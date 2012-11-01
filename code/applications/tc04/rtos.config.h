@@ -60,13 +60,20 @@
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This
     interrupt (like all others which possibly result in a context switch) need to be
-    inhibited by rtos_enterCriticalSection. */
-/** @todo Declare external function void rtos_enableIRQTimerTic(void) which
-    initializes/releases the IRQ to be used to clock the system. If the IRQ can be chosen
-    by means of a macro it makes no sense not to be able to implement its details.
-    Internally, the function could be implemented as weak, it as as kind of default
-    implementation. */
+    inhibited by rtos_enterCriticalSection.\n
+      If an application redefines the interrupt source, it'll probably have to implement
+    the code to configure this interrupt (e.g. set the interrupt enable bit in the
+    according peripheral). If so, this needs to be done by reimplementing void
+    rtos_enableIRQTimerTic(void), which is an overridable default implementation.
+      If an application redefines the interrupt source, the new source will probably
+    produce another system clock frquency. If so, the macro #RTOS_TIC needs to be redefined
+    also. */
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
+
+
+/** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
+    floating point constant. The unit is s. */
+#define RTOS_TIC (2.0399999e-3)
 
 
 /** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in
@@ -104,50 +111,120 @@
     typedef int##noBits##_t intTime_t;                                  
 
 
+#ifdef __AVR_ATmega2560__
+/**
+ * This routine in cooperation with rtos_leaveCriticalSection makes the code sequence
+ * located between the two functions atomic with respect to operations of the RTuinOS task
+ * scheduler.\n
+ *   Any access to data shared between different tasks should be placed inside this pair of
+ * functions in order to avoid data inconsistencies due to task switches during the access
+ * time. A exception are trivial access operations which are atomic as such, e.g. read or
+ * write of a single byte.\n
+ *   The function implementation disables the interrupt source for the system timer, which
+ * is the only unforeseen, random cause of a task switch in the default configuration of
+ * RTuinOS. The implementation of this pair of functions need to be changed if this
+ * standard configuration is changed also. Examples of a changed configuration are:\n
+ *   The system timer is bound to another interrupt source.\n
+ *   External interrupts are enabled and implemented.\n
+ * In any case, the functions need to disable all interrupts, which could lead to a task
+ * switch. It is not the intention -- although it would work -- to simply lock all
+ * interrupts globally. The responsiveness of the system would be degraded without need.\n
+ *   The use of the function pair cli() and sei() is an alternative to
+ * rtos_enter/leaveCriticalSection. Globally locking the interrupts is less expensive than
+ * inhibiting a specific set but degrades the responsiveness of the system. cli/sei should
+ * preferrably be used if the data accessing code is rather short so that the global lock
+ * time of all interrupts stays very brief.
+ *   @remark
+ * The implementation does not permit recursive invokation of the function pair. The status
+ * of the interrupt lock is not saved. If two pairs of the functions are nested, the task
+ * switches are re-enabled as soon as the inner pair is left -- the remaining code in the
+ * outer pair of function would no longer be protected agianst unforeseen task switches.
+ * This is the same as if using nested pairs of cli/sei.
+ *   @remark
+ * This pair of functions is implemented as a macro in the application owned copy of the
+ * RTuinOS configuration file. Changing the implementation means to edit this file.
+ *   @see #RTOS_ISR_SYSTEM_TIMER_TIC
+ *   @see #RTOS_USE_APPL_INTERRUPT_00
+ *   @see #RTOS_USE_APPL_INTERRUPT_01
+ */
+# define rtos_enterCriticalSection()                                        \
+{                                                                           \
+    cli();                                                                  \
+    TIMSK2 &= ~_BV(TOIE2);                                                  \
+    sei();                                                                  \
+                                                                            \
+} /* End of macro rtos_enterCriticalSection */
+#else
+# error Modification of code for other AVR CPU required
+#endif
+
+
+
+
+
+#ifdef __AVR_ATmega2560__
+/**
+ * This macro is the counterpart of #rtos_enterCriticalSection. Please refer to
+ * #rtos_enterCriticalSection for deatils.
+ */
+# define rtos_leaveCriticalSection()                                        \
+{                                                                           \
+    TIMSK2 |= _BV(TOIE2);                                                   \
+                                                                            \
+} /* End of macro rtos_leaveCriticalSection */
+#else
+# error Modifcation of code for other AVR CPU required
+#endif
+
+
+
+
+
 /*
  * Global type definitions
  */
 
-/** The type of the system time. The system time is a cyclic integer value. Most typical
-    its unit is the period time of the fastest regular time if the use case of the RTOS is
-    a traditional scheduling of regular tasks of different priorities. In general, the time
-    doesn't need to be regular and its unit doesn't matter.\n
+/** The type of the system time. The system time is a cyclic integer value. If the use case
+    of the RTOS is a traditional scheduling of regular tasks of different priorities its
+    unit is often chosen to be the period time of the fastest regular time. But in general
+    the time doesn't need to be regular and its unit doesn't matter.\n
       You may define the time to be any unsigned integer considering following trade off:
     The shorter the type is the less the system overhead. Be aware that many operations in
-    the core of the kernel are time based.\n
-      The longer the type the larger the maximum ratio of period times of slowest and
-    fastest task is. This maximum ratio is half the maxmum number. If you implement tasks
-    of e.g. 10ms, 100ms and 1000ms, this could be handeld with a uint8. If you want to have
-    an additional 1ms task, uint8 will no longer suffice, you need at least uint16. (uint32
-    is probably never useful.)\n
-      The longer the type the higher the resolution of timeout timers can be chosen when
+    the kernel are time based.\n
+      The longer the type the larger is the maximum ratio of period times of slowest and
+    fastest task. This maximum ratio is half the maxmum number. If you implement tasks of
+    e.g. 10ms, 100ms and 1000ms, this could be handeld with a uint8_t. If you want to have
+    an additional 1ms task, uint8 will no longer suffice, you need at least uint16_t.
+    (uint32_t is probably never useful.)\n
+      The longer the type the higher can the resolution of timeout timers be chosen when
     waiting for events. The resolution is the tic frequency of the system time. With an 8
-    Bit system time one would probably choose a tic frequency identical to (or at least only
-    higher by a small factor) the repetition time of the fastest task. Then, this task can
-    only specify a timeout which ends at the next regular due time of the task. The
+    Bit system time one would probably choose a tic frequency identical to the repetition
+    speed of the fastest task (or at least only higher by a small factor). Then, this task
+    can only specify a timeout which ends at the next regular due time of the task. The
     statement made before needs refinement: The cylce time of the system time limits the
     ratio of the period time of the slowest task and the resolution of timeout
     specifications.\n
       The shorter the type the higher the probability of not recognizing task overruns when
     implementing the use case mentioned before: Due to the cyclic character of the time
     definition a time in the past is seen as a time in the future, if it is past more than
-    half the maximum integer number. Example: Data type is uint8. A task is implemented as
-    regular task of 100 units. Thus, at the end of the functional code it suspends itself with 
-    time increment 100 units. Let's say it had been resumed at time 123. In normal
-    operation, no task overrun it will end e.g. 87 tics later, i.e. at 210. The demanded
-    resume time is 123+100 = 223, which is seen as +13 in the future. If the task execution
-    was too long and ended e.g. after 110 tics, the system time was 123+110 = 233. The
-    demanded resume time 223 is seen in the past and a task overrun is recognized. A
-    problem appears at excessive task overruns. If the execution had e.g. taken 230 tics
-    the current time is 123 + 230 = 353 = 97, due to its cyclic character. The demanded
-    resume time 223 is 126 tics ahead, which is considered a future time -- no task overrun
-    is recognized. The problem appears if the overrun lasts more than half the system time
-    cycle. With uint16 this problem becomes negligible.\n
+    half the maximum integer number.\n
+      Example: Data type is uint8_t. A task is implemented as regular task of 100 units.
+    Thus, at the end of the functional code it suspends itself with time increment 100
+    units. Let's say it had been resumed at time 123. In normal operation, no task overrun
+    it will end e.g. 87 tics later, i.e. at 210. The demanded resume time is 123+100 = 223,
+    which is seen as +13 in the future. If the task execution was too long and ended e.g.
+    after 110 tics, the system time was 123+110 = 233. The demanded resume time 223 is seen
+    in the past and a task overrun is recognized. A problem appears at excessive task
+    overruns. If the execution had e.g. taken 230 tics the current time is 123 + 230 = 353
+    - or 97 due to its cyclic character. The demanded resume time 223 is 126 tics ahead,
+    which is considered a future time - no task overrun is recognized. The problem appears
+    if the overrun lasts more than half the system time cycle. With uint16_t this problem
+    becomes negligible.\n
       This typedef doesn't have the meaning of hiding the type. In contrary, the character
     of the time being a simple unsigned integer should be visible to the user. The meaning
     of the typedef only is to have an implementation with user-selectable number of bits
-    for the integer. Therefore we choose its name \a uintTime_t similar to the common integer
-    types.\n
+    for the integer. Therefore we choose its name \a uintTime_t similar to the common
+    integer types.\n
       The argument of the macro, which actually makes the required typedefs is set to
     either 8, 16 or 32; the meaning is number of bits. */
 RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
