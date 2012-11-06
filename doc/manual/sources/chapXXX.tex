@@ -1,52 +1,3 @@
-\chapter{About \rtos{}}
-\label{secAbout}
-
-\rtos{} is a small real time operating system (RTOS) for the Arduino
-environment. It is simple to use and fits well into the existing Arduino
-code environment. It adds the concept of pseudo-parallel execution threads
-to your sketches. These threads may be preemptive or non-preemptive.
-Deliberate, cooperative switching between the tasks is supported or time
-based switching. Events can be sent and received by tasks as a simple kind
-of communication.
-
-\rtos{} is provided as a single source code file which is compiled together
-with your other code, which now becomes an \rtos{} application. In the most
-simple case, if you do not define any task, your application will strongly
-resemble a traditional sketch: You implement your \ident{setup} and your
-\ident{loop} function; the former will be run once at the beginning and
-the latter repeatedly.
-
-\rtos{} on its own can't be compiled, there need to be an application.
-\rtos{} is organized as a package which combines the \rtos{} source file
-with some sample applications which are the test cases at the same time.
-The source code of each sample application is held in a separate folder,
-named tc\textless nn\textgreater. Any of these can be selected for
-compilation. You may add more folders, holding the source code of your
-\rtos{} application. A starting point of your application folder can be a
-copy of any of the folders tc\textless nn\textgreater. The compilation
-always is the same. Run the makefile, where the name of the folder (which
-doesn't need to be tc\textless nn\textgreater) is an option of the
-command line. See below for more.
-
-A characteristic of \rtos{} is that the behavior of a task is not
-predetermined or fixed at runtime. \rtos{} supports regular,
-time-controlled tasks as well as purely event controlled ones. It supports
-preemptive tasks and non-preemptive ones. Task scheduling can be done
-cooperatively or time based, and round robin like time slices are also
-possible. Moreover, many of these modes can be mixed. A task is not per-se
-regular, its implementing code decides what happens and this can be
-decided context or situation dependent. This flexibility is achieved by
-the basic idea of having an event controlled scheduler, where typical RTOS
-use cases are supported by providing according events, e.g.
-absolute-point-in-time-reached. If the task's code decides to always wait
-for the same absolute-point-in-time-reached event, then it becomes a
-regular task. However, situation dependent the same task could decide to
-wait for an application sent event -- and give up its regular behavior. In
-many RTOS implementations the basic characteristic of a task is determined
-at compile time, in \rtos{} this is done partly at compile time and partly
-at runtime.
-
-
 \chapter{How does \rtos{} work?}
 
 In a traditional sketch, the function \ident{loop} defines all actions
@@ -976,6 +927,7 @@ it for reading if you what to understand how \rtos{} works.
 
 
 \section{The Makefile}
+\label{secMakefile}
 
 \rtos{} as such can't be compiled, it's just a C source file which has to
 be compiled with your application. (Without application code you'd end up

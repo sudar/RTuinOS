@@ -1,11 +1,9 @@
 #ifndef RTOS_CONFIG_INCLUDED
 #define RTOS_CONFIG_INCLUDED
 /**
- * @file rtos.config.template.h
+ * @file rtos.config.h
  * Switches to define the most relevant compile-time settings of RTuinoOS in an application
  * specific way.
- * @todo Copy this file to your application code, rename it to rtos.config.h and adjust the
- * settings to the need of your RTuinoOS application. Then remove this hint.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -35,13 +33,13 @@
 /** Does the task scheduling concept support time slices of limited length for activated
     tasks? If on, the overhead of the scheduler slightly increases.\n
       Select either RTOS_FEATURE_OFF or RTOS_FEATURE_ON. */
-#define RTOS_ROUND_ROBIN_MODE_SUPPORTED     RTOS_FEATURE_OFF
+#define RTOS_ROUND_ROBIN_MODE_SUPPORTED     RTOS_FEATURE_ON
 
 
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
     will always be existent and alive. Permitted range is 0..255.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_TASKS    5
+#define RTOS_NO_TASKS    8
 
 
 /** Number of distinct priorities of tasks. Since several tasks may share the same
@@ -57,7 +55,7 @@
     structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..255,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 2
+#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 5
 
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This
@@ -81,7 +79,7 @@
 /** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in
     the code and more can be implemented by taking these two as a code template.)\n
       To install an application interrupt, this define is set to #RTOS_FEATURE_ON.\n
-      Secondary, you will define #RTOS_ISR_USER_00 in order to specify the interrupt
+      Secondary, you will define #RTOS_ISR_USER_00 inorder to specify the interrupt
     source.\n
       Then, you will implement the callback \a rtos_enableIRQUser00(void) which enables the
     interrupt, typically by accessing the interrupt control register of some peripheral.\n
@@ -110,7 +108,7 @@
     just once, see below. */
 #define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(noBits)     \
     typedef uint##noBits##_t uintTime_t;            \
-    typedef int##noBits##_t intTime_t;
+    typedef int##noBits##_t intTime_t;                                  
 
 
 #ifdef __AVR_ATmega2560__
