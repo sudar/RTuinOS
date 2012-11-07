@@ -1,6 +1,6 @@
 /**
  * @file tc02_oneTask.c
- *   Test case 02 or RTuinoOS. One task is defined, which runs alternatingly with the idle
+ *   Test case 02 of RTuinoOS. One task is defined, which runs alternatingly with the idle
  * task.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)

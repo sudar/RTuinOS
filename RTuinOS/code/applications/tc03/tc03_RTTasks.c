@@ -1,6 +1,6 @@
 /**
  * @file tc03_RTTasks.c
- *   Test case 03 or RTuinoOS. Several tasks of different priority are defined. Task
+ *   Test case 03 of RTuinoOS. Several tasks of different priority are defined. Task
  * switches are counted and reported in the idle task.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)

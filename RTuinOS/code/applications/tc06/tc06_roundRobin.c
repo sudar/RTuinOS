@@ -1,6 +1,6 @@
 /**
  * @file tc06_roundRobin.c
- *   Test case 06 or RTuinoOS. Several tasks of same priority are defined. Task switches
+ *   Test case 06 of RTuinoOS. Several tasks of same priority are defined. Task switches
  * are controlled by manually posted and time-slice-elapsed events and counted and reported
  * in the idle task.
  *
