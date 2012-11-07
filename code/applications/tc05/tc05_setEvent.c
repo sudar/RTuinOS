@@ -1,6 +1,6 @@
 /**
  * @file tc05_setEvent.c
- *   Test case 05 or RTuinoOS. Several tasks of different priority are defined. Task
+ *   Test case 05 of RTuinoOS. Several tasks of different priority are defined. Task
  * switches are partly controlled by manually posted events and counted and reported in the
  * idle task.
  *
