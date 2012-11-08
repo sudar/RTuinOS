@@ -49,7 +49,7 @@ mkdir %output%\bin\PRODUCTION\obj
 :: The makefile, license. The version file needs to be supplied by the caller of this script.
 copy lgpl.txt %output%
 copy GNUmakefile %output%
-copy version.txt %output%
+copy cm\createSetup\version.txt %output%
 
 :: Protect files
 attrib +R %output%\*
