@@ -21,7 +21,7 @@ mkdir tmp\RTuinOS
 pushd ..\..
 set output=cm\createSetup\tmp\RTuinOS
 
-:: Global Documentation
+:: Global documentation
 copy doc\readMe.forSetup.txt %output%\readMe.txt
 mkdir %output%\doc
 mkdir %output%\doc\doxygen
@@ -32,10 +32,24 @@ xcopy /S doc\manual\manual.pdf %output%\doc\manual
 xcopy /S doc\manual\*.tex %output%\doc\manual
 xcopy /S doc\manual\*.jpg %output%\doc\manual
 
-:: Create a version description.
-echo Archive Compilation Date:>> %output%\version.txt
-date /T>> %output%\version.txt
-time /T>> %output%\version.txt
+:: The source code
+mkdir %output%\code
+xcopy /S code\* %output%\code
+
+:: To soften the problems of the makefile with the creation of the output directories, we
+:: distribute RTuinOS with the (empty) directories in place.
+mkdir %output%\bin
+mkdir %output%\bin\core
+mkdir %output%\bin\core\obj
+mkdir %output%\bin\DEBUG
+mkdir %output%\bin\DEBUG\obj
+mkdir %output%\bin\PRODUCTION
+mkdir %output%\bin\PRODUCTION\obj
+
+:: The makefile, license. The version file needs to be supplied by the caller of this script.
+copy lgpl.txt %output%
+copy GNUmakefile %output%
+copy version.txt %output%
 
 :: Protect files
 attrib +R %output%\*

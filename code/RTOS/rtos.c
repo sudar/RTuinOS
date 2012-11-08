@@ -4,7 +4,7 @@
  * Arduino environment 1.0.1.\n
  *   The implementation is dependent on the board (the controller) and the GNU C++ compiler
  * (thus the release of the Arduino environment) but should be easily portable to other
- * boards and Arduino releases. See documentation for details.
+ * boards and Arduino releases. See manual for details.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -64,7 +64,7 @@
 /** A pattern byte, which is used as prefill byte of any task stack area. A simple and
     unexpensive stack usage check at runtime can be implemented by looking for up to where
     this pattern has been destroyed. Any value which is not the null and which is
-    improbable to be a true stack contents byte can be used -- whatever this value might
+    improbable to be a true stack contents byte can be used - whatever this value might
     be. */
 #define UNUSED_STACK_PATTERN 0x29
 
@@ -274,13 +274,14 @@
 } /* End of macro PUSH_RET_CODE_OF_CONTEXT_SWITCH */
 
 
-/* Two nested macros are used to convert a constant expression to a string which can be
-   used e.g. as part of some inline assembler code.
-     If for example PI is defined to be (355/113) you could use STR(PI) instead of
-   "(355/113)" in the source code. ARG2STR is not called directly. */
+
+/** \cond Two nested macros are used to convert a constant expression to a string which can be
+    used e.g. as part of some inline assembler code.
+      If for example PI is defined to be (355/113) you could use STR(PI) instead of
+    "(355/113)" in the source code. ARG2STR is not called directly. */
 #define ARG2STR(x) #x
 #define STR(x) ARG2STR(x)
-
+/** \endcond */
 
 
 /*
@@ -514,7 +515,7 @@ static uint8_t *prepareTaskStack( uint8_t * const pEmptyTaskStack
        cheap way to pass a Boolean parameter to the task function. */
     * sp-- = 0x80;
 
-    /* The next value is the initial value of r1. This register needs to be 0 -- the
+    /* The next value is the initial value of r1. This register needs to be 0 - the
        compiler's code inside a function depends on this and will crash if r1 has another
        value. This register is therefore also called __zero_reg__. */
     * sp-- = 0;
@@ -584,7 +585,7 @@ void rtos_enableIRQTimerTic(void)
  * easily be that some of these tasks are released and become due. This routine checks all
  * suspended tasks and reorders them into the due task lists if they are released.\n
  *   If there is at least one released tasks it might be that this task is of higher
- * priority than the currently active task -- in which case it will become the new active
+ * priority than the currently active task - in which case it will become the new active
  * task. This routine determines which task is now the active task.
  *   @return
  * The Boolean information wheather the active task now is another task is returned.\n
@@ -621,7 +622,9 @@ static bool checkForTaskActivation(
            does not include the timer events. All postable events need to be set in either
            the mask and the vector of posted events OR any of the timer events in the mask
            are set in the vector of posted events. */
+/** \cond */
 #define TIMER_EVT_MASK (RTOS_EVT_ABSOLUTE_TIMER | RTOS_EVT_DELAY_TIMER)
+/** \endcond */
         eventVec = pT->postedEventVec;
         if((pT->waitForAnyEvent &&  eventVec != 0)
            ||  (!pT->waitForAnyEvent
@@ -993,7 +996,7 @@ ISR(RTOS_ISR_USER_00, ISR_NAKED)
 
     /* The implementation of this ISR makes use of the code of the task called routine
        rtos_setEvent. (Both routines need to be maintained in strict accordance.) That
-       function is executed with a constant parameter (r24/25) -- the event mask just
+       function is executed with a constant parameter (r24/25) - the event mask just
        containing the event which is posted by this interrupt. */
     asm volatile
     ( "ldi r24,lo8(" STR(RTOS_EVT_ISR_USER_00) ") \n\t"
@@ -1024,7 +1027,7 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
 
     /* The implementation of this ISR makes use of the code of the task called routine
        rtos_setEvent. (Both routines need to be maintained in strict accordance.) That
-       function is executed with a constant parameter (r24/25) -- the event mask just
+       function is executed with a constant parameter (r24/25) - the event mask just
        containing the event which is posted by this interrupt. */
     asm volatile
     ( "ldi r24,lo8(" STR(RTOS_EVT_ISR_USER_01) ") \n\t"
@@ -1296,7 +1299,7 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * n..n+1 tics.\n
  *   Even specifying 0 will suspend the task a short time and give others the chance to
  * become active - particularly other tasks belonging to the same priority class.\n
- *   If \a eventMask contains #RTOS_EVT_ABSOLUTE_TIME: The absolute time the task becomes
+ *   If \a eventMask contains #RTOS_EVT_ABSOLUTE_TIMER: The absolute time the task becomes
  * due again at latest. The time designation is relative; it refers to the last recent
  * absolute time at which this task had been resumed. See #rtos_suspendTaskTillTime for
  * details.\n
@@ -1483,7 +1486,7 @@ uint16_t rtos_getStackReserve(uint8_t idxTask)
     uint8_t *sp = _taskAry[idxTask].pStackArea;
     
     /* The bottom of the stack is always initialized with 0, which must not be the pattern
-       byte. Therefore we don't need a limitation of the search loop -- it'll always find a
+       byte. Therefore we don't need a limitation of the search loop - it'll always find a
        non-pattern byte in the stack area. */
     while(*sp == UNUSED_STACK_PATTERN)
         ++ sp;
@@ -1642,7 +1645,7 @@ void rtos_initRTOS(void)
     memset(/* dest */ _taskAry, /* val */ 0x00, /* len */ sizeof(_taskAry));
 #endif
 
-    /* Give the application the chance to do all its initialization -- regardless of RTOS
+    /* Give the application the chance to do all its initialization - regardless of RTOS
        related or whatever else. After return, the task array needs to be properly
        filled. */
     setup();

@@ -6,9 +6,17 @@ See http://www.doxygen.org for details.
 The doxyfile in this directory controls the run of the tool in order to
 produce the wanted output. It solely uses relative paths which found here.
 In order to run doxygen successfully, you need to set the working
-directory here and then start using the following command:
+directory here and then start using the following commands:
 
-doxygen doxyfile
+doxygen
+
+To open the compiled doxygen help you may type
+
+html\index.html
+
+or double-click on
+
+openDoxygenHelp.cmd
 
 The documentation can be generated for various outputs in according
 folders, e.g. html and latex.

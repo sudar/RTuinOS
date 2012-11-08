@@ -29,6 +29,13 @@
  * Defines
  */
 
+/** Startup message for RTuinOS applications. */
+#define RTOS_RTUINOS_STARTUP_MSG                                                        \
+    "RTuinOS for Arduino 1.0.1\n"                                                       \
+    "Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)\n"                \
+    "This is free software; see the source for copying conditions. There is NO\n"       \
+    "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+
 /** Switch to make feature selecting defines readable. Here: Feature is enabled. */
 #define RTOS_FEATURE_ON     1
 /** Switch to make feature selecting defines readable. Here: Feature is disabled. */
