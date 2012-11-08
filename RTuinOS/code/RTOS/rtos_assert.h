@@ -37,7 +37,7 @@
       If the compilation is not made in DEBUG mode ASSERT expands to nothing. */
 # define ASSERT(cond)                                                                   \
     {                                                                                   \
-        if(!( cond))                                                                    \
+        if(!(cond))                                                                     \
         {                                                                               \
             volatile uint32_t u = 0x400000ul;                                           \
             Serial.print("Assertion failed in file " __FILE__ ", line ");               \
