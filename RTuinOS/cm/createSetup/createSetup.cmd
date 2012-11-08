@@ -53,7 +53,6 @@ if "%2" == "" (
             set tag=%2
             set url=branches/%2
         ) else (
-
             set rev=-r %1
             set tag=%2
             set url=tags/%2
