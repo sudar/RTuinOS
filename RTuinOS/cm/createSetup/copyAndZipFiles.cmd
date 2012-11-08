@@ -29,6 +29,7 @@ xcopy /S doc\doxygen\* %output%\doc\doxygen
 mkdir %output%\doc\manual
 xcopy /S doc\manual\GNUmakefile %output%\doc\manual
 xcopy /S doc\manual\manual.pdf %output%\doc\manual
+xcopy /S doc\manual\readMe.txt %output%\doc\manual
 xcopy /S doc\manual\*.tex %output%\doc\manual
 xcopy /S doc\manual\*.jpg %output%\doc\manual
 
