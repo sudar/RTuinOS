@@ -73,7 +73,7 @@
 /* The name of the next event depends on the configuration of RTuinOS. */
 #if RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON
 /** This event is posted by the application defined ISR 00. */
-# define RTOS_EVT_ISR_USER_00   (0x0001u<<12)
+# define RTOS_EVT_ISR_USER_00   (0x0001<<12)
 #else
 /** General purpose event, posted explicitly by rtos_setEvent. */
 # define RTOS_EVT_EVENT_12      (0x0001u<<12)
@@ -82,7 +82,7 @@
 /* The name of the next event depends on the configuration of RTuinOS. */
 #if RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON
 /** This event is posted by the application defined ISR 01. */
-# define RTOS_EVT_ISR_USER_01   (0x0001u<<13)
+# define RTOS_EVT_ISR_USER_01   (0x0001<<13)
 #else
 /** General purpose event, posted explicitly by rtos_setEvent. */
 # define RTOS_EVT_EVENT_13      (0x0001u<<13)
