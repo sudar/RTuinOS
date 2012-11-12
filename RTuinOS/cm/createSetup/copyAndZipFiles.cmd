@@ -53,7 +53,7 @@ copy GNUmakefile %output%
 copy cm\createSetup\version.txt %output%
 
 :: Protect files
-attrib +R %output%\*
+attrib +R %output%\* /S
 
 :: Replace the current archive with the zipped temporary directory tree.
 popd
