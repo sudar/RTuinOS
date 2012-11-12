@@ -189,7 +189,7 @@ void setup(void)
 {
     /* Start serial port at 9600 bps. */
     Serial.begin(9600);
-    Serial.println("RTuinOS starting up");
+    Serial.println("\n" RTOS_RTUINOS_STARTUP_MSG);
 
     /* All tasks are set up. */
     

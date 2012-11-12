@@ -415,8 +415,6 @@ static void taskT0_C2(uint16_t initCondition)
 
 void setup(void)
 {
-    /* All tasks are set up by using a compile-time expression. */
-
     /* Start serial port at 9600 bps. */
     Serial.begin(9600);
     Serial.println("\n" RTOS_RTUINOS_STARTUP_MSG);

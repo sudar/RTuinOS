@@ -150,11 +150,9 @@ static void task01_class00(uint16_t taskCondition)
 
 void setup(void)
 {
-    /* All tasks are set up by using a compile-time expression. */    
-    
     /* Start serial port at 9600 bps. */
     Serial.begin(9600);
-    Serial.println("RTuinOS starting up");
+    Serial.println("\n" RTOS_RTUINOS_STARTUP_MSG);
 
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
