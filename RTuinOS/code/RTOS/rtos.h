@@ -29,9 +29,12 @@
  * Defines
  */
 
+/** Version string of RTuinOS. */
+#define RTOS_RTUINOS_VERSION    "0.9"
+
 /** Startup message for RTuinOS applications. */
 #define RTOS_RTUINOS_STARTUP_MSG                                                        \
-    "RTuinOS for Arduino 1.0.1\n"                                                       \
+    "RTuinOS " RTOS_RTUINOS_VERSION " for Arduino 1.0.1\n"                              \
     "Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)\n"                \
     "This is free software; see the source for copying conditions. There is NO\n"       \
     "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
@@ -72,7 +75,10 @@
 
 /* The name of the next event depends on the configuration of RTuinOS. */
 #if RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON
-/** This event is posted by the application defined ISR 00. */
+/** This event is posted by the application defined ISR 00.
+      @remark The expression here is passed on to the assembler as is. It needs to be
+    compatible with both, compiler and assembler. Type casts, nested macros etc. must not
+    be used. */
 # define RTOS_EVT_ISR_USER_00   (0x0001<<12)
 #else
 /** General purpose event, posted explicitly by rtos_setEvent. */
@@ -81,7 +87,10 @@
 
 /* The name of the next event depends on the configuration of RTuinOS. */
 #if RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON
-/** This event is posted by the application defined ISR 01. */
+/** This event is posted by the application defined ISR 01.
+      @remark The expression here is passed on to the assembler as is. It needs to be
+    compatible with both, compiler and assembler. Type casts, nested macros etc. must not
+    be used. */
 # define RTOS_EVT_ISR_USER_01   (0x0001<<13)
 #else
 /** General purpose event, posted explicitly by rtos_setEvent. */
