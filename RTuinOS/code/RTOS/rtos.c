@@ -994,6 +994,13 @@ ISR(RTOS_ISR_USER_00, ISR_NAKED)
        active task. */ 
     PUSH_CONTEXT_ONTO_STACK
 
+	/* We must not exclude that the zero_reg is temporarily altered in the arbitrarily
+       interrupted code. To make the local code here running, we need to aniticpate this
+       situation and clear the register. */
+    asm volatile 
+    ("clr __zero_reg__ \n\t"
+    );
+
     /* The implementation of this ISR makes use of the code of the task called routine
        rtos_setEvent. (Both routines need to be maintained in strict accordance.) That
        function is executed with a constant parameter (r24/25) - the event mask just
@@ -1024,6 +1031,13 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
        calling this function). Save rest of context onto the stack of the interrupted
        active task. */ 
     PUSH_CONTEXT_ONTO_STACK
+
+	/* We must not exclude that the zero_reg is temporarily altered in the arbitrarily
+       interrupted code. To make the local code here running, we need to aniticpate this
+       situation and clear the register. */
+    asm volatile 
+    ("clr __zero_reg__ \n\t"
+    );
 
     /* The implementation of this ISR makes use of the code of the task called routine
        rtos_setEvent. (Both routines need to be maintained in strict accordance.) That

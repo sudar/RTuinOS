@@ -169,7 +169,7 @@
 # define rtos_leaveCriticalSection()                                        \
 {                                                                           \
     TIMSK2 |= _BV(TOIE2);                                                   \
-   /* TIMSK5 |= _BV(TOIE5);*/                                                   \
+    TIMSK5 |= _BV(TOIE5);                                                   \
                                                                             \
 } /* End of macro rtos_leaveCriticalSection */
 #else
