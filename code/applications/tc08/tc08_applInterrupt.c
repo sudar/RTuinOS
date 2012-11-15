@@ -47,14 +47,14 @@
 #define LED 13
 
 /** Stack size of all the tasks. */
-#define STACK_SIZE 200
+#define STACK_SIZE 100
 
 /** The number of system timer tics required to implement the time span given in Milli
     seconds.
       @remark
     The double operations are limited to the compile time. No such operation is found in
     the machine code. */
-#define TIC(tiInMs) ((uint8_t)((double)(tiInMs)/RTOS_TIC_MS+0.5))
+#define TIC(tiInMs) ((uintTime_t)((double)(tiInMs)/RTOS_TIC_MS+0.5))
 
 
 /*
@@ -116,7 +116,7 @@ static volatile uint8_t _blink_noFlashes = 0;
 
 static void blinkNoBlock(uint8_t noFlashes)
 {
-#define TI_FLASH 150 /* ms */
+#define TI_FLASH 250 /* ms */
 
     while(noFlashes-- > 0)
     {
@@ -126,9 +126,9 @@ static void blinkNoBlock(uint8_t noFlashes)
         rtos_delay(TIC(TI_FLASH));  /* Time between flashes. */
     }    
     
-    /* Wait for a second after the last flash - this command could easily be invoked
+    /* Wait for two seconds after the last flash - this command could easily be invoked
        immediately again and the bursts need to be separated. */
-    delay(TIC(1000-TI_FLASH));
+    rtos_delay(TIC(2000-TI_FLASH));
     
 #undef TI_FLASH
 }
@@ -178,7 +178,7 @@ static void taskT0_C0(uint16_t initCondition)
 static void taskT0_C1(uint16_t initCondition)
 {
 #define TASK_TIME_T0_C1_MS  50 
-#define TRIGGER_DISTANCE    500
+#define TRIGGER_DISTANCE    8000
 
     /* Since we are the only client of the blink task we can abuse the interface variable as
        static counter at the same time. The first sequence shall have a single flash. */
@@ -187,11 +187,11 @@ static void taskT0_C1(uint16_t initCondition)
     /* The task inspects the results of the interrupt on a regular base. */
     do
     {
-        static uint32_t lastTrigger = 500;
+        static uint32_t lastTrigger = TRIGGER_DISTANCE;
         
-        cli();//rtos_enterCriticalSection();
+        rtos_enterCriticalSection();
         bool trigger = _cntLoopsT0_C2 >= lastTrigger;
-        sei();//rtos_leaveCriticalSection();
+        rtos_leaveCriticalSection();
 
         if(trigger)
         {
@@ -235,7 +235,7 @@ static void taskT0_C1(uint16_t initCondition)
  
 static void taskT0_C2(uint16_t initCondition)
 {
-#define TIMEOUT_MS  100
+#define TIMEOUT_MS  10
 
     /* This task just reports the application interrupt by incrementing a global counter. */
     while(true)
@@ -299,8 +299,10 @@ void rtos_enableIRQUser00()
     TCCR5B &= ~0x1f; /* Upper half word of WGM and CS */
     TCCR5B |=  0x15;
     
-    /* We choose 82 as initial value, or f_irq = 100. */
-    OCR5A = 82u;
+    /* We choose 8 as initial value, or f_irq = 1024 Hz. This is more than double the
+       system clock of RTuinOS in its standard configuration (which is used in this test
+       case). */
+    OCR5A = 8u;
 
     TIMSK5 |= 1;    /* Enable overflow interrupt. */
 
@@ -371,10 +373,10 @@ void setup(void)
 void loop(void)
 {
     /* Get a safe copy of the volatile global data. */
-    cli();//rtos_enterCriticalSection();
+    rtos_enterCriticalSection();
     uint32_t noInt = _cntLoopsT0_C2;
     uint16_t noTimeout = _errT0_C2;
-    sei();//rtos_leaveCriticalSection();
+    rtos_leaveCriticalSection();
             
     Serial.print("No application interrupts: ");
     Serial.print(noInt);
@@ -393,6 +395,11 @@ void loop(void)
                                              , /* doReset */ false
                                              )
                   );
+    
+    /* Don't flood the console windows too much. We anyway show only arbitrarily sampled
+       data. */
+    delay(800);
+
 } /* End of loop */
 
 
