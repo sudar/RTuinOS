@@ -1240,6 +1240,27 @@ source code, so that a code review can be done.
 %DEBUG compilation and particularly ASSERT requires initialization of Serial
 %Note on ASSERT: Serial, wait, reset
 
+\subsection{Changes of Arduino's \ident{main} Function}
+
+The file main.cpp of the Arduino standard sketch has been replaced by
+main.c of \rtos. The implementation of the contained function \ident{main}
+is nearly the same. The standard sketch finally enters a short, infinite
+loop, which repeatedly invokes the application's "task-function"
+\ident{loop}. The same loop continues to exist in \rtos{} (although it has
+been moved to the end of \ident{rtos\_initRTOS}) with one major change: In
+the standard sketch the loop contains the following code, which is
+executed alternatingly with function \ident{loop}:
+\begin{verbatim}
+		if (serialEventRun) serialEventRun();
+\end{verbatim}
+We are not sure about the meaning of this code and which library
+functionality depends on it. Moreover, we can't per se be sure that it
+cooperates well with \rtos{}' multitasking and decided not to put it into
+the \rtos{} code. Whoever knows to need it can try to place the statement
+into function \ident{loop} of his \rtos{} application. Now, the behavior
+is just the same as in the standard sketch -- besides all the obvious
+differences because of task switches.
+
 
 \section{Configuring the System Timer}
 \label{secSystemTimer}

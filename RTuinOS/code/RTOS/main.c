@@ -13,7 +13,7 @@ int main(void)
     /* The next function will never return. */
     rtos_initRTOS();
     
-    /* Code is never reached. */
+    /* This code is never reached. */
 	return 0;
 }
 
