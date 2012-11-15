@@ -39,7 +39,7 @@
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
     will always be existent and alive. Permitted range is 0..255.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_TASKS    3
+#define RTOS_NO_TASKS    4
 
 
 /** Number of distinct priorities of tasks. Since several tasks may share the same
@@ -55,7 +55,7 @@
     structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..255,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 1
+#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 2
 
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This
@@ -91,16 +91,16 @@
 /** The name of the interrupt vector which is assigned to application interrupt 0. The
     supported vector names can be derived from table 14-1 on page 105 in the CPU manual,
     doc2549.pdf (see http://www.atmel.com). */
-#define RTOS_ISR_USER_00    TIMER5_OVF_vect
+#define RTOS_ISR_USER_00    TIMER4_OVF_vect
 
 
 /** Enable the application defined interrupt 1. See #RTOS_USE_APPL_INTERRUPT_00 for
     details. */
-#define RTOS_USE_APPL_INTERRUPT_01 RTOS_FEATURE_OFF
+#define RTOS_USE_APPL_INTERRUPT_01 RTOS_FEATURE_ON
 
 /** The name of the interrupt vector which is assigned to application interrupt 1. See
     #RTOS_ISR_USER_00 for details. */
-#define RTOS_ISR_USER_01    xxx_vect
+#define RTOS_ISR_USER_01    TIMER5_OVF_vect
 
 
 /** A macro which expands to the code which defines all types which are related to the
@@ -150,6 +150,7 @@
 # define rtos_enterCriticalSection()                                        \
 {                                                                           \
     TIMSK2 &= ~_BV(TOIE2);                                                  \
+    TIMSK4 &= ~_BV(TOIE4);                                                  \
     TIMSK5 &= ~_BV(TOIE5);                                                  \
                                                                             \
 } /* End of macro rtos_enterCriticalSection */
@@ -169,6 +170,7 @@
 # define rtos_leaveCriticalSection()                                        \
 {                                                                           \
     TIMSK2 |= _BV(TOIE2);                                                   \
+    TIMSK4 |= _BV(TOIE5);                                                   \
     TIMSK5 |= _BV(TOIE5);                                                   \
                                                                             \
 } /* End of macro rtos_leaveCriticalSection */

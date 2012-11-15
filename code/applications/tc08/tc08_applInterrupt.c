@@ -1,8 +1,30 @@
 /**
  * @file tc08_applInterrupt.c
- * Test case 08 of RTuinOS. A timer different to the RTuinOS system timer is installed as
- * second task switch causing interrupt. This interrupt set an event which triggers a task
- * of high priority. The interrupt events are counted to demonstrate the operation.
+ * Test case 08 of RTuinOS. Two timers different to the RTuinOS system timer are installed
+ * as additional task switch causing interrupt sources. These interrupts set an individual
+ * event which triggers an associated task of high priority. The interrupt events of the
+ * associated tasks are counted to demonstrate the operation.\n
+ *   A dedicated task is used for feedback. The Arduino LED signals the number of
+ * application interrupts. Occasionally, a series of flashes is produced, which represents
+ * the number of interrupts so far. (To not overburden the flashes counting human, the
+ * length of the series is limited to ten.) This feedback giving task gets active only on
+ * demand; it's triggered by an application event from another task.
+ *   Observations:\n
+ *   The frequency of the timer interrupts (timers 4 and 5 have been used) can be varied in
+ * a broad range. In this test case the application interrupt 00 is configured to occur
+ * with 1024 Hz, which is more than double the frequency of the RTuinOS system clock, which
+ * determine the highest frequency of calling regular tasks. This doesn't matter, the
+ * scheduler easily handles task switches faster than the system timer.\n
+ *   The start of the application interrupts is significantly delayed. The first interrupts
+ * are seen only 2 or 3 seconds after reset. The application reports an according number of
+ * timeouts at the beginning. This is a strange, still unexplained behavior. It's probably
+ * not an RTuinOS effect as could be proven with a simple standard Arduino sketch. This
+ * sketch used the identical code to configure the interrupt source and contained only a
+ * ++counter operation in the ISR and a Serial.println(counter) in \a loop. It showed
+ * exactly the same effect. One could assume the delay is caused by some initialization of
+ * the Arduino libraries, however, the only complex functionality used is Serial.print and
+ * this is visibly up and running while the interrupts are still in delay. Furthermore, why
+ * does the RTuinOS system timer (timer 2) doesn't show the same effect?
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -28,6 +50,7 @@
  *   taskT0_C0
  *   taskT0_C1
  *   taskT0_C2
+ *   taskT1_C2
  */
 
 /*
@@ -65,6 +88,7 @@
 enum { idxTaskT0_C0 = 0
      , idxTaskT0_C1
      , idxTaskT0_C2
+     , idxTaskT1_C2
      , noTasks
      };
      
@@ -76,6 +100,7 @@ enum { idxTaskT0_C0 = 0
 static void taskT0_C0(uint16_t postedEventVec);
 static void taskT0_C1(uint16_t postedEventVec);
 static void taskT0_C2(uint16_t postedEventVec);
+static void taskT1_C2(uint16_t postedEventVec);
 
 
 /*
@@ -84,12 +109,12 @@ static void taskT0_C2(uint16_t postedEventVec);
 
 static uint8_t _stackT0_C0[STACK_SIZE]
              , _stackT0_C1[STACK_SIZE]
-             , _stackT0_C2[STACK_SIZE];
+             , _stackT0_C2[STACK_SIZE]
+             , _stackT1_C2[STACK_SIZE];
 
 /** Task owned variables which record what happens. */
-static volatile uint32_t _cntLoopsT0_C0 = 0
-                       , _cntLoopsT0_C1 = 0
-                       , _cntLoopsT0_C2 = 0;
+static volatile uint32_t _cntLoopsT0_C2 = 0
+                       , _cntLoopsT1_C2 = 0;
 
 /** The application interrupt handler counts missing interrupt events (timeouts) as errors. */
 static volatile uint16_t _errT0_C2 = 0;
@@ -189,6 +214,10 @@ static void taskT0_C1(uint16_t initCondition)
     {
         static uint32_t lastTrigger = TRIGGER_DISTANCE;
         
+        /* The pair of functions enter/leaveCriticalSection had to be customized for this
+           RTuinOS application: Besides RTuinOS standard system clock interrupt both
+           application interrupt sources must be inhibited/released. The customization is
+           done in the application owned RTuinOS configuration file. */
         rtos_enterCriticalSection();
         bool trigger = _cntLoopsT0_C2 >= lastTrigger;
         rtos_leaveCriticalSection();
@@ -237,7 +266,7 @@ static void taskT0_C2(uint16_t initCondition)
 {
 #define TIMEOUT_MS  10
 
-    /* This task just reports the application interrupt by incrementing a global counter. */
+    /* This task just reports the application interrupt 00 by incrementing a global counter. */
     while(true)
     {
         while(rtos_waitForEvent( RTOS_EVT_ISR_USER_00 | RTOS_EVT_DELAY_TIMER
@@ -270,12 +299,86 @@ static void taskT0_C2(uint16_t initCondition)
 
 
 
+static void taskT1_C2(uint16_t initCondition)
+{
+    /* This task just reports the application interrupt 01 by incrementing a global counter. */
+    while(true)
+    {
+#ifdef DEBUG
+        ASSERT(
+#endif
+               rtos_waitForEvent(RTOS_EVT_ISR_USER_01, /* all */ false, /* timeout */ 0)
+#ifdef DEBUG
+               == RTOS_EVT_ISR_USER_01
+              )
+#endif
+        ;
+
+        /* No access synchronization is required as this task has the highest priority of all
+           data accessors. */
+        ++ _cntLoopsT1_C2;
+
+        /* Outer while condition: Wait for next application interrupt. */
+    }
+#undef TIMEOUT_MS
+} /* End of taskT1_C2 */
+
+
+
+
 /**
- * Callback from RTuinOS: The application interrupt is configured and released.
+ * Callback from RTuinOS: The application interrupt 00 is configured and released.
  */
 
 void rtos_enableIRQUser00()
 {
+#ifdef __AVR_ATmega2560__
+    /* Timer 4 is reconfigured. Arduino has put it into 8 Bit fast PWM mode. We need the
+       phase and frequency correct mode, in which the frequency can be controlled by
+       register OCA. This register is buffered, the CPU writes into the buffer only. After
+       each period, the buffered value is read and determines the period duration of the
+       next period. The period time (and thus the frequency) can be varied in a well
+       defined and glitch free manner. The settings are:
+         WGM4 = %1001, the mentioned operation mode is selected. The 4 Bit word is partly
+       found in TCCR4A and partly in TCCR4B.
+         COM4A/B/C: don't change. The three 2 Bit words determine how to derive up to
+       three PWM output signals from the counter. We don't change the Arduino setting; no
+       PWM wave form is generated. The three words are found as the most significant 6 Bit
+       of register TCCR4A.
+         OCR4A = 8192 Hz/f_irq, the frequency determining 16 Bit register. OCR4A must not
+       be less than 3.
+         CS4 = %101, the counter selects the CPU clock divided by 1024 as clock. This
+       yields the lowest possible frequencies -- good make the operation visible using the
+       LED. */
+    TCCR4A &= ~0x03; /* Lower half word of WGM */
+    TCCR4A |=  0x01;
+    
+    TCCR4B &= ~0x1f; /* Upper half word of WGM and CS */
+    TCCR4B |=  0x15;
+    
+    /* We choose 8 as initial value, or f_irq = 1024 Hz. This is more than double the
+       system clock of RTuinOS in its standard configuration (which is used in this test
+       case). */
+    OCR4A = 8u;
+
+    TIMSK4 |= 1;    /* Enable overflow interrupt. */
+#else
+# error Modification of code for other AVR CPU required
+#endif
+
+} /* End of rtos_enableIRQUser00 */
+
+
+
+
+
+/**
+ * Callback from RTuinOS: The application interrupt 01 is configured and released.
+ */
+
+void rtos_enableIRQUser01()
+{
+#ifdef __AVR_ATmega2560__
     /* Timer 5 is reconfigured. Arduino has put it into 8 Bit fast PWM mode. We need the
        phase and frequency correct mode, in which the frequency can be controlled by
        register OCA. This register is buffered, the CPU writes into the buffer only. After
@@ -299,14 +402,15 @@ void rtos_enableIRQUser00()
     TCCR5B &= ~0x1f; /* Upper half word of WGM and CS */
     TCCR5B |=  0x15;
     
-    /* We choose 8 as initial value, or f_irq = 1024 Hz. This is more than double the
-       system clock of RTuinOS in its standard configuration (which is used in this test
-       case). */
-    OCR5A = 8u;
+    /* We choose 8192 as initial value, or f_irq = 1 Hz. */
+    OCR5A = 8192u;
 
     TIMSK5 |= 1;    /* Enable overflow interrupt. */
+#else
+# error Modification of code for other AVR CPU required
+#endif
 
-} /* End of rtos_enableIRQUser00 */
+} /* End of rtos_enableIRQUser01 */
 
 
 
@@ -354,6 +458,15 @@ void setup(void)
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
+    rtos_initializeTask( /* idxTask */          idxTask++
+                       , /* taskFunction */     taskT1_C2
+                       , /* prioClass */        2
+                       , /* pStackArea */       &_stackT1_C2[0]
+                       , /* stackSize */        sizeof(_stackT1_C2)
+                       , /* startEventMask */   RTOS_EVT_ISR_USER_01
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     0
+                       );
     ASSERT(idxTask == RTOS_NO_TASKS  &&  noTasks == RTOS_NO_TASKS);
 
 } /* End of setup */
@@ -378,17 +491,26 @@ void loop(void)
     uint16_t noTimeout = _errT0_C2;
     rtos_leaveCriticalSection();
             
-    Serial.print("No application interrupts: ");
+    Serial.print("No application interrupts 00: ");
     Serial.print(noInt);
     Serial.print(", timeouts: ");
     Serial.println(noTimeout);
 
+    rtos_enterCriticalSection();
+    noInt = _cntLoopsT1_C2;
+    rtos_leaveCriticalSection();
+    
+    Serial.print("No application interrupts 01: ");
+    Serial.println(noInt);
+    
     Serial.print("Stack reserve: ");
     Serial.print(rtos_getStackReserve(/* idxTask */ 0));
     Serial.print(", ");
     Serial.print(rtos_getStackReserve(/* idxTask */ 1));
     Serial.print(", ");
-    Serial.println(rtos_getStackReserve(/* idxTask */ 2));
+    Serial.print(rtos_getStackReserve(/* idxTask */ 2));
+    Serial.print(", ");
+    Serial.println(rtos_getStackReserve(/* idxTask */ 3));
 
     Serial.print("Overrun T0_C1: "); 
     Serial.println(rtos_getTaskOverrunCounter(/* idxTask */ idxTaskT0_C1
@@ -397,7 +519,9 @@ void loop(void)
                   );
     
     /* Don't flood the console windows too much. We anyway show only arbitrarily sampled
-       data. */
+       data.
+         Caution: Do not use rtos_delay here in the idle task. An attempt to suspend the
+       idle task definitely causes a crash. */
     delay(800);
 
 } /* End of loop */
