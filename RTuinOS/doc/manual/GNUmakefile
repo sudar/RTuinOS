@@ -62,9 +62,9 @@ onePass:
 # in this file.
 .PHONY: h help targets usage
 h help targets usage:
-	$(info Usage: make -s [doc=<latexMainFile>] [help] [onePass])
+	$(info Usage: make [-s] [doc=<latexMainFile>] [help] [onePass])
 	$(info where <latexMainFile> is the LaTeX source file name without extension. Default is $(defaultDocName).)
 	$(info Available targets are:)
-	$(info   - onePass: Run the LaTeX compiler just once)
+	$(info   - onePass: Run the LaTeX compiler just once, e.g. for fast syntax check)
 	$(info   - help: Print this help)
 	$(error)

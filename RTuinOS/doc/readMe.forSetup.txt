@@ -12,8 +12,9 @@ installed and operational. Before using RTuinOS ensure that the original
 Arduino IDE and the sample sketches work well.
 
 To install RTuinOS, extract the files in the archive to a directory of
-your choice. The target location must grant read and write access to all
-files and the path to the target location must not contain any blanks!
+your choice. The target location must grant read access to all files and
+write access to all directories and the path to the target location must
+not contain any blanks!
 
 The link between the RTuinOS build environment (GNU make based) and the
 Arduino installation is made by means of a new environment variable. You
