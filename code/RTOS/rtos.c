@@ -828,7 +828,7 @@ static bool onTimerTic(void)
  * all for the kernel. The time even don't need to be regular.\n
  *   @remark
  * The function needs to be called by an interrupt and can easily end with a context change,
- * i.e. the interrupt will return to another task as that it had interrupted.
+ * i.e. the interrupt will return to another task as the one it had interrupted.
  *   @remark
  * The connected interrupt is defined by macro #RTOS_ISR_SYSTEM_TIMER_TIC. This interrupt
  * needs to be disabled/enabled by the implementation of \a enterCriticalSection and \a
@@ -907,8 +907,8 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
 
 
 /**
- * Actual implentation of task suspension routine \a rtos_waitForEvent. The task is
- * suspended until a specified event occurs.\n
+ * Actual implentation of routine \a rtos_setEvent. The task posts a set of events and the
+ * scheduler is asked which task is the one to be activated now.\n
  *   The action of this SW interrupt is placed into an own function in order to let the
  * compiler generate the stack frame required for all local data. (The stack frame
  * generation of the SW interupt entry point needs to be inhibited in order to permit the
@@ -950,7 +950,7 @@ static bool setEvent(uint16_t postedEventVec)
     /* Check if the task becomes due because of the posted events.
          The function has side effects: If there's a task which was suspended before and
        which is released because of the timer events and which is of higher priority than
-       the one being active so far, the ID of the old and newly active task are written
+       the one being active so far then the ID of the old and newly active task are written
        into global variables _pSuspendedTask and _pActiveTask. */
     return checkForTaskActivation(
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
@@ -1191,7 +1191,7 @@ static inline void storeResumeCondition( task_t * const pT
     else
     {
         /* The timeout counter is reloaded. We could do this conditionally if the bit is
-           set, but in all normal use cases it'll and if not it doesn't harm. We will the
+           set, but in all normal use cases it'll and if not it doesn't harm. We will
            just decrement the delay counter in onTimerTic once but not set the event.
              ++ timeout: The call of the suspend function is in no way synchronized with the
            system clock. We define the delay to be a minimum and implement the resolution

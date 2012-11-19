@@ -987,6 +987,13 @@ of these are incompatible with respect to the syntax of the makefile. Even
 GNU make 3.80 won't work with \rtos' makefile as it didn't know the
 macro \verb+$(info)+ yet.
 
+To run the make tool it might be required to add the path to the binary to
+the front of -- to avoid shadowing by an incompatible derivate of make --
+your Windows search path.\footnote{After installation, type make --version
+to find out.} Inside your Arduino 1.0.1 installation, you'll find the make
+tool as
+arduino-1.0.1\textbackslash\-hard\-ware\textbackslash\-tools\textbackslash\-avr\textbackslash\-utils\textbackslash\-bin\textbackslash\-make.exe.
+
 The makefile compiles the Arduino standard source files to the standard
 library core.a. To do so, it needs to know, where the Arduino sources
 -- which are not part of this project -- are located. It expects an
@@ -996,17 +1003,14 @@ c:\textbackslash{}Program~Files\textbackslash\-arduino-1.0.1. You will
 probably have to add such a variable to your system variables as it is not
 defined by the Arduino standard installation process.
 
-To run the make tool it might be required to add the path to the binary to
-\emph{the front of} your Windows search path. Inside your Arduino 1.0.1
-installation, you'll find the make tool as
-arduino-1.0.1\textbackslash\-hard\-ware\textbackslash\-tools\textbackslash\-avr\textbackslash\-utils\textbackslash\-bin\textbackslash\-make.exe.
-
 Another prerequisite of successfully running the makefile is that your
-application doesn't have any two source files of same name -- although this
-would be basically possible if they were located in different folders.
+application doesn't have any two source files of same name -- although
+this would be basically possible with respect to compiler and linker if
+they were located in different folders.
 
 Finally, all relevant paths to executables and source files and the file
-names themselves must not contain any blanks.
+names themselves must not contain any blanks. This includes the path to
+the Arduino installation.
 
 \subsection{Concept of Makefile}
 
@@ -1116,6 +1120,7 @@ explicitly command make to re-compile everything.
 
 
 \subsection{Selecting the Arduino Board}
+\label{secMakefileSelectBoard}
 
 The target platform is selected as value of macro
 \ident{targetMicroController} in the makefile. However, not all Arduino
@@ -1123,6 +1128,30 @@ boards are currently supported by the implementation of \rtos{}. If you
 select a \uC, which is not yet supported, you will run into error
 directives in the source code. Please refer to section
 \ref{secArduinoBoards} for more.
+
+The makefile has not been tested with any Arduino boards other than the
+Arduino Mega 2560. Please be aware, that additional changes on the
+makefile could be necessary: Different controllers may require different
+command line options of compiler, linker and flash tool. These differences
+are not yet anticipated by the makefile. You need to double-check all
+command lines, which are typically compiled from variables like
+\ident{targetMicroController}, \ident{cFlags} and \ident{lFlags}.
+
+You can use the Arduino IDE to find out, which command lines are
+appropriate in your specific environment. In the file menu of the IDE you
+can navigate to the properties dialog. Here, you can check the verbose
+output for both, compilation and download. Now select, build and download
+any of the sample sketches in the IDE. Copy the contents of the IDE's
+output window and paste them into a text editor. You will find appropriate
+command lines for all the tools.
+
+There's a pit-fall: When running the flash tool avrdude the Arduino IDE
+uses a protocol which unfortunately requires an additional, preparatory
+reset command. This protocol works with the makefile only if you press the
+reset button shortly before avrdude is run, which is at least inconvenient
+if not unacceptable. The makefile uses a quite similar protocol, which
+works well and doesn't require the reset. Place "-cWiring" in the command
+line of avrdude.
 
 
 \subsection{Selecting the USB Port}
@@ -1511,8 +1540,9 @@ referred to before.
 \section{Support of different Arduino Boards}
 \label{secArduinoBoards}
 
-\rtos{} has been developed on an Arduino Mega board and this is the only
-supported board so far. There are some obvious dependencies on the \uC: 
+\rtos{} has been developed on an Arduino Mega 2560 board and this is the
+only supported board so far. There are some obvious dependencies on the
+\uC:
 \begin{itemize}
   \item The size of the program counter is three Byte for an ATmega2560
     but only two Byte for some other derivates
@@ -1536,12 +1566,17 @@ Unfortunately, there's a remaining risk, that there are more platform
 dependencies than currently anticipated in the code. This can only be
 found out by doing the migration and testing. Feedback is welcome.
 
+The makefile controlled build process depends on the Arduino board, too.
+An obvious change is the specification of the \uC{} in use when compiling
+the code. However, there are more changes required in the makefile. Please
+refer to section \ref{secMakefileSelectBoard} for more.
+
 
 \chapter{Outlook}
 \label{secOutlook}
 
 We hope that \rtos{} is deemed useful as it is and that it adds some value
-the Arduino world. Nonetheless, we are aware that it has its limitations
+to the Arduino world. Nonetheless, we are aware that it has its limitations
 and that a lot of improvements are imaginable and some even feasible. Some
 ideas and comments have been collected here.
 
