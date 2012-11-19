@@ -26,16 +26,17 @@
 # 
 # The makefile is intended to be executed by the GNU make utility coming along with the
 # Arduino package.
-#   The name of the project needs to be assigned to the makefile macro projectName, see
-# heading part of the code section of this makefile.
+#   The name of the project can be assigned to the makefile macro project, see heading part
+# of the code section of this makefile. If you don't do, your compilation products will use
+# a standard name.
 #   The makefile hard codes the hardware target. Among more, see makefile macros
-# targetMicroController, cFlag and lFlags. Here, you will have to make some changes
+# targetMicroController, cFlags and lFlags. Here, you will have to make some changes
 # according to your selection of an ATmega micro controller. More changes will be required
 # to the command lines of the object file tool avr-objcopy and the flash tool avrdude.
 #   Hint: To find out how to run these tools, you can enable verbose mode in the Arduino
-# IDE and click download for one of the code examples. Copy the contents of the IDE's
-# output window and paste into a text editor. You will find appropriate command lines for
-# all the tools.
+# IDE and click download for one of the code examples. Build and download the sketch in the
+# IDE, then copy the contents of the IDE's output window and paste them into a text editor.
+# You will find appropriate command lines for all the tools.
 #   The Arduino installation directory needs to be referenced. The location is determined
 # by environment variable ARDUINO_HOME. The variable holds the name of the folder which
 # arduino.exe is located in. Caution: This variable is not created by the original Arduino
@@ -43,11 +44,13 @@
 #   The Windows path needs to contain the location of the GNU compiler/linker etc. This is
 # the folder containing e.g. avr-gcc.exe down in the Arduino installation. Typically this
 # can be derived from the environment variable as $(ARDUINO_HOME)\hardware\tools\avr\bin,
-# but we want to have these tools directly available.
+# but we want to have these tools directly available. You will probably have to extend the
+# Windows environment variable PATH.
 #   For your convenience, the Windows path should contain the location of the GNU make
 # processor. If you name this file either makefile or GNUmakefile you will just have to
 # type "make" in order to get your make process running. Typically, the path to the
-# executable is $(ARDUINO_HOME)\hardware\tools\avr\utils\bin.
+# executable is $(ARDUINO_HOME)\hardware\tools\avr\utils\bin. Consider to extend the
+# Windows environment variable PATH accordingly.
 #   This makefile does not handle blanks in any paths or file names. Please rename your
 # paths and files accordingly prior to using this makefile.
 #
@@ -133,6 +136,7 @@ h help targets usage:
 	$(info   - bin/<configuration>/obj/<cFileName>.o: Compile a single C(++) module)
 	$(info   - download: Build first, then flash the device)
 	$(info   - help: Print this help)
+	$(info CAUTION: Always use a clean first when switching between applications)
 	$(error)
 
 # Concept of compilation configurations:
@@ -268,11 +272,32 @@ $(coreDir)\core.a: $(objListCoreWithPath)
 $(objListWithPath) $(objListCoreWithPath): GNUmakefile
 
 # Let the linker create the binary ELF file.
-lFlags = -Os -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)
+#   Here we have serious pit-fall. We know from the Arduino IDE, that the compiled Arduino
+# standard files are bundled in the archive file core.a and that the program is linked
+# against this archive. We started doing the same. Following problem appears: The vector
+# table at the beginning of the code section uses short 12 Bit jumps to the implementation
+# of the interrupt service routines. These jumps can't be changed, as there's no source code
+# available. If we place core.a behind the object files of the program the size of the
+# program is limited by the 12 Bit jump from before till behind - which is unacceptable. If
+# we place core.a in front of the program's object files we end up with numerous unresolved
+# references since the linker doesn't seem to do two passes across an archive as naturally
+# for a set of object files. The work around is to not use the archive but to place all the
+# distinct object files into the command line. Now the object files from the Arduino files
+# may come first (i.e. safely inside the 12 Bit range) followed by the object files of the
+# program itself. We keep the file core.a nonetheless but only as a kind of structural
+# element of the compilation process. It is used as target of the Arduino file compilation
+# and as prerequisite for the linkage of the RTuinOS application. If it is up-to-date, we
+# can be sure, that all Arduino object file are also up-to-date.
+#   Remark: It seems that only the vectors to the ISRs in HardwareSerial use short jumps.
+# The implementation of some other ISRs (e.g. in rtos.o) is definitly allowed to be more
+# than 4 kByte away from the vector table.
+lFlags = -Os -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)			\
+         --fatal-warnings --no-undefined --reduce-memory-overheads --stats
 $(targetDir)\$(project).elf: $(coreDir)\core.a $(objListWithPath)
 	$(info Linking project. Ouput is redirected to $(targetDir)\$(project).map)
-	avr-gcc $(lFlags) -o $@ $(objListWithPath) $(coreDir)\core.a -lm                    \
+	avr-gcc $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm               \
             -Wl,-M > $(targetDir)\$(project).map
+	avr-size -C --mcu=$(targetMicroController) $@
 
 # Derive eep and hex file formats from the ELF file.
 $(targetDir)\$(project).eep: $(targetDir)\$(project).elf
@@ -283,14 +308,16 @@ $(targetDir)\$(project).hex: $(targetDir)\$(project).elf
 	avr-objcopy -O ihex -R .eeprom $< $@
 
 # Download compiled software onto the controller.
-#   Option -cWiring: The Arduino uses a quite similar protocol which unfortunately requires
-# an additional, preparatory reset command. This protocol can't therefore be applied in an
-# automated process. Here we need to use protocol Wiring instead.
+#   Option -cWiring: The Arduino IDE uses a quite similar protocol which unfortunately
+# requires an additional, preparatory reset command. This protocol can't therefore be
+# applied in an automated process. Here we need to use protocol Wiring instead.
 .PHONY: download
 download: $(targetDir)\$(project).hex $(targetDir)\$(project).eep                       \
           $(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf
 	avrdude -C$(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf -v                    \
 	        -p$(targetMicroController) -cWiring -P$(COM_PORT) -b115200 -D -Uflash:w:$<:i
+	avr-size -C --mcu=$(targetMicroController) $@
+
 
 # Run the complete build process with compilation, linkage and a2l and binary file
 # modifications.
