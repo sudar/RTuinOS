@@ -169,7 +169,7 @@ C and M files in the scope of this project."
       (make-cmd-base (concat "cd /d " project-path-win32 " & make -s APP=tc05 "))
       (doxygen-cmd-base (concat "cd /d " project-path-win32 "doc\\doxygen & "))
       (latex-cmd-base (concat "cd /d " project-path-win32 "doc\\manual & "))
-      (history (list (concat make-cmd-base "download")
+      (history (list (concat make-cmd-base "upload")
                      (concat make-cmd-base "bin\\DEBUG\\obj\\.o")
                      (concat make-cmd-base "build")
                      (concat make-cmd-base "rebuild")

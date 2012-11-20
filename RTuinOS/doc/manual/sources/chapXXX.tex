@@ -920,7 +920,7 @@ do now is to run \verb+make -s APP=myFolderName build+.
 
 Start your application using the makefile. Your Arduino board is connected
 via the USB cable. Run 
-\verb+make -s APP=myFolderName COM_PORT=\\.\COM6 download+.
+\verb+make -s APP=myFolderName COM_PORT=\\.\COM6 upload+.
 
 The \rtos{} source file \refRTOSC{} must not be touched at all. Just open
 it for reading if you what to understand how \rtos{} works.
@@ -933,7 +933,7 @@ it for reading if you what to understand how \rtos{} works.
 be compiled with your application. (Without application code you'd end up
 with unresolved externals when linking the code.) However, \rtos{} is
 distributed with some autonomous test cases which are true \rtos{}
-applications. All of these can be build and downloaded using the make
+applications. All of these can be build and uploaded using the make
 processor, which is part of the Arduino installation and the makefile
 which is part of the \rtos{} distribution.
 
@@ -950,10 +950,10 @@ board to the USB port, e.g. port number 6.\footnote{Other boards need some
 code customization first. Please, refer to section
 \ref{secArduinoBoards}.} Now type
 
-\verb+make -s APP=tc05 COM_PORT=\\.\COM6 download+
+\verb+make -s APP=tc05 COM_PORT=\\.\COM6 upload+
 
-and test case (or application) \ident{tc05} is compiled and downloaded
-onto the board. The Arduino board is reset and the \rtos{} application is
+and test case (or application) \ident{tc05} is compiled and uploaded
+to the board. The Arduino board is reset and the \rtos{} application is
 started. Now you might consider to open the Arduino IDE and open the
 Serial Monitor (i.e. the console window) to see what's going on. Later,
 you might replace the default COM port in the makefile with your specific
@@ -1019,10 +1019,10 @@ is the starting point of all. All of these directories are searched for C
 and C++ files. The found files are compiled and linked with the Arduino
 library \ident{core.a}.
 
-Post processing steps create the binary files as required for download to
+Post processing steps create the binary files as required for upload to
 the Arduino board.
 
-An optional, final rule permits to download the binary code onto the
+An optional, final rule permits to upload the binary code to the
 Arduino board. If your application makes use of the USB communication with
 \ident{Serial} all you still have to do to make your application visibly
 run is an ALT-TAB to switch to the (open) Arduino IDE and a Ctrl-Shft-m to
@@ -1140,7 +1140,7 @@ command lines, which are typically compiled from variables like
 You can use the Arduino IDE to find out, which command lines are
 appropriate in your specific environment. In the file menu of the IDE you
 can navigate to the properties dialog. Here, you can check the verbose
-output for both, compilation and download. Now select, build and download
+output for both, compilation and upload. Now select, build and upload
 any of the sample sketches in the IDE. Copy the contents of the IDE's
 output window and paste them into a text editor. You will find appropriate
 command lines for all the tools.
@@ -1157,7 +1157,7 @@ line of avrdude.
 \subsection{Selecting the USB Port}
 
 The USB (or COM) port which is used for the connection between PC and
-Arduino board has to be known by the rule, which downloads (and flashes)
+Arduino board has to be known by the rule, which uploads (and flashes)
 the compiled and linked application. You can specify the port as part of
 the command line of the makefile (type e.g. \verb+COM_PORT=\\.\COM6+).
 

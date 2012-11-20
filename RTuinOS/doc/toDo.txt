@@ -28,3 +28,5 @@ Overhead, da Code komplett ausgeblendet bleibt. Manual
 #if PRESCALER != 1
     static uint8_t cnt = 0;
 #endif
+
+EnterLeaveCriticalSection: Try without cli/sei but only TIMER2). Use tc07

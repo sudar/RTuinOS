@@ -7,7 +7,7 @@ controller platform for various purposes, mainly located in leisure time
 projects. Arduino comes along with a simple to use integrated development
 environment, which contains the complete tool chain to write source code,
 to browse through samples and libraries, to compile and link the software
-and to download it onto the board and flash it. The RTuinOS project adds
+and to upload it to the board and flash it. The RTuinOS project adds
 the programming paradigm of a real time operating system to the Arduino
 world.
 
