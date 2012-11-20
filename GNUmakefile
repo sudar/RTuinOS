@@ -1,7 +1,7 @@
 # 
 # Generic Makefile for Arduino Project
 #
-# Compilation and linkage of C(++) code into binary files and download to the controller.
+# Compilation and linkage of C(++) code into binary files and upload to the controller.
 #
 # Help on the syntax of this makefile is got at
 # http://www.gnu.org/software/make/manual/make.pdf.
@@ -34,9 +34,9 @@
 # according to your selection of an ATmega micro controller. More changes will be required
 # to the command lines of the object file tool avr-objcopy and the flash tool avrdude.
 #   Hint: To find out how to run these tools, you can enable verbose mode in the Arduino
-# IDE and click download for one of the code examples. Build and download the sketch in the
-# IDE, then copy the contents of the IDE's output window and paste them into a text editor.
-# You will find appropriate command lines for all the tools.
+# IDE and compile one of the code examples. Build and upload the sketch in the IDE, then
+# copy the contents of the IDE's output window and paste them into a text editor. You will
+# find appropriate command lines for all the tools.
 #   The Arduino installation directory needs to be referenced. The location is determined
 # by environment variable ARDUINO_HOME. The variable holds the name of the folder which
 # arduino.exe is located in. Caution: This variable is not created by the original Arduino
@@ -124,7 +124,7 @@ h help targets usage:
 	$(info Usage: make [-s] APP=<myRTuinOSApplication> [CONFIGURATION=<configuration>] [COM_PORT=<portName>] {<target>})
 	$(info where <myRTuinOSApplication> is the name of the source code folder of your application, located at code\applications)
 	$(info and where <configuration> is one out of DEBUG (default) or PRODUCTION)
-	$(info and <portName> is an a USB port identifying string to be used for the download.)
+	$(info and <portName> is an a USB port identifying string to be used for the upload.)
 	$(info The default port ($(COM_PORT)) is configured in the makefile. See help of avrdude for more.)
 	$(info Available targets are:)
 	$(info   - build: Build the hex files for flashing onto uC. Includes all others but help)
@@ -134,7 +134,7 @@ h help targets usage:
 	$(info   - makeDir: Create folder structure for generated files. Needs to be called first)
 	$(info   - rebuild: Same as clean and build together)
 	$(info   - bin/<configuration>/obj/<cFileName>.o: Compile a single C(++) module)
-	$(info   - download: Build first, then flash the device)
+	$(info   - upload: Build first, then flash the device)
 	$(info   - help: Print this help)
 	$(info CAUTION: Always use a clean first when switching between applications)
 	$(error)
@@ -307,16 +307,16 @@ $(targetDir)\$(project).eep: $(targetDir)\$(project).elf
 $(targetDir)\$(project).hex: $(targetDir)\$(project).elf
 	avr-objcopy -O ihex -R .eeprom $< $@
 
-# Download compiled software onto the controller.
+# Upload compiled software on the controller.
 #   Option -cWiring: The Arduino IDE uses a quite similar protocol which unfortunately
 # requires an additional, preparatory reset command. This protocol can't therefore be
 # applied in an automated process. Here we need to use protocol Wiring instead.
-.PHONY: download
-download: $(targetDir)\$(project).hex $(targetDir)\$(project).eep                       \
+.PHONY: upload
+upload: $(targetDir)\$(project).hex $(targetDir)\$(project).elf $(targetDir)\$(project).eep \
           $(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf
-	avrdude -C$(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf -v                    \
+	avrdude -C$(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf -v                        \
 	        -p$(targetMicroController) -cWiring -P$(COM_PORT) -b115200 -D -Uflash:w:$<:i
-	avr-size -C --mcu=$(targetMicroController) $@
+	avr-size -C --mcu=$(targetMicroController) $(targetDir)\$(project).elf
 
 
 # Run the complete build process with compilation, linkage and a2l and binary file
