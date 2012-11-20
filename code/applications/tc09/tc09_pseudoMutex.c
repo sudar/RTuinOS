@@ -1,9 +1,19 @@
 /**
  * @file tc09_pseudoMutex.c
  * Test case 09 of RTuinOS. Using a global flag and enter/leaveCriticalSection a kind of
- * mutex is implemented, which is applied to control the alternating use of a shared resource
- * (Serial) by several tasks. The result is a kind of pseudo mutex as some polling is
- * required. True, to the point waiting for a resource is not possible in RTuinOS.
+ * mutex is implemented, which is applied to control the alternating use of a shared
+ * resource (Serial) by several tasks. The result is a kind of pseudo mutex (pseudo bacause
+ * some polling is required). True to-the-point waiting for a resource is not possible in
+ * RTuinOS.
+ *   Observations:
+ *   The test succeeds if the Arduino console shows correct text output. The tasks, which
+ * gets the resource uses the shared resource (the global object Serial) to write one line
+ * of text to the console. This is purposely done in several portions of output, which are
+ * interrupted by task switches. A certain percentage of the task switches will also oocur
+ * in the middle of a print command. The lines must nonetheless be always complete.
+ *   Although the pseudo-mutex has some deficiencies with respect to regarding task
+ * priorities (see below), it must be apparent, that the task of higher priority gets the
+ * resource more often than the others.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -110,24 +120,25 @@ static volatile bool _mutex = false;
 
 static void getResource()
 {
-    /* Basically, the mutex is implemented by a global flag and a polling loop which checks
+    /* Basically, the mutex is implemented by a global flag and a polling loop which tests
        the flag under mutual exclusion with other tasks (using a critical section). If the
-       resource is occupied the routine suspends the invoking task for a little while.
+       resource is occupied the routine suspends the invoking task for a little while until
+       it tests the flag again.
          Don't be confused that the same function getResource can individually suspend
-       different tasks all calling this function - even with an overlap in time. This is
+       different tasks all calling this function - even overlappingly in time. This is
        what reentrant actually means: The same function code operates individually and
        independently for each caller.
          Pure polling would basically work, but we can approach true mutexes even a little
-       bit. We don not just wait for a while but additionally for an event, which would be
+       bit. We do not just wait for a while but additionally for an event, which would be
        posted in the very instance another task returns the resource.
-         Adding an event statistically shortens the wait time. If the the event is posted
-       after the test-the-flag operation and after entering the suspend command it does
-       what it is expected to do: It aborts the wait time of the requesting task. But in
-       the rare case, that it is posted between the test and the suspend command, it is not
-       received by the requesting task and this task will (probably successfully) repeat
-       the test only after the complete wait time span. This is the major difference in
-       comparison to a true mutex implementation. The effect can be lowered only by
-       choosing a small timeout.
+         Adding an event statistically shortens the wait time. If the event is posted after
+       the test-the-flag operation and after entering the suspend command it does what it
+       is expected to do: It aborts the wait time of the requesting task. But in the rare
+       case, that it is posted between the test and the suspend command, it is not received
+       by the requesting task and this task will (probably successfully) repeat the test
+       only after the complete wait time span. This is the major difference in comparison
+       to a true mutex implementation. The effect can be lowered only by choosing a small
+       timeout.
          Another important difference of the implementation here with a true mutex is the
        disregarding of the task priorities. If several tasks request the resource at the
        same time and if the task of higher priority misses the event (as it is posted
@@ -156,7 +167,7 @@ static void getResource()
         
         /* No, we still have to wait for it. */
     }  
-    while(rtos_delay(0));
+    while(rtos_waitForEvent(EVT_RESOURCE_IS_AVAILABLE | RTOS_EVT_DELAY_TIMER, false, 1));
 
 } /* End of getResource */
 
@@ -176,6 +187,9 @@ static void releaseResource()
        such. */
     ASSERT(_mutex);
     _mutex = false;
+    
+    /* Signal the availability of the resource to possibly waiting tasks. */
+    rtos_setEvent(EVT_RESOURCE_IS_AVAILABLE);
     
 } /* End of releaseResource */
 
@@ -221,7 +235,7 @@ static void taskC0(uint8_t idxTask)
         /* Give other tasks a chance to get the resource. After the call of release, we
            must not immediately cycle around, otherwise the chance is high, that we get it
            immediately again. Suspend deliberately (but as short as possible), so that
-           other tasks of same priority class can become active. */
+           other tasks of the same priority class can become active. */
         releaseResource();
         rtos_delay(0);
     }
@@ -285,7 +299,7 @@ static void taskEntryC0(uint16_t initCondition)
  
 static void taskT0_C1(uint16_t initCondition)
 {
-#define TASK_TIME_T0_C1_MS  50 
+#define TASK_TIME_T0_C1_MS  21
 
     uint32_t cnt = 0;
     
@@ -306,11 +320,11 @@ static void taskT0_C1(uint16_t initCondition)
         Serial.print("This is task T0_C1");
         Serial.print(": "); Serial.print(++cnt);
         Serial.print(" loops. This line of conso");
-        rtos_delay(TIME_IN_MS(11));
+        rtos_delay(TIME_IN_MS(7));
         Serial.print("le output is interr");
-        delay(13/*ms*/);
-        Serial.print("upted by several task de-activations. ");
-        Serial.println("Now the resource is released again");
+        delay(3/*ms*/);
+        Serial.print("upted by several task de-activations");
+        Serial.println(". Now the resource is released again");
 
         /* Give other tasks a chance to get the resource. */
         releaseResource();
