@@ -30,3 +30,4 @@ Overhead, da Code komplett ausgeblendet bleibt. Manual
 #endif
 
 EnterLeaveCriticalSection: Try without cli/sei but only TIMER2). Use tc07
+  Done: cli/sei is essential, test case fails otherwise

@@ -149,9 +149,11 @@
  */
 # define rtos_enterCriticalSection()                                        \
 {                                                                           \
+    cli();                                                                  \
     TIMSK2 &= ~_BV(TOIE2);                                                  \
     TIMSK4 &= ~_BV(TOIE4);                                                  \
     TIMSK5 &= ~_BV(TOIE5);                                                  \
+    sei();                                                                  \
                                                                             \
 } /* End of macro rtos_enterCriticalSection */
 #else

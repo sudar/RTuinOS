@@ -482,9 +482,9 @@ static uint8_t *prepareTaskStack( uint8_t * const pEmptyTaskStack
 
     /* Push 3 Bytes of guard program counter, which is the reset address, 0x00000. If
        someone returns from a task, this will cause a reset of the controller (instead of
-       an undertemined kind of crash).
+       an undertermined kind of crash).
          CAUTION: The distinction between 2 and 3 byte PC is the most relevant modification
-       of the code whenporting to another AVR CPU. Many types use a 16 Bit PC. */
+       of the code when porting to another AVR CPU. Many types use a 16 Bit PC. */
     * sp-- = 0x00;
     * sp-- = 0x00;
 #ifdef __AVR_ATmega2560__
@@ -531,7 +531,7 @@ static uint8_t *prepareTaskStack( uint8_t * const pEmptyTaskStack
     for(r=26; r<=31; ++r)
         * sp-- = 0;
 
-    /* The stack is prepared. The value, the stack pointer has now needs to be returned to
+    /* The stack is prepared. The value the stack pointer has now needs to be returned to
        the caller. It has to be stored in the context save area of the new task as current
        stack pointer. */
     retCode = sp;
@@ -619,7 +619,7 @@ static bool checkForTaskActivation(
            events.
              The AND operation is less straight forward as the timeout character of the
            timer events needs to be retained: AND only refers to the postable events but
-           does not include the timer events. All postable events need to be set in either
+           does not include the timer events. All postable events need to be set in both
            the mask and the vector of posted events OR any of the timer events in the mask
            are set in the vector of posted events. */
 /** \cond */
@@ -1104,7 +1104,7 @@ volatile void rtos_setEvent(uint16_t eventVec)
        this will be restored on function exit. */ 
     PUSH_CONTEXT_ONTO_STACK
 
-    /* The next assembler statement has not direct impact but permits to jump on machine
+    /* The next assembler statement has no direct impact but permits to jump on machine
        code level into the middle of this function. The application ISRs make use of this:
        They push the interrupted context, load the parameter register pair r24/25 with the
        event they are assigned to and jump here to reuse the code for posting an event and
