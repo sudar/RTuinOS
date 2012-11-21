@@ -133,7 +133,7 @@ h help targets usage:
 	$(info   - cleanCore: Delete the compilation core.a of the Arduino standard library files)
 	$(info   - makeDir: Create folder structure for generated files. Needs to be called first)
 	$(info   - rebuild: Same as clean and build together)
-	$(info   - bin/<configuration>/obj/<cFileName>.o: Compile a single C(++) module)
+	$(info   - bin\<configuration>\obj\<cFileName>.o: Compile a single C(++) module)
 	$(info   - upload: Build first, then flash the device)
 	$(info   - help: Print this help)
 	$(info CAUTION: Always use a clean first when switching between applications)
@@ -217,7 +217,7 @@ objListWithPath := $(addprefix $(targetDir)\obj\, $(objList))
 # files are not available after a clean.
 -include $(patsubst %.o,%.d,$(objListWithPath))
 
-# Blank separated search path for source files and their prerequisites permit to use auto
+# Blank separated search path for source files and their prerequisites permits to use auto
 # rules for compilation.
 VPATH := $(srcDirList) 																\
          $(targetDir)                                                               \

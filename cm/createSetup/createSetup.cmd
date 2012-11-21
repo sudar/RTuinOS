@@ -93,10 +93,11 @@ pushd "%tmpCheckoutFolder%\cm\createSetup"
 call makeDoc.cmd
 
 :: Create a version description.
+copy ..\..\version.txt .
 if /I not "%rev%" == "" (
-    echo Source: %url%> version.txt
+    echo Source: %url%>> version.txt
 ) else (
-    echo Source: %url%, %rev%> version.txt
+    echo Source: %url%, %rev%>> version.txt
 )
 echo Archive Compilation Date:>> version.txt
 date /T>> version.txt
