@@ -365,8 +365,9 @@ void setup(void)
  * there's some execution time left. It's interrupted by any other task when it becomes
  * due.
  *   @remark
- * Different to all other tasks, the idle task routine may and should termninate. This has
- * been designed in accordance with the meaning of the original Arduino loop function.
+ * Different to all other tasks, the idle task routine may and should return. (The task as
+ * such doesn't terminate). This has been designed in accordance with the meaning of the
+ * original Arduino loop function.
  */ 
 
 void loop(void)

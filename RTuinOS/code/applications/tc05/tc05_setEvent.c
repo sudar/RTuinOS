@@ -242,7 +242,7 @@ static void task01_class00(uint16_t initCondition)
         ++ noLoopsTask01_C0;
 
         /* For test purpose only: This task consumes the CPU for most of the cycle time. */
-        //delay(8 /*ms*/);
+        //delay(1 /*ms*/);
         
         /* Release high priority task for a single cycle. It should continue operation
            before we leave the suspend function here. Check it. */
@@ -251,7 +251,7 @@ static void task01_class00(uint16_t initCondition)
         ASSERT(u+1 == noLoopsTask00_C1)
         ASSERT(noLoopsTask01_C0 == noLoopsTask00_C1)
         
-        /* This tasks cycles with about 10ms. */
+        /* This tasks cycles with about 10 ms. */
         rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 1);
     }
 } /* End of task01_class00 */
@@ -363,8 +363,9 @@ void setup(void)
  * there's some execution time left. It's interrupted by any other task when it becomes
  * due.
  *   @remark
- * Different to all other tasks, the idle task routine may and should termninate. This has
- * been designed in accordance with the meaning of the original Arduino loop function.
+ * Different to all other tasks, the idle task routine may and should return. (The task as
+ * such doesn't terminate). This has been designed in accordance with the meaning of the
+ * original Arduino loop function.
  */ 
 
 void loop(void)

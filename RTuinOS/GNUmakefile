@@ -230,6 +230,7 @@ cFlags =  $(cDefines) -c -g -Os -Wall -fno-exceptions -ffunction-sections       
           -fdata-sections -mmcu=$(targetMicroController) -DF_CPU=16000000L -MMD     \
           -DUSB_VID=null -DUSB_PID=null -DARDUINO=101                               \
           -Wa,-a=$(patsubst %.o,%.lst,$@)                                           \
+          -Winline                                                                  \
           $(foreach path, $(srcDirList), -I$(path))                                 \
           -I$(ARDUINO_HOME)\hardware\arduino\cores\arduino                          \
           -I$(ARDUINO_HOME)\hardware\arduino\variants\mega                          \
