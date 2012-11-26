@@ -31,3 +31,18 @@ Overhead, da Code komplett ausgeblendet bleibt. Manual
 
 EnterLeaveCriticalSection: Try without cli/sei but only TIMER2). Use tc07
   Done: cli/sei is essential, test case fails otherwise
+
+Manual: 3.8, API, enter/leaveCS: sei/cli will disable delay, but not
+delayMicroseconds. e/lCS would be okay with both
+
+Review all test cases: Arduino's delay enables task switches. Is this
+aligned with the intention of the test cases? At some points we purposely
+want to produce CPU load. Here delayMicroseconds would be the right
+choice.
+  Done. No code changes but comments became more meaningful.
+
+TC05: T0C0: Documentation and implementation differ. Timeout event is
+commented out while value is still set. The task cycle time is documented
+to be slow while it is set very fast. T1C0: cycle time is documented
+different to implementation. The triggered T0C1 has a very long timeout to
+wait for each trigger. SHould become much sharper

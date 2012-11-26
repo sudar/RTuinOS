@@ -1260,6 +1260,39 @@ active yet. Here you can use the Arduino libraries without more. In
 particular, you can initialize all required ports and devices and the
 communication with \ident{Serial}.
 
+It's similar for library \ident{LiquidCrystal}. The implementation is
+basically thread-safe; the library can be used. Of course, the tasks must
+cooperatively implement a mutual exclusion when accessing the display. The
+source code contains some hardware-required delays, which are of
+course not implemented RTOS conform and which could be replaced by
+\ident{rtos\_delay} as an improvement of the library for \rtos. 
+
+The delay is implemented using Arduino's library function
+\ident{delayMicroseconds}, which is based on a CPU consuming waiting loop.
+This does not necessarily mean that task switches are inhibited or
+delayed; just avoid to use the library in a task of high priority.
+Nonetheless, the CPU time is lost; these function calls raise the CPU load
+without need.\footnote{Arduino's delay function \ident{delay}
+is different. It compares the desired return time with the
+global system time, which is updated by an interrupt. If a task using
+\ident{delay} is interrupted by other tasks and if the time it gets
+re-activated again is ahead the desired return time it'll not continue to
+loop and consume the CPU like \ident{delayMicroseconds} would.}
+
+Most of the significant, CPU consuming delays occur in the initialization
+of the display and this can be done in \ident{setup} before multitasking
+actually takes place. The only other undesired delays are found in the
+control commands \ident{clear} and \ident{home} -- if these are avoided or
+if their waste of CPU time causes no pain there's no concern to use
+\ident{LiquidCrystal} from \rtos{} tasks.\footnote{At point of release
+this still needs to be proven by testing. The data is written into the
+display chip by toggling one of its inputs up and down as a clock signal.
+The implementation ensures a minimum time for the clock impulse. Due to
+task switching it can however be arbitrarily prolonged. Whether the
+hardware of the display accepts this is still unclear. If it gets
+confused, the few clock commands would need to be put into a critical
+section.}
+
 Despite of all, using a library developed for single tasking in a
 multi-tasking environment remains a risk, which must not be taken in a
 production system. In a production system, any library function needs to
@@ -1668,3 +1701,25 @@ could easily obscure the current quite concise and stringent
 implementation concept. Furthermore, using
 \ident{rtos\_enter/leaveCriticalSection}, an \rtos{} application can write
 its own queues even though it had to use a polling strategy.
+
+Another typical RTOS element are mutexes and semaphores. (Actually, a
+mutex can be considered a special case of a semaphore, a semaphore with a
+single instance.) Semaphores are useful to handle shared resources. The
+difference to a critical code section is, that the access to the shared
+resources can be granted to a task across task switches. Task scheduling can
+go on, while a task owns the resource. A critical section generally blocks
+task switches and must therefore used only on short operations. 
+
+There's one test case of \rtos{}, which demonstrates how to implement the
+idea of a mutex by a combination of flags and critical sections. Such an
+implementation can indeed safely manage a resource but will always have
+some weakness with respect to responsiveness and priority handling.
+
+An implementation of true semaphores fits basically well to the existing
+code. In particular if we restrict the implementation to mutexes (where
+the instance counter can be replaced by a single bit in a bit vector of
+\ident{n} mutexes, all handled in parallel) the implementation will
+strongly resemble the current event handling and significant parts of the
+existing event code could be used for mutexes without changes. Because of
+this, the next release of \rtos{} will likely support at least mutexes if
+not semaphores.
