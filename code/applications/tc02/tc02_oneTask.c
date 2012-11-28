@@ -105,6 +105,8 @@ static void blink(uint8_t noFlashes)
 static void task01_class00(uint16_t taskCondition)
 
 {
+#define TICS_CYCLE  125
+
     uint16_t u;
     uint32_t ti = millis()
            , tiCycle;
@@ -123,7 +125,7 @@ static void task01_class00(uint16_t taskCondition)
         Serial.println(u, HEX);
         
         Serial.println("task01_class00: Suspending...");
-        u = rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 125);
+        u = rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ TICS_CYCLE);
         tiCycle = millis();
         Serial.print("task01_class00: Released with ");
         Serial.println(u, HEX);
@@ -133,11 +135,13 @@ static void task01_class00(uint16_t taskCondition)
            expression if there's no explicit, superfluous pair of parenthesis around it.
            With parenthesis it compiles just one product, without it uses several products
            and divisions. */
-        Serial.print("Accuracy: ");
-        Serial.print((tiCycle-ti) * (100.0/1000.0 / (125.0/490.1961)));
+        Serial.print("Cycle time: ");
+        Serial.print((tiCycle-ti) * (100.0/1000.0 / (TICS_CYCLE/490.1961)));
         Serial.println("%");
         ti = tiCycle;
     }
+    
+#undef TICS_CYCLE
 } /* End of task01_class00 */
 
 

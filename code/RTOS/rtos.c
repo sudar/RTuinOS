@@ -1184,8 +1184,15 @@ static inline void storeResumeCondition( task_t * const pT
                 ++ pT->cntOverrun;
 
             /* The wanted point in time is over. We do the best recovery which is possible: Let
-               the task become due in the very next timer tic. */
+               the task become due in the very next timer tic.
+                 In specific situations, this can be counter productive - the application
+               may turn off this corrective action. See documentation: If the eight Bit
+               system timer and very slow, regular tasks are used there's a high risk of
+               seeing false overrun recognitions. Now making the task due immediately would
+               introduce a true error. */
+#if RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE == RTOS_FEATURE_ON
             pT->timeDueAt = _time+1;
+#endif
         }
     }
     else
