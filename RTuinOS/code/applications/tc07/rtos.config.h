@@ -71,8 +71,8 @@
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
 
 
-/** The system timer tic is about 2 ms. For more accurate considerations, it is defined
-    here as floating point constant. The unit is s. */
+/** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
+    floating point constant. The unit is s. */
 #define RTOS_TIC (2.0399999e-3)
 
 
@@ -229,6 +229,24 @@
     either 8, 16 or 32; the meaning is number of bits. */
 RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
 
+
+/** Normally, when the overrun of a regular task has been recognized the task is made due
+    immediately (instead of sticking to the nominal due time, which will be reached only in
+    the next system timer cycle).\n
+      If the short system timer is chosen and if there are regular tasks having a cycle
+    time greater than half the timer cycle (i.e. above 127 tics) the probability of faulty
+    recognizing task overruns is close to one (see above). In this situation it can make
+    sense not to react on a recognized task overrun, i.e. not to make the task due
+    immediately. Since faster tasks are more typical than very slow tasks the feature is
+    active by standard even for the short system timer. An application may however turn it
+    off (with care) if it uses that slow regular tasks.\n
+      The counters for task overruns are still supported even if this feature is turned
+    off. The counter for the very slow task should not be evaluated. If you turn this
+    feature off you anticipate false task overrun recognitions for this task.\n
+      If the 16 or 32 Bit system timer is in use it makes no sense to turn the feature off;
+    moreover, it is dangerous to do, as a true, properly recognized task overrun would lead
+    to an almost dead task. */
+#define RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE  RTOS_FEATURE_ON
 
 
 /*
