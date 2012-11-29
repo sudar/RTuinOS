@@ -46,3 +46,7 @@ commented out while value is still set. The task cycle time is documented
 to be slow while it is set very fast. T1C0: cycle time is documented
 different to implementation. The triggered T0C1 has a very long timeout to
 wait for each trigger. SHould become much sharper
+
+TC10: Document the observations
+
+Mention the system load estimation in the manual
