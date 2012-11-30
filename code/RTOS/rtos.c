@@ -1314,16 +1314,18 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * #RTOS_EVT_DELAY_TIMER or #RTOS_EVT_ABSOLUTE_TIMER, the task will resume when either the
  * timer elapsed or when all other events in the mask were seen.
  *   @param timeout
- * If \a eventMask contains #RTOS_EVT_DELAY_TIMER: The number of system timer tics from now
- * on until the timeout elapses. One should be aware of the resolution of any timing being
- * the tic of the system timer. A timeout of n may actually mean any delay in the range
- * n..n+1 tics.\n
+ * If \a eventMask contains #RTOS_EVT_DELAY_TIMER:\n
+ *   The number of system timer tics from now on until the timeout elapses. One should be
+ * aware of the resolution of any timing being the tic of the system timer. A timeout of \a
+ * n may actually mean any delay in the range \a n .. \a n+1 tics.\n
  *   Even specifying 0 will suspend the task a short time and give others the chance to
  * become active - particularly other tasks belonging to the same priority class.\n
- *   If \a eventMask contains #RTOS_EVT_ABSOLUTE_TIMER: The absolute time the task becomes
- * due again at latest. The time designation is relative; it refers to the last recent
- * absolute time at which this task had been resumed. See #rtos_suspendTaskTillTime for
- * details.\n
+ *   If \a eventMask contains #RTOS_EVT_ABSOLUTE_TIMER:\n
+ *   The absolute time the task becomes due again at latest. The time designation is
+ * relative; it refers to the last recent absolute time at which this task had been
+ * resumed. See #rtos_suspendTaskTillTime for details.\n
+ *   Now specifying 0 means that the timeout elapses as late as possible - after a complete
+ * cycle of the system timer.\n
  *   If neither #RTOS_EVT_DELAY_TIMER nor #RTOS_EVT_ABSOLUTE_TIMER is set in the event mask,
  * this parameter should be zero.
  *   @remark
@@ -1345,7 +1347,7 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * combination of optimization flags, GCC will again generate this crash-code. This issue
  * remains a severe risk! Consequently, at any change of a compiler setting you will need
  * to inspect the assembly listing file and double-check that it is proper with respect of
- * using (better not using) the stack frame for this function (and rtos_setEvent).\n
+ * using (better not using) the stack frame for this function (and \a rtos_setEvent).\n
  *   Another idea would be the implementation of this function completely in assembly code.
  * Doing so, we have the new problem of calling assembly code as C functions. Find an
  * example of how to do in
@@ -1411,11 +1413,11 @@ volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t tim
 
 /**
  * Get the current value of the overrun counter of a given task.\n
- *   The value is a limited (i.e. it won't cycle around) 8 Bit counter. This is considered
+ *   The value is a limited 8 Bit counter (i.e. it won't cycle around). This is considered
  * satisfying as any task overrun is a kind of error and should not happen in a real
- * application (with other words: even a Boolean information would maybe enough).
- * Furthermore, if a larger range is required, one can regularly ask for this information,
- * accumulate it and reset the value here to zero at the same time.\n
+ * application (with other words: even a Boolean information could be enough). Furthermore,
+ * if a larger range is required, one can regularly ask for this information, accumulate it
+ * and reset the value here to zero at the same time.\n
  *   The function may be called from a task or from the idle task.
  *   @return
  * Get the current value of the overrun counter.
@@ -1428,6 +1430,14 @@ volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t tim
  * atomic operation, which requires a critical section. This is significantly more
  * expensive than just reading the value and it globally enables the interrupts finally.
  * Therefore this call may destroy a surrounding critical section.
+ *   @remark
+ * This function has some limitations and weaknesses: First of all, the concept of task
+ * overruns is defined only for regular tasks. Secondary, and particularly when using the 8
+ * Bit system timer, there's a significant probability of not recognizing huge task
+ * overruns. Finally there's a significant probability of false recognitions of (not
+ * happening) task overruns if the task period time is greater than half the system timer's
+ * cycle time (i.e. greater than 127 for the 8 Bit system timer). Please, refer to the
+ * RTuinOS manual for details.
  *   @see
  * void rtos_initializeTask()
  */

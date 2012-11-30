@@ -1,8 +1,25 @@
 /**
  * @file tc05_setEvent.c
  *   Test case 05 of RTuinoOS. Several tasks of different priority are defined. Task
- * switches are partly controlled by manually posted events and counted and reported in the
- * idle task.
+ * switches are partly controlled by posted events and counted and reported in the idle
+ * task.
+ *   A task of low priority wait for events posted by the idle task.
+ *   A task of high priority is triggered once by an event posted by a second task of low
+ * priority. The triggering task is a regular task of high frequency. The dependent,
+ * triggered task is expected to cycle synchronously.
+ *   Observations:
+ * The waitForEvent operation in the slow task T00_C0 times out irregulary. The
+ * asynchronous idle task posts the event sometimes but not often enough to satisfy the
+ * task. Due to the irregularity of the idle task we see more or less timeout events.
+ *   The code inside the tasks proves that the second task of low priority is tightly
+ * coupled with the task of high priority. The display of the counters on the console seems
+ * to indicate the opposite. However, this is a multitasking effect only: The often
+ * interrupted idle task samples the data of the different tasks at different times and
+ * does not apply a critical section to synchronize the data.
+ *   The limitations of the recognition of task overruns can be seen in the slow task T00_C0.
+ * It has a cycle time of more than half the system timer (the 8 Bit timer is chosen) and
+ * then there's a significant probability of seeing overruns which actually aren't any. The
+ * code in the task proves the correct task timing.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -75,10 +92,14 @@ static uint8_t _taskStack00_C0[STACK_SIZE_TASK00_C0]
              , _taskStack01_C0[STACK_SIZE_TASK01_C0]
              , _taskStack00_C1[STACK_SIZE_TASK00_C1];
 
-static volatile uint16_t noLoopsTask00_C0 = 0;
-static volatile uint16_t noLoopsTask01_C0 = 0;
-static volatile uint16_t noLoopsTask00_C1 = 0;
- 
+static volatile uint16_t _noLoopsIdleTask = 0;
+static volatile uint16_t _noLoopsTask00_C0 = 0;
+static volatile uint16_t _noLoopsTask01_C0 = 0;
+static volatile uint16_t _noLoopsTask00_C1 = 0;
+static volatile uint16_t _task00_C0_cntWaitTimeout = 0;
+static volatile uint16_t _task00_C0_trueTaskOverrunCnt = 0;
+
+
 /*
  * Function implementation
  */
@@ -86,7 +107,8 @@ static volatile uint16_t noLoopsTask00_C1 = 0;
 
 /**
  * Trivial routine that flashes the LED a number of times to give simple feedback. The
- * routine is blocking.
+ * routine is blocking in the sense that the time it is executed is not available to other
+ * tasks. It produces significant system load.
  *   @param noFlashes
  * The number of times the LED is lit.
  */
@@ -101,6 +123,10 @@ static void blink(uint8_t noFlashes)
         delay(TI_FLASH);          /* The flash time. */
         digitalWrite(LED, LOW);   /* Turn the LED off by making the voltage LOW. */
         delay(TI_FLASH);          /* Time between flashes. */
+        
+        /* Blink takes many hundreds of milli seconds. To prevent too many timeouts in
+           task00_C0 we post the event also inside of blink. */
+        rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
     }                              
     delay(1000-TI_FLASH);         /* Wait for a second after the last flash - this command
                                      could easily be invoked immediately again and the
@@ -122,7 +148,7 @@ static void blink(uint8_t noFlashes)
  * is very limited, but still apparent the first time it is called.
  */ 
 
-static volatile uint8_t _touchedBySubRoutine; /* To discard removal of recursion by
+static volatile uint8_t _touchedBySubRoutine; /* Attempt to discard removal of recursion by
                                                  optimization. */
 static RTOS_TRUE_FCT void subRoutine(uint8_t);
 static void subRoutine(uint8_t nestedCalls)
@@ -183,14 +209,14 @@ void rtos_enableIRQTimerTic(void)
  * A task function must never return; this would cause a reset.
  */ 
 
-static uint16_t _task00_C0_cntWaitTimeout = 0;
-
 static void task00_class00(uint16_t initCondition)
 
 {
+    uint32_t ti1, ti2=0;
+    
     for(;;)
     {
-        ++ noLoopsTask00_C0;
+        ++ _noLoopsTask00_C0;
 
         /* To see the stack reserve computation working we invoke a nested sub-routine
            after a while. */
@@ -203,10 +229,10 @@ static void task00_class00(uint16_t initCondition)
         
         /* Wait for an event from the idle task. The idle task is asynchrounous and its
            speed depends on the system load. The behavior is thus not perfectly
-           predictable. Let's have a look on the overrrun counter for this task. */
-        if(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_03 //| RTOS_EVT_DELAY_TIMER
+           predictable. */
+        if(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_03 | RTOS_EVT_DELAY_TIMER
                             , /* all */ false
-                            , /* timeout */ 40 /* about 80 ms */
+                            , /* timeout */ 200 /* about 400 ms */
                             )
            == RTOS_EVT_DELAY_TIMER
           )
@@ -214,10 +240,39 @@ static void task00_class00(uint16_t initCondition)
             ++ _task00_C0_cntWaitTimeout;
         }
         
-        //rtos_delay(80);
-        /* This tasks cycles with about 500ms. */
+        /* This tasks cycles with the lowest frequency, once per system timer cycle. */
         rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 0);
-    }
+        
+        /* A task period of more than half the system timer cycle leads to a high
+           probability of seeing task overruns where no such overruns happen. (See RTuinOS
+           manual.)
+             We therefore disable the standard corrective action in case of overruns; macro
+           RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE is set to RTOS_FEATURE_OFF.
+             The false overruns are counted nonetheless by rtos_getTaskOverrunCounter.
+           Here, we implement our own overrun counter by comparing the task cycle time with
+           the Arduino timer which coexists with the RTuinOS system timer. */
+        ti1 = millis();
+        if(ti2 > 0)
+        {    
+            ti2 = ti1-ti2;
+            if(ti2 < (uint32_t)(0.9*256.0*RTOS_TIC*1000.0)
+               ||  ti2 > (uint32_t)(1.1*256.0*RTOS_TIC*1000.0)
+              )
+            {
+                ++ _task00_C0_trueTaskOverrunCnt;
+            }   
+        }
+        ti2 = ti1;
+
+        /* What looks like CPU consuming floating point operations actually is a
+           compile time operation. Here's the prove - which also produces no CPU load
+           as it is removed by the optimizer. (Sounds contradictory but it isn't.) */
+        ASSERT(__builtin_constant_p((uint32_t)(0.9*256.0*RTOS_TIC*1000.0))
+               &&  __builtin_constant_p((uint32_t)(1.1*256.0*RTOS_TIC*1000.0))
+              );
+
+    } /* End for(ever) */
+    
 } /* End of task00_class00 */
 
 
@@ -239,20 +294,24 @@ static void task01_class00(uint16_t initCondition)
     {
         uint16_t u;
         
-        ++ noLoopsTask01_C0;
+        ++ _noLoopsTask01_C0;
 
         /* For test purpose only: This task consumes the CPU for most of the cycle time. */
         //delay(1 /*ms*/);
         
         /* Release high priority task for a single cycle. It should continue operation
-           before we leave the suspend function here. Check it. */
-        u = noLoopsTask00_C1;
+           before we return from the suspend function setEvent. Check it. */
+        u = _noLoopsTask00_C1;
         rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_00);
-        ASSERT(u+1 == noLoopsTask00_C1)
-        ASSERT(noLoopsTask01_C0 == noLoopsTask00_C1)
+        ASSERT(u+1 == _noLoopsTask00_C1)
         
-        /* This tasks cycles with about 10 ms. */
-        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 1);
+        /* Double-check that this task keep in sync with the triggered task of higher
+           priority. */
+        ASSERT(_noLoopsTask01_C0 == _noLoopsTask00_C1)
+        
+        /* This tasks cycles with about 10 ms. This will succeed only if the other task in
+           the same priority class does not use lengthy blocking operations. */
+        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 5);
     }
 } /* End of task01_class00 */
 
@@ -273,11 +332,11 @@ static void task00_class01(uint16_t initCondition)
 {
     ASSERT(initCondition == RTOS_EVT_EVENT_00)
     
-    /* This tasks cycles once it is awaked by the event. */
+    /* This tasks cycles once when it is awaked by the event. */
     do
     {
         /* As long as we stay in the loop we didn't see a timeout. */
-        ++ noLoopsTask00_C1;
+        ++ _noLoopsTask00_C1;
     }
     while(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_00 | RTOS_EVT_DELAY_TIMER
                            , /* all */ false
@@ -287,7 +346,7 @@ static void task00_class01(uint16_t initCondition)
          );
     
     /* We must never get here. Otherwise the test case failed. In compilation mode
-       PRODUCTION, when there's no assertion, we will see an immediate reset because we
+       PRODUCTION, when there's no assertion, we would see an immediate reset because we
        leave a task function. */
     ASSERT(false)
 
@@ -315,9 +374,6 @@ void setup(void)
     rtos_initializeTask( /* idxTask */          0
                        , /* taskFunction */     task00_class00
                        , /* prioClass */        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-                       , /* timeRoundRobin */
-#endif
                        , /* pStackArea */       &_taskStack00_C0[0]
                        , /* stackSize */        sizeof(_taskStack00_C0)
                        , /* startEventMask */   RTOS_EVT_DELAY_TIMER
@@ -329,23 +385,17 @@ void setup(void)
     rtos_initializeTask( /* idxTask */          1
                        , /* taskFunction */     task01_class00
                        , /* prioClass */        0
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-                       , /* timeRoundRobin */
-#endif
                        , /* pStackArea */       &_taskStack01_C0[0]
                        , /* stackSize */        sizeof(_taskStack01_C0)
                        , /* startEventMask */   RTOS_EVT_DELAY_TIMER
                        , /* startByAllEvents */ false
-                       , /* startTimeout */     15
+                       , /* startTimeout */     3
                        );
 
     /* Task 0 of priority class 1 */
     rtos_initializeTask( /* idxTask */          2
                        , /* taskFunction */     task00_class01
                        , /* prioClass */        1
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-                       , /* timeRoundRobin */
-#endif
                        , /* pStackArea */       &_taskStack00_C1[0]
                        , /* stackSize */        sizeof(_taskStack00_C1)
                        , /* startEventMask */   RTOS_EVT_EVENT_00
@@ -372,6 +422,8 @@ void loop(void)
 {
     uint8_t idxStack;
     
+    ++ _noLoopsIdleTask;
+    
     /* An event can be posted even if nobody is listening for it. */
     rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_04);
 
@@ -380,10 +432,12 @@ void loop(void)
     rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
 
     Serial.println("RTuinOS is idle");
-    Serial.print("noLoopsTask00_C0: "); Serial.println(noLoopsTask00_C0);
-    Serial.print("_task00_C0_cntWaitTimeout: "); Serial.println(_task00_C0_cntWaitTimeout);
-    Serial.print("noLoopsTask01_C0: "); Serial.println(noLoopsTask01_C0);
-    Serial.print("noLoopsTask00_C1: "); Serial.println(noLoopsTask00_C1);
+    Serial.print("noLoopsIdleTask: "); Serial.println(_noLoopsIdleTask);
+    Serial.print("noLoopsTask00_C0: "); Serial.println(_noLoopsTask00_C0);
+    Serial.print("noLoopsTask01_C0: "); Serial.println(_noLoopsTask01_C0);
+    Serial.print("noLoopsTask00_C1: "); Serial.println(_noLoopsTask00_C1);
+    
+    Serial.print("task00_C0_cntWaitTimeout: "); Serial.println(_task00_C0_cntWaitTimeout);
     
     /* Look for the stack usage. */
     for(idxStack=0; idxStack<RTOS_NO_TASKS; ++idxStack)
@@ -393,9 +447,17 @@ void loop(void)
         Serial.print(": ");
         Serial.print(rtos_getStackReserve(idxStack));
         Serial.print(", task overrun: ");
-        Serial.println(rtos_getTaskOverrunCounter(idxStack, /* doReset */ false));
+        
+        /* The RTuinOS task overrun counter is not reliable for very slow tasks. We've
+           implemented our own counter inside the task function of the slow task task00_C0. */
+        if(idxStack == 0)
+            Serial.println(_task00_C0_trueTaskOverrunCnt);
+        else
+            Serial.println(rtos_getTaskOverrunCounter(idxStack, /* doReset */ false));
     }
     
+    /* Blink takes many hundreds of milli seconds. To prevent too many timeouts in
+       task00_C0 we post the event also inside of blink. */
     blink(2);
     
 } /* End of loop */

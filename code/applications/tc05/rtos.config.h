@@ -246,7 +246,7 @@ RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
       If the 16 or 32 Bit system timer is in use it makes no sense to turn the feature off;
     moreover, it is dangerous to do, as a true, properly recognized task overrun would lead
     to an almost dead task. */
-#define RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE  RTOS_FEATURE_ON
+#define RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE  RTOS_FEATURE_OFF
 
 
 /*
