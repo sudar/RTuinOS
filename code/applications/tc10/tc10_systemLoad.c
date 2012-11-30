@@ -1,6 +1,6 @@
 /**
  * @file tc10_systemLoad.c
- *   Test case 10 of RTuinoOS. Three tasks with known CPU consumption are scheduled. A
+ *   Test case 10 of RTuinOS. Three tasks with known CPU consumption are scheduled. A
  * simple system load estimation is compared to the the known CPU consumption of the
  * tasks.\n
  *   The system load estimation routine can be used in many other RTuinOS applications. The

@@ -2,10 +2,10 @@
 #define RTOS_CONFIG_INCLUDED
 /**
  * @file rtos.config.template.h
- * Switches to define the most relevant compile-time settings of RTuinoOS in an application
+ * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  * @todo Copy this file to your application code, rename it to rtos.config.h and adjust the
- * settings to the need of your RTuinoOS application. Then remove this hint.
+ * settings to the need of your RTuinOS application. Then remove this hint.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *

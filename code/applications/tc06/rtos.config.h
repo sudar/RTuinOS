@@ -2,7 +2,7 @@
 #define RTOS_CONFIG_INCLUDED
 /**
  * @file rtos.config.h
- * Switches to define the most relevant compile-time settings of RTuinoOS in an application
+ * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
