@@ -68,12 +68,12 @@
       If an application redefines the interrupt source, the new source will probably
     produce another system clock frquency. If so, the macro #RTOS_TIC needs to be redefined
     also. */
-#define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
+#define RTOS_ISR_SYSTEM_TIMER_TIC TIMER4_OVF_vect
 
 
-/** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
-    floating point constant. The unit is s. */
-#define RTOS_TIC (2.0399999e-3)
+/** The system timer tic has been changed to about 1 ms. For more accurate considerations,
+    it is defined here as floating point constant. The unit is s. */
+#define RTOS_TIC (9.765625e-4)
 
 
 /** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in
@@ -150,7 +150,7 @@
 # define rtos_enterCriticalSection()                                        \
 {                                                                           \
     cli();                                                                  \
-    TIMSK2 &= ~_BV(TOIE2);                                                  \
+    TIMSK4 &= ~_BV(TOIE4);                                                  \
     sei();                                                                  \
                                                                             \
 } /* End of macro rtos_enterCriticalSection */
@@ -169,7 +169,7 @@
  */
 # define rtos_leaveCriticalSection()                                        \
 {                                                                           \
-    TIMSK2 |= _BV(TOIE2);                                                   \
+    TIMSK4 |= _BV(TOIE4);                                                   \
                                                                             \
 } /* End of macro rtos_leaveCriticalSection */
 #else

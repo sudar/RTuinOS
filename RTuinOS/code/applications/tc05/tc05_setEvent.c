@@ -7,6 +7,11 @@
  *   A task of high priority is triggered once by an event posted by a second task of low
  * priority. The triggering task is a regular task of high frequency. The dependent,
  * triggered task is expected to cycle synchronously.
+ *   Secondary, and not essential for what has been said before, this test case proves the
+ * possibility to exchange the system timer clock by configuration, i.e. without changing
+ * RTuinOS itself. Another interrupt source is configured with a changed clock frequency.
+ * In this sample, RTuinOS is running with a system timer frequency of 1024 Hz or about
+ * 1 ms tic duration respectively.
  *   Observations:
  * The waitForEvent operation in the slow task T00_C0 times out irregulary. The
  * asynchronous idle task posts the event sometimes but not often enough to satisfy the
@@ -127,10 +132,14 @@ static void blink(uint8_t noFlashes)
         /* Blink takes many hundreds of milli seconds. To prevent too many timeouts in
            task00_C0 we post the event also inside of blink. */
         rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
-    }                              
-    delay(1000-TI_FLASH);         /* Wait for a second after the last flash - this command
-                                     could easily be invoked immediately again and the
-                                     bursts need to be separated. */
+    }
+    
+    /* Wait for a second after the last flash - this command could easily be invoked
+       immediately again and the series need to be separated. */
+    delay(500);
+    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
+    delay(500-TI_FLASH);         
+                                 
 #undef TI_FLASH
 }
 
@@ -183,15 +192,36 @@ void rtos_enableIRQTimerTic(void)
     Serial.println("Overloaded interrupt initialization rtos_enableIRQTimerTic in " __FILE__);
     
 #ifdef __AVR_ATmega2560__
-    /* Initialization of the system timer: Arduino (wiring.c, init()) has initialized
-       timer2 to count up and down (phase correct PWM mode) with prescaler 64 and no TOP
-       value (i.e. it counts from 0 till MAX=255). This leads to a call frequency of
-       16e6Hz/64/510 = 490.1961 Hz, thus about 2 ms period time.
-         Here, we found on this setting (in order to not disturb any PWM related libraries)
-       and just enable the overflow interrupt. */
-    TIMSK2 |= _BV(TOIE2);
+    /* Timer 4 is reconfigured. Arduino has put it into 8 Bit fast PWM mode. We need the
+       phase and frequency correct mode, in which the frequency can be controlled by
+       register OCA. This register is buffered, the CPU writes into the buffer only. After
+       each period, the buffered value is read and determines the period duration of the
+       next period. The period time (and thus the frequency) can be varied in a well
+       defined and glitch free manner. The settings are:
+         WGM4 = %1001, the mentioned operation mode is selected. The 4 Bit word is partly
+       found in TCCR4A and partly in TCCR4B.
+         COM4A/B/C: don't change. The three 2 Bit words determine how to derive up to
+       three PWM output signals from the counter. We don't change the Arduino setting; no
+       PWM wave form is generated. The three words are found as the most significant 6 Bit
+       of register TCCR4A.
+         OCR4A = 8192 Hz/f_irq, the frequency determining 16 Bit register. OCR4A must not
+       be less than 3.
+         CS4 = %101, the counter selects the CPU clock divided by 1024 as clock. This
+       yields the lowest possible frequencies -- good make the operation visible using the
+       LED. */
+    TCCR4A &= ~0x03; /* Lower half word of WGM */
+    TCCR4A |=  0x01;
+    
+    TCCR4B &= ~0x1f; /* Upper half word of WGM and CS */
+    TCCR4B |=  0x15;
+    
+    /* We choose 8 as initial value, or f_irq = 1024 Hz. This is more than double the
+       system clock of RTuinOS in its standard configuration. */
+    OCR4A = 8u;
+
+    TIMSK4 |= 1;    /* Enable overflow interrupt. */
 #else
-# error Modifcation of code for other AVR CPU required
+# error Modification of code for other AVR CPU required
 #endif
     
 } /* End of rtos_enableIRQTimerTic */
@@ -232,7 +262,7 @@ static void task00_class00(uint16_t initCondition)
            predictable. */
         if(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_03 | RTOS_EVT_DELAY_TIMER
                             , /* all */ false
-                            , /* timeout */ 200 /* about 400 ms */
+                            , /* timeout */ 200 /*ms*/
                             )
            == RTOS_EVT_DELAY_TIMER
           )
@@ -296,8 +326,9 @@ static void task01_class00(uint16_t initCondition)
         
         ++ _noLoopsTask01_C0;
 
-        /* For test purpose only: This task consumes the CPU for most of the cycle time. */
-        //delay(1 /*ms*/);
+        /* For test purpose only: This task consumes the CPU for about 50% of the cycle
+           time. */
+        delay(5 /*ms*/);
         
         /* Release high priority task for a single cycle. It should continue operation
            before we return from the suspend function setEvent. Check it. */
@@ -311,7 +342,7 @@ static void task01_class00(uint16_t initCondition)
         
         /* This tasks cycles with about 10 ms. This will succeed only if the other task in
            the same priority class does not use lengthy blocking operations. */
-        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 5);
+        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 10 /*ms*/);
     }
 } /* End of task01_class00 */
 
@@ -340,7 +371,7 @@ static void task00_class01(uint16_t initCondition)
     }
     while(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_00 | RTOS_EVT_DELAY_TIMER
                            , /* all */ false
-                           , /* timeout */ 50+5 /* about 100 ms */
+                           , /* timeout */ 100 /*ms*/
                            )
           == RTOS_EVT_EVENT_00
          );
