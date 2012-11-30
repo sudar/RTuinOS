@@ -345,7 +345,7 @@ void rtos_enableIRQUser00()
        three PWM output signals from the counter. We don't change the Arduino setting; no
        PWM wave form is generated. The three words are found as the most significant 6 Bit
        of register TCCR4A.
-         OCR4A = 8192 Hz/f_irq, the frequency determining 16 Bit register. OCR4A must not
+         OCR4A = 7812.5 Hz/f_irq, the frequency determining 16 Bit register. OCR4A must not
        be less than 3.
          CS4 = %101, the counter selects the CPU clock divided by 1024 as clock. This
        yields the lowest possible frequencies -- good make the operation visible using the
@@ -356,9 +356,8 @@ void rtos_enableIRQUser00()
     TCCR4B &= ~0x1f; /* Upper half word of WGM and CS */
     TCCR4B |=  0x15;
     
-    /* We choose 8 as initial value, or f_irq = 1024 Hz. This is more than double the
-       system clock of RTuinOS in its standard configuration (which is used in this test
-       case). */
+    /* We choose 8 as initial value, or f_irq = 976 Hz. This is about double the system
+       clock of RTuinOS in its standard configuration (which is used in this test case). */
     OCR4A = 8u;
 
     TIMSK4 |= 1;    /* Enable overflow interrupt. */
@@ -391,7 +390,7 @@ void rtos_enableIRQUser01()
        three PWM output signals from the counter. We don't change the Arduino setting; no
        PWM wave form is generated. The three words are found as the most significant 6 Bit
        of register TCCR5A.
-         OCR5A = 8192 Hz/f_irq, the frequency determining 16 Bit register. OCR5A must not
+         OCR5A = 7812.5 Hz/f_irq, the frequency determining 16 Bit register. OCR5A must not
        be less than 3.
          CS5 = %101, the counter selects the CPU clock divided by 1024 as clock. This
        yields the lowest possible frequencies -- good make the operation visible using the
@@ -402,8 +401,8 @@ void rtos_enableIRQUser01()
     TCCR5B &= ~0x1f; /* Upper half word of WGM and CS */
     TCCR5B |=  0x15;
     
-    /* We choose 8192 as initial value, or f_irq = 1 Hz. */
-    OCR5A = 8192u;
+    /* We choose 7813 as initial value, or f_irq = 1 Hz. */
+    OCR5A = 7813u;
 
     TIMSK5 |= 1;    /* Enable overflow interrupt. */
 #else
