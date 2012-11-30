@@ -2,7 +2,7 @@
 #define RTOS_CONFIG_INCLUDED
 /**
  * @file rtos.config.h
- * Switches to define the most relevant compile-time settings of RTuinoOS in an application
+ * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
@@ -71,9 +71,9 @@
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER4_OVF_vect
 
 
-/** The system timer tic has been changed to about 1 ms. For more accurate considerations,
-    it is defined here as floating point constant. The unit is s. */
-#define RTOS_TIC (9.765625e-4)
+/** The system timer tic has been changed to 1 ms. Here, it is defined as floating point
+    constant. The unit is s. */
+#define RTOS_TIC (1e-3)
 
 
 /** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in
