@@ -4,12 +4,42 @@
  * simple system load estimation is compared to the the known CPU consumption of the
  * tasks.\n
  *   The system load estimation routine can be used in many other RTuinOS applications. The
- * prerequiste is, that the idle task is not used in the application. Or at maximum
- * for very low frequently done things. Most of the idle time is consumed by the system
- * load estimation.\n
+ * prerequisite is that the idle task is not used in the application. Or outermost for very
+ * infrequently done things. Most of the idle time is consumed by the system load
+ * estimation.\n
  *   To reuse the load estimation in your application copy the files gsl_systemLoad.c/h to
  * your application and see the idle task implementation here to find out how to apply
  * the code.
+ *   Observations:
+ *   The system load is displayed alternatingly as 51%-52% or 63%-64%. The known loads by
+ * the tasks are: 6%, 23% and 20%. Every few seconds one of the tasks produced an
+ * additional load of 12% for a few seconds. Additional system load is introduced by the
+ * system (the scheduler), by the Arduino interrupts and by the implementation of the task
+ * functions (some simple loop constructs). These additional terms can not be predicted. If
+ * we compare the known terms with the measured results, we find about 3% in sum for these
+ * addends.\n
+ *   The mentioned loads are produced by Arduino's \a delayMicroseconds. This function uses
+ * a loop of known number of CPU clock tics to execute. The time till return really
+ * consumes the CPU for the specified time, any kind of interruption (by Arduino
+ * interrupts, by RTuinOS task switches) is additional. If a regular task uses this
+ * function it is clearly defined how much CPU load it causes in percent but it is open
+ * how long (i.e. world time) the function will take to return.\n
+ *   Arduino's function \a delay must not be used to produce a defined load: It measures
+ * the world time till return. If the task invoking \a delay is interrupted it doesn't
+ * produce CPU load (another task does) but after reactivation of the task \a delay might
+ * nonetheless be satisfied and would return if it sees that enough time has gone by.
+ * Therefore, if we'd applied \a delay here instead of \a delayMicroseconds we could not
+ * predict the total system load by adding the loads of the distinct tasks.\n
+ *   The observation window (i.e. the averaging time) of the system load measurement is
+ * about 1 s of world time. The measurement is reliable only, if this time span captures a
+ * number of repetitions of the complete task activation pattern. If only regular tasks are
+ * implemented the slowest task should have a repetition time of significantly less than
+ * 1 s. In this sample the slowest regular task has a cycle time of about 250 ms. By the way,
+ * it's straight forward to prolong the averaging time of gsl_getSystemLoad(void) if an
+ * RTuinOS application would require this because of very slow regular tasks.\n
+ *   Besides measuring the current system load, \a loop is used to let the Arduino LED
+ * blink. This is basically useless but demonstrates that the idle task is available to
+ * other (infrequent) jobs even if gsl_getSystemLoad(void) is applied.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -105,7 +135,7 @@ static uint8_t _taskStackT0C0[STACK_SIZE]
  
 static void blink(uint8_t noFlashes)
 {
-#define TI_FLASH 150
+#define TI_FLASH 150 /** Duration of both, on and off phases of the LED. */
 
     while(noFlashes-- > 0)
     {
@@ -133,7 +163,7 @@ static void blink(uint8_t noFlashes)
 static void taskT0C0(uint16_t taskCondition)
 
 {
-#define TI_CYCLE_MS 250
+#define TI_CYCLE_MS 250 /** Cycle time of regular task. */
 
     uint16_t cnt=0;
     uint32_t ti = millis()
