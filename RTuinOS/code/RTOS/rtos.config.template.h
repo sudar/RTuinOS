@@ -107,7 +107,7 @@
 
 /** A macro which expands to the code which defines all types which are related to the
     system timer. We need the unsigned and the related signed type. The macro is applied
-    just once, see below. */
+    just once, see below and #RTOS_DEFINE_TYPE_OF_SYSTEM_TIME_DOXYGEN_TAG. */
 #define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(noBits)     \
     typedef uint##noBits##_t uintTime_t;            \
     typedef int##noBits##_t intTime_t;
@@ -129,7 +129,7 @@
  *   The system timer is bound to another interrupt source.\n
  *   External interrupts are enabled and implemented.\n
  * In any case, the functions need to disable all interrupts, which could lead to a task
- * switch. It is not the intention -- although it would work -- to simply lock all
+ * switch. It is not the intention - although it would work - to simply lock all
  * interrupts globally. The responsiveness of the system would be degraded without need.\n
  *   The use of the function pair cli() and sei() is an alternative to
  * rtos_enter/leaveCriticalSection. Globally locking the interrupts is less expensive than
@@ -139,7 +139,7 @@
  *   @remark
  * The implementation does not permit recursive invokation of the function pair. The status
  * of the interrupt lock is not saved. If two pairs of the functions are nested, the task
- * switches are re-enabled as soon as the inner pair is left -- the remaining code in the
+ * switches are re-enabled as soon as the inner pair is left - the remaining code in the
  * outer pair of function would no longer be protected agianst unforeseen task switches.
  * This is the same as if using nested pairs of cli/sei.
  *   @remark
@@ -191,7 +191,7 @@
     unit is often chosen to be the period time of the fastest regular time. But in general
     the time doesn't need to be regular and its unit doesn't matter.\n
       You may define the time to be any unsigned integer considering following trade off:
-    The shorter the type is the less the system overhead. Be aware that many operations in
+    The shorter the type the less the system overhead. Be aware that many operations in
     the kernel are time based.\n
       The longer the type the larger is the maximum ratio of period times of slowest and
     fastest task. This maximum ratio is half the maxmum number. If you implement tasks of
@@ -217,8 +217,8 @@
     which is seen as +13 in the future. If the task execution was too long and ended e.g.
     after 110 tics, the system time was 123+110 = 233. The demanded resume time 223 is seen
     in the past and a task overrun is recognized. A problem appears at excessive task
-    overruns. If the execution had e.g. taken 230 tics the current time is 123 + 230 = 353
-    - or 97 due to its cyclic character. The demanded resume time 223 is 126 tics ahead,
+    overruns. If the execution had e.g. taken 230 tics the current time is 123 + 230 = 353 -
+    or 97 due to its cyclic character. The demanded resume time 223 is 126 tics ahead,
     which is considered a future time - no task overrun is recognized. The problem appears
     if the overrun lasts more than half the system time cycle. With uint16_t this problem
     becomes negligible.\n
@@ -228,7 +228,12 @@
     for the integer. Therefore we choose its name \a uintTime_t similar to the common
     integer types.\n
       The argument of the macro, which actually makes the required typedefs is set to
-    either 8, 16 or 32; the meaning is number of bits. */
+    either 8, 16 or 32; the meaning is number of bits.
+      @remark
+    Please ignore the appendix _DOXYGEN_TAG in the displayed name of the macro. This is a
+    work around as the doxygen parser gets confused about the true (nested) macro syntax.
+    Inspect the header file to see. */
+#define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME_DOXYGEN_TAG
 RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
 
 

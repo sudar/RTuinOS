@@ -372,7 +372,7 @@ static void task00_class01(uint16_t initCondition)
     }
     while(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_00 | RTOS_EVT_DELAY_TIMER
                            , /* all */ false
-                           , /* timeout */ 100 /*ms*/
+                           , /* timeout */ 15 /*ms*/
                            )
           == RTOS_EVT_EVENT_00
          );
@@ -432,7 +432,7 @@ void setup(void)
                        , /* stackSize */        sizeof(_taskStack00_C1)
                        , /* startEventMask */   RTOS_EVT_EVENT_00
                        , /* startByAllEvents */ false
-                       , /* startTimeout */     0
+                       , /* startTimeout */     5
                        );
 
 } /* End of setup */
