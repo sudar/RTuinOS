@@ -410,6 +410,163 @@ remains the head of its due list. The task is inactive but still due and
 still the first candidate for reactivation within its priority class.
 
 
+\section{Task Switches}
+
+The basic principle of the scheduler is to switch between different tasks.
+The chapters before explained the rules the scheduler applies to decide
+when and why to switch to which task. This section explains how a task
+switch is done.
+
+The CPU doesn't know about tasks. It is a state machine, which has a set
+of registers, which determine the next action in the next tic of the CPU
+clock. The most relevant register in this context is the program counter
+(PC). It is a pointer to one specific word in the program memory (flash
+ROM). The word it points to is the next CPU command, which will be
+executed. This next command will probably have an effect on one or more of
+the CPU registers, it might e.g. command the CPU to add two data
+registers, to add a constant to one of the data registers, to read a
+memory cell into a register or to write a register into a memory cell.
+While the command is being executed the PC is incremented so that it
+points to the next word in the program flash. The next command is
+selected. And so on. A program is build from hundreds and thousands of
+these elementary commands. The sequence of commands form the program.
+
+Since they are not endless it's possible to have several such command
+sequences one after another in the program memory. These different
+sequences now form the program code of the different tasks. The main thing
+to do when switching between tasks is to alter the value of the program
+counter from the one sequence to one of the others. There are dedicated
+CPU command to do so, like \ident{jump}, which directly loads the PC with
+the desired target address or \ident{rts} and \ident{reti}, which load the
+PC from the stack.
+
+Obviously, a scheduler needs to be able to later continue the left command
+sequence, or task respectively. The continuation needs to seamless, to be
+done as if there had not been a switch to another sequence at all. This
+means in the first place, that we remind the value the PC had,
+before we forced it to point to the other program sequence. But it also
+means that all the CPU's data registers have exactly the same value they
+used to have before the switch. This condition can only be fulfilled if we
+save the contents of all registers prior to switching to another command
+sequence.
+
+The AVR CPU has 32 general purpose data registers plus a status register.
+The scheduler holds a task object for each task. It would be straight
+forward to have an array \ident{uint8\_t saveReg[32+1]} as member of the
+task object and to place the register contents here. Yes, this would
+basically work well but there is a much simpler and cheaper way to do: All
+the registers are pushed onto the stack. The ease of doing starts with
+saving the PC: As we saw, a task switch is always initiated by either an
+interrupt or the call of an API function (a suspend function or
+\ident{setEvent}). Both machine operations start execution with pushing
+the current PC onto the stack. As we intend to use the stack as storage
+location of all our registers it's fine to already have the PC here, where
+we want it to have. Saving the other registers on the stack is as easy:
+The command set of any CPU contains a push command which directly stores
+the contents of a data register onto the stack. For an AVR CPU this
+command is called \ident{push}. Consequently, all interrupt service
+routines and all API functions, which could initiate a task switch, start
+with 32 push operations to save the general purpose data registers (an
+important exception is mentioned later). This code sequence is completed
+by two simple CPU commands which also push the CPU's status register onto
+the stack.
+
+The register pushing entry-commands of an ISR or a task switch causing API
+function basically enable this function to change the PC to point to the
+code of another task (and thus to continue with that task). Figuring out
+whether this is necessary will be the next step of these functions. Quite
+often this will not be the case. In which case the function terminates by
+doing all in reverse order. All registers are read and taken from the
+stack again. (They are "popped" from the stack.) This includes the PC as
+very last register -- and the code execution continues where the interrupt
+had interrupted the task code, or behind the API function respectively.
+This is like any ordinary interrupt service routine.
+
+Saving the registers on the stack is easy but only half the battle.
+Different tasks can't operate on the same stack. A stack is the
+implementation of the paradigm of the strictly hierarchical concept of
+function calls and nested sub-function calls and all the local data of
+these nested function invocations. This paradigm is not applicable to
+multi-tasking. Tasks can be switched disregarding function entry and exit
+points; the activated task is not a sub-function of the left other
+task.\footnote{Prove: To continue the left task it is not a prerequisite
+that the activates task terminates -- in order to "return" to the left
+task.} Therefore, each task has its own, dedicated stack. Before switching
+from one task to another we need to save the stack of the left task. At
+runtime, i.e. beyond memory allocation and stack initialization
+considerations, the stack actually is completely represented by the
+pointer to its top -- and this "stack pointer" (the last CPU register to
+mention) is what we need to save also. Here, we use an absolute storage
+location. The task object has a member to hold the stack pointer of this
+task. The value of this object member is meaningful always and only while
+the task is inactive.
+
+Before we proceed to the perhaps most difficult to understand detail, we
+will shortly summarize what we saw so far:
+
+All code, which can initiate a task switch is a function. Either an ISR or
+a dedicated API function. All of these functions are well prepared to do a
+task switch as they push the PC, all data registers and the status
+register onto the stack of the active task. We say, they save the "CPU
+context" onto the task's stack. And in case a task switch should become
+necessary these functions know about a well-defined memory location where
+to also save the stack pointer of the currently active task.
+
+Now we reach the maybe most tricky detail, easy on the one hand but
+nonetheless a bit difficult to see on the other hand. Let's put it into a
+question: How could we ever get here to the point where we are about to
+leave the currently active task? The answer: By the same kind of task
+switch from another task into this task! Consequently, the other task will
+have done the same. In this instance, there will be its dedicated stack
+and this stack will have all the saved registers of that task on its top
+(including the PC). So, if we load the stack pointer of that task, we just
+have to do the same as if we'd return from the task switch causing
+function back to the same task (see above) -- pop all registers and go
+ahead with that task.\footnote{The program counter is popped as the last
+register with a command \ident{reti}, "return from interrupt".}
+
+Important to see: All tasks which are not currently active have been
+deactivated the same way; all have left a stack with all registers
+including the PC on its top and all their stack pointers have been saved
+at the well-defined, known location. A picture of a task switch could be
+as follows: Pushing the registers on the stack is like climbing up a hill,
+from its top we jump to the top of any of the other hills around and then
+we slide it down (i.e. restore the registers with the contents of this
+other hill).
+
+Doing the good preparation of storing the CPU context onto the stack the
+complete task switch reduces to nothing else than exchanging the value of
+the CPU's stack pointer. The value of the still active task is stored and
+the value of the newly activated task is loaded -- that's all. Then we
+leave the task switch causing function and its simple register popping
+exit code loads the earlier saved context of the new task just like that
+into the CPU.
+
+The general story is complete if we mention the initialization. Before the
+first task becomes active the still un-threaded initialization code of
+\rtos{} prepares the stack areas of all tasks as if these tasks had been
+active before and as if they had then been suspended. This is done by the
+simple, assembler code free C function \ident{prepareTaskStack}. It places
+33 bytes at the beginning of this memory area -- and these bytes will
+become the initial values of the data registers of the CPU when the task
+is activated the very first time (general purpose and status registers).
+And in front of these 33 bytes it places the two or three bytes of the
+wanted PC (depending on the type of AVR \uC). At runtime this is the
+program memory location where to continue a task; now at initialization
+time it's obviously the start address of the task or -- in C -- the
+pointer to the task function. The address where the last byte has been
+placed is the value of the stack pointer that has to be stored in the task
+objekt.
+
+When all stack areas are prepared the system timer interrupt is enabled
+and the first task activation a little bit later can in no way be
+distinguished from any later task switch.
+
+%\subsection{Details}
+%
+%TODO r24/r25 to push or not to push, eventMask as flag what to do, state
+%chart of task activity states
+
 
 \chapter{The API of \rtos}
 \label{secAPI}
