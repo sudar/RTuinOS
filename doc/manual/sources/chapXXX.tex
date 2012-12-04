@@ -243,36 +243,36 @@ task. \rtos{} knows a predefined number of general purpose events, which
 can be posted by one task and which another task can wait for. The latter
 task suspends itself and specifies the event as resume condition. Under
 application determined conditions, the
-former task calls the \rtos{} API function \ident{setEvent} and the latter
+former task calls the \rtos{} API function \ident{rtos\_setEvent} and the latter
 task will resume. 
 
 In this situation it depends on the priorities of the two tasks how
-\ident{setEvent} returns. If the event-setting task has the same or higher
-priority \ident{setEvent} will immediately return like an ordinary
+\ident{rtos\_setEvent} returns. If the event-setting task has the same or higher
+priority \ident{rtos\_setEvent} will immediately return like an ordinary
 sub-routine. The other task becomes due but not active. If the
-event-receiving task has the higher priority, \ident{setEvent} leads to
+event-receiving task has the higher priority, \ident{rtos\_setEvent} leads to
 temporary inactivation of the calling task and will return only when it is
 activated again.
 
-More in general, \ident{setEvent} is implemented as a software interrupt
+More in general, \ident{rtos\_setEvent} is implemented as a software interrupt
 (SWI) and behaves similar to the system timer ISR. It notifies the event
 to all currently suspended tasks, which are waiting for it. The rest is
-done exactly as the system timer ISR does. \ident{setEvent} checks the
+done exactly as the system timer ISR does. \ident{rtos\_setEvent} checks the
 resume condition of all suspended tasks. Those tasks the condition of
 which is fulfilled are moved to the end of their due list. Then, the new
 active task is selected. This might be the same or another task. The SWI
 ends with continuing the new, active task.
 
-As a matter of fact, a call of \ident{setEvent} will never make the
+As a matter of fact, a call of \ident{rtos\_setEvent} will never make the
 calling task undue (i.e. suspended), outermost inactive. This is the
-reason, why \ident{setEvent} may even be called by the idle task.
+reason, why \ident{rtos\_setEvent} may even be called by the idle task.
 
-Side note: There is a crosswise relationship between \ident{setEvent} and
+Side note: There is a crosswise relationship between \ident{rtos\_setEvent} and
 the suspend commands. From the perspective of the task code switching
 tasks appears as follows: The suspend function is invoked but it returns
-out of a call of \ident{setEvent} of another task or out of the suspend
+out of a call of \ident{rtos\_setEvent} of another task or out of the suspend
 command of a task which became due meanwhile. If a task calls
-\ident{setEvent} it doesn't need to return but could for example return
+\ident{rtos\_setEvent} it doesn't need to return but could for example return
 out of the initially mentioned suspend command.
 
 
@@ -281,11 +281,11 @@ out of the initially mentioned suspend command.
 
 The last situation where the scheduler gets active is an application
 interrupt. By compile switch, you can bind any AVR interrupt to the
-\ident{setEvent} function. The ISR of the interrupt source will call
-\ident{setEvent}. The event which is posted is no longer a general purpose
+\ident{rtos\_setEvent} function. The ISR of the interrupt source will call
+\ident{rtos\_setEvent}. The event which is posted is no longer a general purpose
 event but dedicated to this interrupt.
 
-The actions are exactly the same as described for \ident{setEvent} in
+The actions are exactly the same as described for \ident{rtos\_setEvent} in
 section \ref{secManualEvents}. Obviously, the ISR is asynchronous to the
 task execution. If the posted event makes a task due which has a higher
 priority than the interrupted task, the interrupted task is made inactive
@@ -294,7 +294,7 @@ priority than the interrupted task, the interrupted task is made inactive
 Typically, there will be such a task waiting for the event and having a
 higher priority. Thus causing a task switch. There's only one use case for
 this kind of scheduler invocation: The interrupt triggers a dedicated task
--- indirectly via the hidden call of \ident{setEvent} --, which actually
+-- indirectly via the hidden call of \ident{rtos\_setEvent} --, which actually
 serves as interrupt handler, doing all sort of things which are needed by
 the interrupt. This tasks will be implemented as an infinite
 \ident{while}-loop, where the \ident{while}-condition is the suspend
@@ -308,9 +308,9 @@ is the actual handler of the interrupt.
 An important detail of the implementation of \rtos{} is the way
 information is passed back from the scheduler to the application code. The
 direct interaction of the application code with the scheduler is done with the
-suspend commands and function \ident{setEvent} in the \rtos{} API.
+suspend commands and function \ident{rtos\_setEvent} in the \rtos{} API.
 
-\ident{setEvent} takes a parameter -- the set of events to be posted to
+\ident{rtos\_setEvent} takes a parameter -- the set of events to be posted to
 the suspended tasks -- but doesn't return anything. Here, the only
 complexity to understand is, that it won't immediately return. It triggers
 a scheduler act and won't return until the calling task is the due task
@@ -392,12 +392,12 @@ head of a due list of lower priority would become the new active task. In
 our figure, this could then be the head of priority list 1.
 
 Arrows 4 and 5 show how a suspended task becomes due again. In any call of
-either the system timer ISR or \ident{setEvent} all suspended tasks are
+either the system timer ISR or \ident{rtos\_setEvent} all suspended tasks are
 checked if their resume condition became true. If so, the task object is
 moved from the list of suspended tasks to the end of their due list. The
 due list a task belongs to is predetermined at compile time, when the task
 priority is chosen. Actions 4 and 5 might appear in the same timer tic or
-call of \ident{setEvent} or in different ones.
+call of \ident{rtos\_setEvent} or in different ones.
 
 Arrow 5 shows the resume of a task of the highest known priority: Here, we
 have an example where an event causes the interruption of a running task.
@@ -458,7 +458,7 @@ basically work well but there is a much simpler and cheaper way to do: All
 the registers are pushed onto the stack. The ease of doing starts with
 saving the PC: As we saw, a task switch is always initiated by either an
 interrupt or the call of an API function (a suspend function or
-\ident{setEvent}). Both machine operations start execution with pushing
+\ident{rtos\_setEvent}). Both machine operations start execution with pushing
 the current PC onto the stack. As we intend to use the stack as storage
 location of all our registers it's fine to already have the PC here, where
 we want it to have. Saving the other registers on the stack is as easy:
@@ -562,10 +562,81 @@ When all stack areas are prepared the system timer interrupt is enabled
 and the first task activation a little bit later can in no way be
 distinguished from any later task switch.
 
-%\subsection{Details}
-%
-%TODO r24/r25 to push or not to push, eventMask as flag what to do, state
+
+\subsection{Interrupt versus API Functions}
+% %TODO r24/r25 to push or not to push, eventMask as flag what to do, state
 %chart of task activity states
+
+Basically all task switch causing functions behave as described in the
+previous section. Task switch causing functions are either interrupt
+service routines or API functions. Interrupts can be the system timer tic
+or an application interrupt. The API functions are either the suspend
+command \ident{rtos\_waitForEvent}\footnote{This includes the derived
+suspend commands \ident{rtos\_delay} and
+\ident{rtos\_suspendTaskTillTime}.} or function \ident{rtos\_setEvent} to
+post an event.
+
+There's a significant difference between interrupt service routines and
+API functions. The API functions can return a result to the calling code
+but an ISR won't. When the ISR returns to a task (the one it had
+interrupted or another one in case of a task switch) all data registers
+need to be in the exactly same state as at the point of inactivation of
+this task. When API functions return, some registers may be altered and
+some others need to be altered. Data registers which pass parameter
+information to the function could be changed in the function without
+confusing the calling code after return. These "may be changed" conditions
+are disregarded by \rtos; the registers will be restored even if this is
+not essential. Some other data registers, which are selected by the
+compiler to pass the function result back to the calling code however need
+to be altered; just restoring them like the other registers would mean not
+to return a meaningful function result. We only have the case of a
+\ident{uint16\_t} function; the GNU compiler lets such a function return
+its result in register pair r24/r25.
+
+Consequently, if a task switch activates a task, which had been
+deactivated by a suspend command, the context restore operation differs.
+All registers but the register pair r24/r25 are restored and r24/r25 is
+loaded with the function result. The final command \ident{reti} then pops
+the PC from the stack and the task is continued (and will probably
+evaluate the function result in r24/r25 as one of its first operations).
+
+Some details still need explanation. First the stack balance. Since we
+save the CPU context on the task stack we must always push and pop the
+same number of bytes at each task switch. When restoring the context on
+return to an originally suspended task we will not pop r24/r25 from the
+stack (but load it with the function result) and therefore we must not
+push these registers when saving the context. The context save operation
+on entry into a suspend command will save all registers but r24/r25 -
+anticipating that these registers will not be restored later.
+
+The task switch causing API function \ident{rtos\_setEvent} is a void
+function. It doesn't return a result and all registers are thus saved on
+entry into \ident{rtos\_setEvent} and restored on return to the calling
+task. (Which might be immediately on exit from \ident{rtos\_setEvent} or
+later because of suspending another, intermediately executed task of
+higher priority.)
+
+A second, less important detail is about how the register pair r24/r25 is
+loaded with the function result. If the task switching code recognizes
+that the task to be activated now had been suspended before it pushes the
+function result onto the stack as a last action before leaving the
+function. The code sequence to leave the task switch causing function (be
+it an ISR or an API function) can now be identical under all conditions: It
+pops \emph{all} data registers, it pops the status register, it finally
+pops the PC and it'll continue with the new active task. This simple
+implementation idea requires that the save-context code pushes the
+registers not in their natural order, r1\ldots r32, but the registers
+r24/r25 need to be pushed as last registers.
+
+TODO: Show flow charts for ISR, setEvent and waitForEvent
+
+The next, important detail is about how to know whether an activated task
+had originally been suspended or not. The consideration of this detail
+also answers the question where the function result of the suspend
+commands comes from.
+
+TODO: Continue with this section. Place a figure of the state machine of a
+task
 
 
 \chapter{The API of \rtos}
@@ -1803,9 +1874,9 @@ would be implemented as software interrupt similar to the suspend
 commands. The active task would be taken out of its class list and put at
 the end of the targeted class list. The list lengths would be adapted
 accordingly. Then the normal step of looking for the now most due task and
-making this the active one would end the operation. \ident{setEvent} would
-probably be the best fitting starting point of the implementation. This
-idea has not been implemented as we don't see a use case for it.
+making this the active one would end the operation. \ident{rtos\_setEvent}
+would probably be the best fitting starting point of the implementation.
+This idea has not been implemented as we don't see a use case for it.
 
 Currently, the round robin time (including round robin mode on/off by
 setting the time to 0) is predetermined at compile time -- but without any
