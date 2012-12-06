@@ -14,8 +14,8 @@
  * duration respectively.\n
  *   Observations:\n
  * The waitForEvent operation in the slow task T00_C0 times out irregularly. The
- * asynchronous idle task posts the event sometimes but not often enough to satisfy the
- * task. Due to the irregularity of the idle task we see more or less timeout events.\n
+ * asynchronous idle task posts the event sometimes but not frequently enough to satisfy
+ * the task. Due to the irregularity of the idle task we see more or less timeout events.\n
  *   The code inside the tasks proves that the second task of low priority is tightly
  * coupled with the task of high priority. The display of the counters on the console seems
  * to indicate the opposite. However, this is a multitasking effect only: The often
@@ -25,9 +25,9 @@
  * It has a cycle time of more than half the system timer (the 8 Bit timer is chosen) and
  * then there's a significant probability of seeing overruns which actually aren't any. The
  * code in the task proves the correct task timing.\n
- *   The task stack consumption is demonstrated. To prove operability, one the task T00_C0
- * invokes a subroutine only after a while. The console output shows a related decrease
- * of the stack reserve.
+ *   The display of the task stack consumption is demonstrated. To prove operability, one
+ * the task T00_C0 invokes a subroutine only after a while. The console output shows a
+ * related decrease of the stack reserve.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
