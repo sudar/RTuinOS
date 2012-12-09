@@ -1,6 +1,6 @@
 /**
  * @file tc06_roundRobin.c
- *   Test case 06 of RTuinoOS. Several tasks of same priority are defined. Task switches
+ *   Test case 06 of RTuinOS. Several tasks of same priority are defined. Task switches
  * are controlled by manually posted and time-slice-elapsed events and counted and reported
  * in the idle task.
  *
@@ -365,8 +365,9 @@ void setup(void)
  * there's some execution time left. It's interrupted by any other task when it becomes
  * due.
  *   @remark
- * Different to all other tasks, the idle task routine may and should termninate. This has
- * been designed in accordance with the meaning of the original Arduino loop function.
+ * Different to all other tasks, the idle task routine may and should return. (The task as
+ * such doesn't terminate). This has been designed in accordance with the meaning of the
+ * original Arduino loop function.
  */ 
 
 void loop(void)

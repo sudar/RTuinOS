@@ -1,25 +1,6 @@
 Test case for AND combination of events but a timeout at the same time.
 Has been implemented in r233 but never been tested at that time.
 
-Test case for user interrupts. They have never been tested when comitted
-in r227.
-
-Implementation of waitForEventsUntillTime:
-  Done as part of waitForEvent.
-Now we have the situation that rtos_suspendTaskTillTime is a code copy of
-most of rtos_waitForEvent and its functionality actually is a subset of
-the functionality of rtos_waitForEvent. It could therefore become a macro
-calling rtos_waitForEvent.
-  Consider to do: Advantage is more straight forward implementation,
-drawback is somewhat less performant implementation of relevant use case
-of regular tasks. However, replacing suspendTaskTillTime by waitForEvent
-has already been a step in the same direction.
-  CAUTION: The documentation of rtos_suspendTaskTillTime is surely worth
-it.
-
-Implement EnterLeaveCriticalSection (cli/sei and only TIMER2):
-  Done
-
 Implement get/setRoundRobin?
 
 Timer ISR: onTimerTic, nur jedes n-te Mal. Bei Standardeinstellung 1 kein
@@ -28,5 +9,31 @@ Overhead, da Code komplett ausgeblendet bleibt. Manual
 #if PRESCALER != 1
     static uint8_t cnt = 0;
 #endif
+  Abgelehnt: Macht wenig Sinn, weil mehrfache Interrupts bewusst ohne
+Taskwechsel nur Performancefresser sind. Dann lieber die Hardware
+langsamer programmieren.
 
 EnterLeaveCriticalSection: Try without cli/sei but only TIMER2). Use tc07
+  Done: cli/sei is essential, test case fails otherwise
+
+Manual: 3.8, API, enter/leaveCS: sei/cli will disable delay, but not
+delayMicroseconds. e/lCS would be okay with both
+
+TC05: T0C0: Documentation and implementation differ. Timeout event is
+commented out while value is still set. The task cycle time is documented
+to be slow while it is set very fast. T1C0: cycle time is documented
+different to implementation. The triggered T0C1 has a very long timeout to
+wait for each trigger. Should become much sharper
+  All done
+
+TC10: Document the observations
+  Done
+
+Mention the system load estimation in the manual
+
+Mention false task overrun recognitions in manual. The C comments
+reference it but it doesn't contain this issue yet. Furthermore, the API
+documentation of suspendTillTime and waitForEvent should mention this as a
+true problem appears if tiCycle is > 127: False task overrun recognitions
+lead to too soon activation. ANother location where to place a hint is the
+type-of-timer discussion in config.h

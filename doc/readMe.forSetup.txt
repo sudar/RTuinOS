@@ -26,8 +26,12 @@ Caution: Also for the Arduino files holds true: No blanks in paths are
 permitted. An Arduino installation at e.g. C:\Program Files would make
 the makefile fail to compile the sources.
 
-The GNU make processor, which is shipped with Arduino needs to be in the
-Windows search path. Extending the search path accordingly is not part
-of the Arduino standard installation procedure; you will probably still
-have to do this. Type make --version to find out: GNU Make 3.81 should
-start up. (Be aware, revision 3.80 or elder is not sufficient.)
+The GNU tools, compiler, linker and make processor, which are shipped with
+Arduino need to be in the Windows search path. Extending the search path
+accordingly (by two directories) is not part of the Arduino standard
+installation procedure; you will probably still have to do this. Type
+avr-gcc --version and make --version to find out: avr-gcc 4.3.2 and GNU
+Make 3.81 should start up. (Be aware, revision 3.80 or elder of make is
+not sufficient.)
+
+You need to do a clean when switching between different applications.

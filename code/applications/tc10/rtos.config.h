@@ -1,7 +1,7 @@
 #ifndef RTOS_CONFIG_INCLUDED
 #define RTOS_CONFIG_INCLUDED
 /**
- * @file rtos.config.template.h
+ * @file rtos.config.h
  * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  *
@@ -33,20 +33,20 @@
 /** Does the task scheduling concept support time slices of limited length for activated
     tasks? If on, the overhead of the scheduler slightly increases.\n
       Select either RTOS_FEATURE_OFF or RTOS_FEATURE_ON. */
-#define RTOS_ROUND_ROBIN_MODE_SUPPORTED     RTOS_FEATURE_ON
+#define RTOS_ROUND_ROBIN_MODE_SUPPORTED     RTOS_FEATURE_OFF
 
 
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
     will always be existent and alive. Permitted range is 0..255.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_TASKS    4
+#define RTOS_NO_TASKS    3
 
 
 /** Number of distinct priorities of tasks. Since several tasks may share the same
     priority, this number is lower or equal to NO_TASKS. Permitted range is 0..NO_TASKS,
     but 1..NO_TASKS if at least one task is defined.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_PRIO_CLASSES 2
+#define RTOS_NO_PRIO_CLASSES 3
 
 
 /** Since many tasks will belong to distinct priority classes, the maximum number of tasks
@@ -55,7 +55,7 @@
     structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..255,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 3
+#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 1
 
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This
@@ -108,7 +108,7 @@
     just once, see below. */
 #define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(noBits)     \
     typedef uint##noBits##_t uintTime_t;            \
-    typedef int##noBits##_t intTime_t;
+    typedef int##noBits##_t intTime_t;                                  
 
 
 #ifdef __AVR_ATmega2560__

@@ -196,13 +196,7 @@ static void task02_class00(uint16_t initCondition)
     
     for(;;)
     {
-//        volatile uint8_t v = 0;
-        
         ++ _t2;
-
-//        delay(1000);
-//        for(u=0; u<1000; ++u)
-//            v = 2*v;
 
         u = rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 100);
     }
@@ -217,8 +211,9 @@ static void task02_class00(uint16_t initCondition)
  * there's some execution time left. It's interrupted by any other task when it becomes
  * due.
  *   @remark
- * Different to all other tasks, the idle task routine may and should termninate. This has
- * been designed in accordance with the meaning of the original Arduino loop function.
+ * Different to all other tasks, the idle task routine may and should return. (The task as
+ * such doesn't terminate). This has been designed in accordance with the meaning of the
+ * original Arduino loop function.
  */ 
 
 void loop(void)

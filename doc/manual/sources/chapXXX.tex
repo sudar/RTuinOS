@@ -243,36 +243,36 @@ task. \rtos{} knows a predefined number of general purpose events, which
 can be posted by one task and which another task can wait for. The latter
 task suspends itself and specifies the event as resume condition. Under
 application determined conditions, the
-former task calls the \rtos{} API function \ident{setEvent} and the latter
+former task calls the \rtos{} API function \ident{rtos\_setEvent} and the latter
 task will resume. 
 
 In this situation it depends on the priorities of the two tasks how
-\ident{setEvent} returns. If the event-setting task has the same or higher
-priority \ident{setEvent} will immediately return like an ordinary
+\ident{rtos\_setEvent} returns. If the event-setting task has the same or higher
+priority \ident{rtos\_setEvent} will immediately return like an ordinary
 sub-routine. The other task becomes due but not active. If the
-event-receiving task has the higher priority, \ident{setEvent} leads to
+event-receiving task has the higher priority, \ident{rtos\_setEvent} leads to
 temporary inactivation of the calling task and will return only when it is
 activated again.
 
-More in general, \ident{setEvent} is implemented as a software interrupt
+More in general, \ident{rtos\_setEvent} is implemented as a software interrupt
 (SWI) and behaves similar to the system timer ISR. It notifies the event
 to all currently suspended tasks, which are waiting for it. The rest is
-done exactly as the system timer ISR does. \ident{setEvent} checks the
+done exactly as the system timer ISR does. \ident{rtos\_setEvent} checks the
 resume condition of all suspended tasks. Those tasks the condition of
 which is fulfilled are moved to the end of their due list. Then, the new
 active task is selected. This might be the same or another task. The SWI
 ends with continuing the new, active task.
 
-As a matter of fact, a call of \ident{setEvent} will never make the
+As a matter of fact, a call of \ident{rtos\_setEvent} will never make the
 calling task undue (i.e. suspended), outermost inactive. This is the
-reason, why \ident{setEvent} may even be called by the idle task.
+reason, why \ident{rtos\_setEvent} may even be called by the idle task.
 
-Side note: There is a crosswise relationship between \ident{setEvent} and
+Side note: There is a crosswise relationship between \ident{rtos\_setEvent} and
 the suspend commands. From the perspective of the task code switching
 tasks appears as follows: The suspend function is invoked but it returns
-out of a call of \ident{setEvent} of another task or out of the suspend
+out of a call of \ident{rtos\_setEvent} of another task or out of the suspend
 command of a task which became due meanwhile. If a task calls
-\ident{setEvent} it doesn't need to return but could for example return
+\ident{rtos\_setEvent} it doesn't need to return but could for example return
 out of the initially mentioned suspend command.
 
 
@@ -281,11 +281,11 @@ out of the initially mentioned suspend command.
 
 The last situation where the scheduler gets active is an application
 interrupt. By compile switch, you can bind any AVR interrupt to the
-\ident{setEvent} function. The ISR of the interrupt source will call
-\ident{setEvent}. The event which is posted is no longer a general purpose
+\ident{rtos\_setEvent} function. The ISR of the interrupt source will call
+\ident{rtos\_setEvent}. The event which is posted is no longer a general purpose
 event but dedicated to this interrupt.
 
-The actions are exactly the same as described for \ident{setEvent} in
+The actions are exactly the same as described for \ident{rtos\_setEvent} in
 section \ref{secManualEvents}. Obviously, the ISR is asynchronous to the
 task execution. If the posted event makes a task due which has a higher
 priority than the interrupted task, the interrupted task is made inactive
@@ -294,7 +294,7 @@ priority than the interrupted task, the interrupted task is made inactive
 Typically, there will be such a task waiting for the event and having a
 higher priority. Thus causing a task switch. There's only one use case for
 this kind of scheduler invocation: The interrupt triggers a dedicated task
--- indirectly via the hidden call of \ident{setEvent} --, which actually
+-- indirectly via the hidden call of \ident{rtos\_setEvent} --, which actually
 serves as interrupt handler, doing all sort of things which are needed by
 the interrupt. This tasks will be implemented as an infinite
 \ident{while}-loop, where the \ident{while}-condition is the suspend
@@ -308,9 +308,9 @@ is the actual handler of the interrupt.
 An important detail of the implementation of \rtos{} is the way
 information is passed back from the scheduler to the application code. The
 direct interaction of the application code with the scheduler is done with the
-suspend commands and function \ident{setEvent} in the \rtos{} API.
+suspend commands and function \ident{rtos\_setEvent} in the \rtos{} API.
 
-\ident{setEvent} takes a parameter -- the set of events to be posted to
+\ident{rtos\_setEvent} takes a parameter -- the set of events to be posted to
 the suspended tasks -- but doesn't return anything. Here, the only
 complexity to understand is, that it won't immediately return. It triggers
 a scheduler act and won't return until the calling task is the due task
@@ -392,12 +392,12 @@ head of a due list of lower priority would become the new active task. In
 our figure, this could then be the head of priority list 1.
 
 Arrows 4 and 5 show how a suspended task becomes due again. In any call of
-either the system timer ISR or \ident{setEvent} all suspended tasks are
+either the system timer ISR or \ident{rtos\_setEvent} all suspended tasks are
 checked if their resume condition became true. If so, the task object is
 moved from the list of suspended tasks to the end of their due list. The
 due list a task belongs to is predetermined at compile time, when the task
 priority is chosen. Actions 4 and 5 might appear in the same timer tic or
-call of \ident{setEvent} or in different ones.
+call of \ident{rtos\_setEvent} or in different ones.
 
 Arrow 5 shows the resume of a task of the highest known priority: Here, we
 have an example where an event causes the interruption of a running task.
@@ -409,6 +409,280 @@ interrupted. Note, that the inactivated task object is not moved! It
 remains the head of its due list. The task is inactive but still due and
 still the first candidate for reactivation within its priority class.
 
+
+\section{Task Switches}
+
+The basic principle of the scheduler is to switch between different tasks.
+The chapters before explained the rules the scheduler applies to decide
+when and why to switch to which task. This section explains how a task
+switch is done.
+
+The CPU doesn't know about tasks. It is a state machine, which has a set
+of registers, which determine the next action in the next tic of the CPU
+clock. The most relevant register in this context is the program counter
+(PC). It is a pointer to one specific word in the program memory (flash
+ROM). The word it points to is the next CPU command, which will be
+executed. This next command will probably have an effect on one or more of
+the CPU registers; it might for example command the CPU to add two data
+registers, to add a constant to one of the data registers, to read a
+memory cell into a register or to write a register into a memory cell.
+While the command is being executed the PC is incremented so that it
+points to the next word in the program flash. The next command is
+selected. And so on. A program is build from hundreds and thousands of
+these elementary commands. The sequence of commands form the program.
+
+Since they are not endless it's possible to have several such command
+sequences one after another in the program memory. These different
+sequences now form the program code of the different tasks. The main thing
+to do when switching between tasks is to alter the value of the program
+counter from the one sequence to one of the others. There are dedicated
+CPU command to do so, like \ident{jump}, which directly loads the PC with
+the desired target address or \ident{rts} and \ident{reti}, which load the
+PC from the stack.
+
+Obviously, a scheduler needs to be able to later continue the left command
+sequence, or task respectively. The continuation needs to be seamless, to
+be done as if there had not been a switch to another sequence at all. This
+means in the first place, that we remind the value the PC had before we
+forced it to point to the other program sequence. But it also means that
+all the CPU's data registers have exactly the same value they used to have
+before the switch. This condition can only be fulfilled if we save the
+contents of all registers prior to switching to another command sequence.
+
+The AVR CPU has 32 general purpose data registers plus a status register.
+The scheduler holds a task object for each task. It would be straight
+forward to have an array \ident{uint8\_t saveReg[32+1]} as member of the
+task object and to place the register contents here. Yes, this would
+basically work well but there is a much simpler and cheaper way to do: All
+the registers are pushed onto the stack. The ease of doing starts with
+saving the PC: As we saw, a task switch is always initiated by either an
+interrupt or the call of an API function (a suspend function or
+\ident{rtos\_setEvent}). Both machine operations start execution with
+pushing the current PC onto the stack. As we intend to use the stack as
+storage location of all our registers it's fine to already have the PC
+here, where we want it to have. Saving the other registers on the stack is
+as easy: The command set of any CPU contains a push command which directly
+stores the contents of a data register onto the stack. For an AVR CPU this
+command is called \ident{push}. Consequently, all interrupt service
+routines and all API functions, which could initiate a task switch, start
+with 32 push operations to save the general purpose data registers. (An
+important exception is mentioned in section \ref{secISRVsAPIFunc}.) This
+code sequence is completed by two simple CPU commands which also push the
+CPU's status register onto the stack.
+
+The register pushing entry-commands of an ISR or a task switch causing API
+function basically enable this function to change the PC to point to the
+code of another task (and thus to continue with that task). Figuring out
+whether this is necessary will be the next step of these functions. Quite
+often this will not be the case. In which case the function terminates by
+doing all in reverse order. All registers are read and taken from the
+stack again. (They are "popped" from the stack.) This includes the PC as
+very last register -- and the code execution continues where the interrupt
+had interrupted the task code, or behind the API function respectively.
+This is like any ordinary interrupt service routine.
+
+Saving the registers on the stack is easy but only half the battle.
+Different tasks can't operate on the same stack. A stack is the
+implementation of the paradigm of strictly hierarchical function calls and
+nested sub-function calls and all the local data of these nested function
+invocations. The paradigm thus of many high level languages, among which
+C/C++. This paradigm is not applicable to multi-tasking. Tasks can be
+switched disregarding function entry and exit points; the activated task
+is not a sub-function of the left other task.\footnote{Prove: To continue
+the left task it is not a prerequisite that the activated task terminates
+-- in order to "return" to the left task.} Therefore, each task has its
+own, dedicated stack. Before switching from one task to another we need to
+save the stack of the left task. At runtime, i.e. out of scope of memory
+allocation and stack initialization considerations, the stack actually is
+completely represented by the pointer to its top -- and this "stack
+pointer" (the last CPU register to mention) is what we need to save also.
+Here, we use an absolute storage location. The task object has a member to
+hold the stack pointer of this task. The value of this object member is
+meaningful always and only while the task is inactive.
+
+Before we proceed to the perhaps most difficult to understand detail, we
+will shortly summarize what we saw so far:
+
+All code, which can initiate a task switch is a function. Either an ISR or
+a dedicated API function. All of these functions are well prepared to do a
+task switch as they push the PC, all data registers and the status
+register onto the stack of the active task. We say, they save the "CPU
+context" onto the task's stack. And in case a task switch should become
+necessary these functions know about a well-defined memory location where
+to also save the stack pointer of the currently active task.
+
+Now we reach the maybe most tricky detail, easy on the one hand but
+nonetheless a bit difficult to see on the other hand. Let's put it into a
+question: How could we ever get here to the point where we are about to
+leave the currently active task? The answer: By the same kind of task
+switch from another task into this task! Consequently, the other task will
+have done the same. In this instance, there will be its dedicated stack
+and this stack will have all the saved registers of that task on its top
+(including the PC). So, if we load the stack pointer of that task, we just
+have to do the same as if we'd return from the task switch causing
+function back to the same task (see above): pop all registers and go
+ahead with that task.\footnote{The program counter is popped as the last
+register with a command \ident{reti}, "return from interrupt".}
+
+Important to see: All tasks which are not currently active have been
+deactivated the same way; all have left a stack with all registers
+including the PC on its top and all their stack pointers have been saved
+at the well-defined, known location. A picture of a task switch could be
+as follows: Pushing the registers on the stack is like climbing up a hill,
+from its top we jump to the top of any of the other hills around and then
+we slide it down (i.e. restore the registers with the contents of this
+other hill).
+
+Doing the good preparation of storing the CPU context onto the stack the
+complete task switch reduces to nothing else than exchanging the value of
+the CPU's stack pointer. The value of the still active task is stored and
+the value of the newly activated task is loaded -- that's all. Then we
+leave the task switch causing function and its simple register popping
+exit code loads the earlier saved context of the new task just like that
+into the CPU.
+
+The general story is complete if we mention the initialization. Before the
+first task becomes active the still un-threaded initialization code of
+\rtos{} prepares the stack areas of all tasks as if these tasks had been
+active before and as if they had then been suspended. This is done by the
+simple, assembler code free C function \ident{prepareTaskStack}. It places
+33 bytes at the beginning of this memory area\footnote{The logical
+beginning is meant. This is the last memory address in the stack area. The
+AVR architecture lets the stack grow from higher to lower memory
+addresses.} -- and these bytes will become the initial values of the data
+registers of the CPU when the task is activated the very first time
+(general purpose and status registers). And in front of these 33 bytes it
+places the two or three bytes of the wanted PC (depending on the type of
+AVR \uC). At runtime this is the program memory location where to continue
+a task; now at initialization time it's obviously the start address of the
+task or -- in C -- the pointer to the task function. The address where the
+last byte has been placed is the value of the stack pointer that has to be
+stored in the task objekt.
+
+When all stack areas are prepared the system timer interrupt is enabled
+and the first task activation a little bit later can in no way be
+distinguished from any later task switch.
+
+
+\subsection{Interrupt versus API Function}
+\label{secISRVsAPIFunc}
+
+Basically all task switch causing functions behave as described in the
+previous section. Task switch causing functions are either interrupt
+service routines or API functions. Interrupts can be the system timer tic
+or an application interrupt. The API functions are either the suspend
+command \ident{rtos\_waitForEvent}\footnote{This includes the derived
+suspend commands \ident{rtos\_delay} and
+\ident{rtos\_suspendTaskTillTime}.} or function \ident{rtos\_setEvent} to
+post an event.
+
+There's a significant difference between interrupt service routines and
+API functions. The API functions can return a result to the calling code
+but an ISR won't. When the ISR returns to a task (the one it had
+interrupted or another one in case of a task switch) all data registers
+need to be in the exactly same state as at the point of inactivation of
+this task. When API functions return, some registers may be altered and
+some others need to be altered. Data registers which pass parameter
+information to the function could be changed in the function without
+confusing the calling code after return. These "may be changed" conditions
+are disregarded by \rtos; the registers will be restored even if this is
+not necessary. Some other data registers, which are selected by the
+compiler to pass the function result back to the calling code however need
+to be altered; just restoring them like the other registers would mean not
+to return a meaningful function result. We only have the case of the
+suspend command \ident{uint16\_t rtos\_waitForEvent}; the GNU compiler
+lets such a function return its 16 Bit integer result in register pair
+r24/r25.
+
+Consequently, if a task switch activates a task, which had been
+deactivated by a suspend command, the context restore operation differs.
+All registers but the register pair r24/r25 are restored and r24/r25 is
+loaded with the function result. The final command \ident{reti} then pops
+the PC from the stack and the task is continued (and will probably
+evaluate the function result in r24/r25 as one of its first operations).
+
+Some details still need explanation. First the stack balance; please refer
+to figure \ref{figFlowChartTaskSwitch}. Since we save the CPU context on
+the task stack we must always push and pop the same number of bytes at
+each task switch. When restoring the context on return to an originally
+suspended task we will not pop r24/r25 from the stack (but load it with
+the function result) and therefore we must not push these registers when
+saving the context. The context save operation on entry into a suspend
+command will save all registers but r24/r25 - anticipating that these
+registers will not be restored later.
+
+\incFigFile{FlowChartTaskSwitch}{Implementation of task switches. On the
+left-hand side for interrupt service routines. On the right-hand side for
+the suspend commands: The only difference is to push or not to push the
+register pair r25/r25 on function entry. The API function
+\ident{rtos\_setEvent} is not shown; it is implemented like an ISR, it
+pushes the register pair}{0.8}
+
+The task switch causing API function \ident{rtos\_setEvent} is a void
+function. It doesn't return a result and all registers are thus saved on
+entry into \ident{rtos\_setEvent} and restored on return to the calling
+task. (Which might be immediately on exit from \ident{rtos\_setEvent} or
+later because of suspending another, intermediately executed task of
+higher priority.)
+
+A second, less important detail is about how the register pair r24/r25 is
+loaded with the function result. If the task switching code recognizes
+that the task to be activated had been suspended before it pushes the
+function result onto the stack as a last action before leaving the
+function. The code sequence to leave the task switch causing function (be
+it an ISR or an API function) can now be identical under all conditions: It
+pops \emph{all} data registers, it pops the status register, it finally
+pops the PC and it'll continue with the new active task. This simple
+implementation idea requires that the save-context code pushes the
+registers not in their natural order, r0\ldots r31, but the registers
+r24/r25 need to be pushed as last registers.
+
+The last and important detail is about how to know whether an activated
+task had originally been suspended or not. The consideration of this
+detail also answers the question where the function result of the suspend
+commands comes from. The answers are depicted in figure
+\ref{figStateChartTask}.
+
+\incFigFile{StateChartTask}{State model of a single task. The transition
+conditions are shown in default font, whereas the transition actions are
+shown in italics. The task variable \ident{postedEventVec} is used as
+flag that indicates whether the task is going to return from a suspend
+command or not.}{0.95}
+
+A task object owns a member \ident{postedEventVec}, which is null
+initially and when the task is active. It is still null on entry in state
+suspended. While a task is in state suspended it listens to all
+broadcasted events. Whenever another task posts an event it is
+double-checked if this event is relevant to the suspended task. If so, it
+is added to member \ident{postedEventVec} of the suspended task. This
+variable holds the set of events, which have been received by the task
+since it became suspended. As soon as the set of received events suffices
+to make the suspended task due again this variable is no longer changed.
+
+A task can become due also on another path through the state chart. At any
+time the active task can be inactivated because of any other task of
+higher priority becoming due (and active at the same time). If it is a
+round robin task a task can be inactivated when its time slice is
+elapsed. Inactivation means to transit from state active to state due.
+
+The variable \ident{postedEventVec} is always null in state active. If the
+task transits from active to due the variable is still null in state due
+and won't be changed here. If and only if a task transits from suspended
+to due the variable is not null. This way, the variable has a double
+meaning once we reach state due: In the first place it holds the set of
+received events that made the task due. This is the return value of the
+suspend command which originally made the task inactive. In the second
+place the variable holds the Boolean information whether the task will
+return from either a suspend command (which expects the result in r24/r25)
+or from an ISR or \ident{rtos\_setEvent} (which must return with restored
+contents of r24/r25). This information is exploited by the task switching
+code.
+
+The variable \ident{postedEventVec} is cleared to null when activating the
+task, i.e. when doing the task switch to this task. Now it is prepared for
+the next cycle active $\rightarrow$ due $\rightarrow$ active or active
+$\rightarrow$ suspended $\rightarrow$ due $\rightarrow$ active
+respectively.
 
 
 \chapter{The API of \rtos}
@@ -866,7 +1140,7 @@ Open \ident{rtos.config.h} and configure the number of tasks and the
 number of different priority classes. Do not use empty priority classes,
 this wastes expensive memory. Priorities should always be counted 0, 1,
 \ldots{}, max. Select the word width of the system time. Often an eight Bit
-value will be sufficient. Please refer to \ref{secSystemTimer}. In
+value will be sufficient. Please refer to \ref{secSystemTime}. In
 general, you'll find a lot of hints and comments in the configuration file
 telling you what to do in detail.
 
@@ -995,7 +1269,7 @@ tool as
 arduino-1.0.1\textbackslash\-hard\-ware\textbackslash\-tools\textbackslash\-avr\textbackslash\-utils\textbackslash\-bin\textbackslash\-make.exe.
 
 The makefile compiles the Arduino standard source files to the standard
-library core.a. To do so, it needs to know, where the Arduino sources
+library \ident{core.a}. To do so, it needs to know, where the Arduino sources
 -- which are not part of this project -- are located. It expects an
 environment variable \ident{ARDUINO\_HOME} to point to the Arduino
 installation directory, e.g.
@@ -1260,6 +1534,39 @@ active yet. Here you can use the Arduino libraries without more. In
 particular, you can initialize all required ports and devices and the
 communication with \ident{Serial}.
 
+It's similar for library \ident{LiquidCrystal}. The implementation is
+basically thread-safe; the library can be used. Of course, the tasks must
+cooperatively implement a mutual exclusion when accessing the display. The
+source code contains some hardware-required delays, which are of
+course not implemented RTOS conform and which could be replaced by
+\ident{rtos\_delay} as an improvement of the library for \rtos. 
+
+The delay is implemented using Arduino's library function
+\ident{delayMicroseconds}, which is based on a CPU consuming waiting loop.
+This does not necessarily mean that task switches are inhibited or
+delayed; just avoid to use the library in a task of high priority.
+Nonetheless, the CPU time is lost; these function calls raise the CPU load
+without need.\footnote{Arduino's delay function \ident{delay}
+is different. It compares the desired return time with the
+global system time, which is updated by an interrupt. If a task using
+\ident{delay} is interrupted by other tasks and if the time it gets
+re-activated again is ahead the desired return time it'll not continue to
+loop and consume the CPU like \ident{delayMicroseconds} would.}
+
+Most of the significant, CPU consuming delays occur in the initialization
+of the display and this can be done in \ident{setup} before multitasking
+actually takes place. The only other undesired delays are found in the
+control commands \ident{clear} and \ident{home} -- if these are avoided or
+if their waste of CPU time causes no pain there's no concern to use
+\ident{LiquidCrystal} from \rtos{} tasks.\footnote{At point of release
+this still needs to be proven by testing. The data is written into the
+display chip by toggling one of its inputs up and down as a clock signal.
+The implementation ensures a minimum time for the clock impulse. Due to
+task switching it can however be arbitrarily prolonged. Whether the
+hardware of the display accepts this is still unclear. If it gets
+confused, the few clock commands would need to be put into a critical
+section.}
+
 Despite of all, using a library developed for single tasking in a
 multi-tasking environment remains a risk, which must not be taken in a
 production system. In a production system, any library function needs to
@@ -1268,6 +1575,7 @@ source code, so that a code review can be done.
 
 %DEBUG compilation and particularly ASSERT requires initialization of Serial
 %Note on ASSERT: Serial, wait, reset
+
 
 \subsection{Changes of Arduino's \ident{main} Function}
 
@@ -1291,12 +1599,12 @@ is just the same as in the standard sketch -- besides all the obvious
 differences because of task switches.
 
 
-\section{Configuring the System Timer}
-\label{secSystemTimer}
+\section{Configuring the System Time}
+\label{secSystemTime}
 
 A central element of \rtos{} is its system time. This time is e.g. the
 parameter of a suspend command if a task wants to wait until a specific
-point in time (as opposed to wait for a specific while). Many of the
+point in time or for a specific while. Many of the
 operations in \rtos{} and its application code deal with the system time.
 Therefore, we decided to make the implementation type of the system time
 subject to the configuration of the application; you have to customize the
@@ -1306,59 +1614,112 @@ general. The intention of this section is to explain all implications of
 the type choice to enable you to choose the optimal, shortest possible
 type for your application.
 
+
+\subsection{The Unit of the System Time}
+
 The system time is a cyclic integer value. The unit is the period time of
-the main interrupt, which is associated with the system timer. Each
+the main interrupt, which is associated with the system time. Each
 interrupt will clock the time by one unit. If the use case of \rtos{} is a
-traditional scheduling of regular tasks of different priorities, it's good
+traditional scheduling of regular tasks of different priorities it's good
 practice to choose the period time of the fastest regular task as unit of
-the system time. But in general the unit of the system time doesn't matter
-with respect to the function of \rtos{} and the time even doesn't need to
-be regular.
+the system time. This yields the best performance, or the least system
+overhead respectively. But in general the unit of the system time doesn't
+matter with respect to the function of \rtos{} and the time even doesn't
+need to be regular.
 
-You may define the time to be any unsigned integer considering the
-following trade off:
+All time related operations use the tic of the system time as unit. The
+delay time of \ident{rtos\_delay} can for example be specified only in
+multiples of this unit. The application required resolution of these
+timing conditions will determine the tic duration of the system time. (And
+your application will configure the driving interrupt source accordingly.)
+With respect to system overhead this resolution should be chosen as low as
+acceptable. Each timer interrupts causes at least one save and restore
+operation of the complete CPU context and this becomes a significant CPU
+load if the tic duration is about or even below 1~ms.
 
-The shorter the type the less the system overhead -- many operations in
-the kernel are time based.
 
-The shorter the type the earlier does the system time cycle around. This
-has implications on the ratio of period times of slowest and fastest
-regular task and the maximum suspend or delay time of any other task.
+\subsection{Recommended Timer Tic for regular Tasks}
 
-The longer the type the larger is the maximum ratio of period times of
-slowest and fastest task. This maximum ratio is half the maximum number,
-which can be represented by the chosen integer type. If you implement
-regular tasks of e.g. 10~ms, 100~ms and 1000~ms period time, this could be
-handled with a \ident{uint8\_t} (ratio 1:100). If you want to have an
-additional 1~ms task, \ident{uint8\_t} will no longer suffice (ratio
-1:1000), you need at least \ident{uint16\_t}. (\ident{uint32\_t} is
-probably never useful.)
+If applicable and if the application uses regular tasks we strongly
+recommend to choose the timer tic duration identical with the period time
+of the fasted task. Now each interrupt will really cause a task switch and
+there's no (useless) overhead just to clock the time. The timing
+resolution is identical to the task period. This means that the fastest
+task can barely operate with timeouts, e.g. if it needs to wait for events
+posted by other tasks. The only timeout condition it can use is to state
+the next regular due time. Nonetheless, reasonable error handling code is
+still possible as the task code can distinguish between becoming active
+because of the timeout or because it's its normal due time.
 
-The longer the type the higher becomes the resolution of timeout timers
-when waiting for events. The resolution is the clock frequency of the
-system time. With a system time of type \ident{uint8\_t}, which cycles
-around very soon, one would probably choose a tic frequency identical to
-the frequency of the fastest task (or at least only higher by a small
-factor). Then, this task can only specify a timeout which ends at the next
-regular due time of the task. (Which might still be alright with respect
-to error handling.)
 
-If the clock frequency of the system time is higher than the frequency of
-the fastest regular task, then the statement made before needs refinement:
-The range of the data type of the system time limits the ratio of the period
-time of the slowest task and the resolution of timeout specifications.
+\subsection{Upper Limit of the Task Period Time}
 
-The shorter the type the higher the probability of not recognizing task
-overruns when implementing regular tasks: Due to the cyclic character of
-the time definition a time in the past is seen as a time in the future if
-it is over more than half the maximum integer number. This leads to the
-wrong decision whether we have a task overrun or not. See the example:
+The task period time of a regular task must not be greater than half the
+maximum of the system time. In practice, this is a limitation only if
+using the 8 Bit time. Now, the parameter of a call to
+\ident{rtos\_suspendTaskTillTime} must not exceed 127. The task overrun
+recognition can fail if this rule is disregarded.
 
-Data type be \ident{uint8\_t} . A task is implemented as regular task of
+A task overrun recognition is implemented in \rtos{} to support the use case
+of regular tasks. The system decides on a task overrun if a task referring
+to the absolute timer demands to be resumed in the past.
+
+Here's an example of the normal situation: The tic duration of the system
+time is 1~ms and a regular task of 100~ms period time is implemented. The
+system time has 8 Bit. An infinite loop is implemented, which uses
+\verb+while(rtos_suspendTaskTillTime(100))+ as always true condition.
+Given the task execution takes between 45 and 67~ms the \rtos{} code will
+safely find the next demanded due time between 55 and 33~ms in the future
+and will not see a task overrun as 100-45 and 100-67 both is positive in
+the chosen 8 Bit arithmetics. Given a bad, too long task execution time of
+e.g. 102~ms \rtos{} would recognize a task overrun as 100-102 is negative.
+
+Let's assume the period time of the same regular task would be changed to
+180~ms. There's definitely no risk of getting into task overruns. However,
+at the end of the task execution, when the next resume time is demanded it
+depends if this demanded time is seen in the future or in the past. If the
+execution took 67~ms the remaining time to suspend the task is 180-67=113,
+which is a positive number, whereas 180-45=135 in case of the shorter task
+execution time is the negative number -121 in the chosen 8 Bit
+arithmetics. For \rtos{} the demanded resume time is seemingly in the past
+and decides on a task overrun.
+
+Caution, the false decision on a task overrun, which actually isn't an
+overrun is much worse than just an increment of the diagnostics counter
+(see \ident{rtos\_getTaskOverrunCounter}). If the demanded resume time of
+a task is found to be in the past this task is not suspended but made due
+immediately. Our example task would not be made due (and active) every
+180~ms but irregularly depending on its actual execution time. This is the
+real fault!
+
+To avoid this problem the period time of regular tasks must not exceed
+half the range of the chosen system timer. If a task period of 127 tics to
+too little you will have to choose the 16 Bit time, which produces of
+course more system overhead.
+
+If we follow the recommendation made before this means that the ratio of
+period times of slowest and fastest task is limited by half the range of
+the chosen system timer. If you implement regular tasks of e.g. 10~ms,
+100~ms and 1000~ms period time, this could be handled with a
+\ident{uint8\_t} (ratio 1:100). If you want to have an additional 1~ms
+task, \ident{uint8\_t} will no longer suffice (ratio 1:1000), you need at
+least \ident{uint16\_t}. (\ident{uint32\_t} is probably never useful.)
+
+
+\subsection{Unrecognized Task Overruns}
+
+The shorter the chosen type of the system time the higher the probability
+of not recognizing task overruns when implementing regular tasks: Due to
+the cyclic character of the time definition a time in the past is seen as
+a time in the future if it is over more than half the maximum integer
+number. This leads to the wrong decision whether we have a task overrun or
+not. See the example:
+
+Data type be \ident{uint8\_t}. A task is implemented as regular task of
 100 units period time. Thus, at the end of the functional code it suspends
 itself with time increment 100 units. Let's say it had been resumed at
 time 123. In normal operation -- no task overrun -- it will end e.g. 87
-tics later, i.e. at 210. The demanded resume time is 123+100 = 223, which
+tics later, i.e. at 210. The demanded next resume time is 123+100 = 223, which
 is seen as +13 in the future. If the task execution was too long and ended
 e.g. after 110 tics, the system time was 123+110 = 233. The demanded
 resume time 223 is seen in as 10 tics in the past and a task overrun is
@@ -1373,13 +1734,92 @@ the next one is timely again.} The problem appears if the overrun lasts
 more than half the cycle time of the system timer. With \ident{uint16\_t}
 this problem becomes negligible.
 
-The idea is to choose the data type of the system time as short as
-possible. Choosing the type is done with macro
-\ident{RTOS\_DEFINE\_TYPE\_OF\_SYSTEM\_TIME}, please refer to
-\refRTOSConfigH.
+
+\subsection{Summary}
+
+Here's a short summary of the timer data type discussion:
+\begin{itemize}
+  \item Choose the data type of the system time as short as possible
+  
+  \item Choose the duration of the timer tic as long as acceptable. If
+  applicable make it identical with the period time of the fastest task
+  
+  \item The duration of the timer tic is the resolution of timeout
+  operations
+  
+  \item The task period time of a regular task must not exceed half the range
+  of the chosen system time data type. False task overrun recognitions and
+  resulting bad task timing would probably be the consequence
+
+  \item The maximum reasonably expected time a task could exceed its nominal
+  period time should be no more than half the range of the chosen system
+  time data type. A task overrun would otherwise not be recognized as such
+\end{itemize}
+  
+Choosing the type is done with macro
+\ident{RTOS\_DEFINE\_TYPE\_OF\_SYSTEM\_TIME}, please refer to \refRTOSConfigH.
+
+%Original chapter:
+%You may define the time to be any unsigned integer considering the
+%following trade off:
+%
+%The shorter the type the less the system overhead -- many operations in
+%the kernel are time based.
+%
+%The shorter the type the earlier does the system time cycle around. This
+%has implications on the ratio of period times of slowest and fastest
+%regular task and the maximum suspend or delay time of any other task.
+%
+%The longer the type the larger is the maximum ratio of period times of
+%slowest and fastest task. This maximum ratio is half the maximum number,
+%which can be represented by the chosen integer type. If you implement
+%regular tasks of e.g. 10~ms, 100~ms and 1000~ms period time, this could be
+%handled with a \ident{uint8\_t} (ratio 1:100). If you want to have an
+%additional 1~ms task, \ident{uint8\_t} will no longer suffice (ratio
+%1:1000), you need at least \ident{uint16\_t}. (\ident{uint32\_t} is
+%probably never useful.)
+%
+%The longer the type the higher becomes the resolution of timeout timers
+%when waiting for events. The resolution is the clock frequency of the
+%system time. With a system time of type \ident{uint8\_t}, which cycles
+%around very soon, one would probably choose a tic frequency identical to
+%the frequency of the fastest task (or at least only higher by a small
+%factor). Then, this task can only specify a timeout which ends at the next
+%regular due time of the task. (Which might still be alright with respect
+%to error handling.)
+%
+%If the clock frequency of the system time is higher than the frequency of
+%the fastest regular task, then the statement made before needs refinement:
+%The range of the data type of the system time limits the ratio of the period
+%time of the slowest task and the resolution of timeout specifications.
+%
+%The shorter the type the higher the probability of not recognizing task
+%overruns when implementing regular tasks: Due to the cyclic character of
+%the time definition a time in the past is seen as a time in the future if
+%it is over more than half the maximum integer number. This leads to the
+%wrong decision whether we have a task overrun or not. See the example:
+%
+%Data type be \ident{uint8\_t} . A task is implemented as regular task of
+%100 units period time. Thus, at the end of the functional code it suspends
+%itself with time increment 100 units. Let's say it had been resumed at
+%time 123. In normal operation -- no task overrun -- it will end e.g. 87
+%tics later, i.e. at 210. The demanded resume time is 123+100 = 223, which
+%is seen as +13 in the future. If the task execution was too long and ended
+%e.g. after 110 tics, the system time was 123+110 = 233. The demanded
+%resume time 223 is seen in as 10 tics in the past and a task overrun is
+%recognized.\footnote{When a task overrun is recognized this way the task
+%becomes due immediately. It is not omitted but activated significantly too
+%late.} A problem appears at excessive task overruns. If the execution had
+%e.g. taken 230 tics the current time was 123 + 230 = 353 -- or 97 due to
+%its cyclic character. The demanded resume time 223 is 126 tics ahead,
+%which is considered a future time -- no task overrun is
+%recognized.\footnote{One call of the task has been silently omitted and
+%the next one is timely again.} The problem appears if the overrun lasts
+%more than half the cycle time of the system timer. With \ident{uint16\_t}
+%this problem becomes negligible.
 
 
-\subsection{Configuring the System Timer Interrupt}
+\section{Configuring the System Timer Interrupt}
 
 The interrupt service routine (ISR), which clocks the system time and
 which performs all related actions like resuming tasks, which are waiting
@@ -1613,9 +2053,9 @@ would be implemented as software interrupt similar to the suspend
 commands. The active task would be taken out of its class list and put at
 the end of the targeted class list. The list lengths would be adapted
 accordingly. Then the normal step of looking for the now most due task and
-making this the active one would end the operation. \ident{setEvent} would
-probably be the best fitting starting point of the implementation. This
-idea has not been implemented as we don't see a use case for it.
+making this the active one would end the operation. \ident{rtos\_setEvent}
+would probably be the best fitting starting point of the implementation.
+This idea has not been implemented as we don't see a use case for it.
 
 Currently, the round robin time (including round robin mode on/off by
 setting the time to 0) is predetermined at compile time -- but without any
@@ -1668,3 +2108,25 @@ could easily obscure the current quite concise and stringent
 implementation concept. Furthermore, using
 \ident{rtos\_enter/leaveCriticalSection}, an \rtos{} application can write
 its own queues even though it had to use a polling strategy.
+
+Another typical RTOS element are mutexes and semaphores. (Actually, a
+mutex can be considered a special case of a semaphore, a semaphore with a
+single instance.) Semaphores are useful to handle shared resources. The
+difference to a critical code section is, that the access to the shared
+resources can be granted to a task across task switches. Task scheduling can
+go on, while a task owns the resource. A critical section generally blocks
+task switches and must therefore used only on short operations. 
+
+There's one test case of \rtos{}, which demonstrates how to implement the
+idea of a mutex by a combination of flags and critical sections. Such an
+implementation can indeed safely manage a resource but will always have
+some weakness with respect to responsiveness and priority handling.
+
+An implementation of true semaphores fits basically well to the existing
+code. In particular if we restrict the implementation to mutexes (where
+the instance counter can be replaced by a single bit in a bit vector of
+\ident{n} mutexes, all handled in parallel) the implementation will
+strongly resemble the current event handling and significant parts of the
+existing event code could be used for mutexes without changes. Because of
+this, the next release of \rtos{} will likely support at least mutexes if
+not semaphores.

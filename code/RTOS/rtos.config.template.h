@@ -2,10 +2,10 @@
 #define RTOS_CONFIG_INCLUDED
 /**
  * @file rtos.config.template.h
- * Switches to define the most relevant compile-time settings of RTuinoOS in an application
+ * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  * @todo Copy this file to your application code, rename it to rtos.config.h and adjust the
- * settings to the need of your RTuinoOS application. Then remove this hint.
+ * settings to the need of your RTuinOS application. Then remove this hint.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -73,8 +73,8 @@
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
 
 
-/** The system timer tic is about 2 ms. For more accurate considerations, it is defined
-    here as floating point constant. The unit is s. */
+/** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
+    floating point constant. The unit is s. */
 #define RTOS_TIC (2.0399999e-3)
 
 
@@ -107,7 +107,7 @@
 
 /** A macro which expands to the code which defines all types which are related to the
     system timer. We need the unsigned and the related signed type. The macro is applied
-    just once, see below. */
+    just once, see below and #RTOS_DEFINE_TYPE_OF_SYSTEM_TIME_DOXYGEN_TAG. */
 #define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(noBits)     \
     typedef uint##noBits##_t uintTime_t;            \
     typedef int##noBits##_t intTime_t;
@@ -129,7 +129,7 @@
  *   The system timer is bound to another interrupt source.\n
  *   External interrupts are enabled and implemented.\n
  * In any case, the functions need to disable all interrupts, which could lead to a task
- * switch. It is not the intention -- although it would work -- to simply lock all
+ * switch. It is not the intention - although it would work - to simply lock all
  * interrupts globally. The responsiveness of the system would be degraded without need.\n
  *   The use of the function pair cli() and sei() is an alternative to
  * rtos_enter/leaveCriticalSection. Globally locking the interrupts is less expensive than
@@ -139,7 +139,7 @@
  *   @remark
  * The implementation does not permit recursive invokation of the function pair. The status
  * of the interrupt lock is not saved. If two pairs of the functions are nested, the task
- * switches are re-enabled as soon as the inner pair is left -- the remaining code in the
+ * switches are re-enabled as soon as the inner pair is left - the remaining code in the
  * outer pair of function would no longer be protected agianst unforeseen task switches.
  * This is the same as if using nested pairs of cli/sei.
  *   @remark
@@ -191,7 +191,7 @@
     unit is often chosen to be the period time of the fastest regular time. But in general
     the time doesn't need to be regular and its unit doesn't matter.\n
       You may define the time to be any unsigned integer considering following trade off:
-    The shorter the type is the less the system overhead. Be aware that many operations in
+    The shorter the type the less the system overhead. Be aware that many operations in
     the kernel are time based.\n
       The longer the type the larger is the maximum ratio of period times of slowest and
     fastest task. This maximum ratio is half the maxmum number. If you implement tasks of
@@ -217,8 +217,8 @@
     which is seen as +13 in the future. If the task execution was too long and ended e.g.
     after 110 tics, the system time was 123+110 = 233. The demanded resume time 223 is seen
     in the past and a task overrun is recognized. A problem appears at excessive task
-    overruns. If the execution had e.g. taken 230 tics the current time is 123 + 230 = 353
-    - or 97 due to its cyclic character. The demanded resume time 223 is 126 tics ahead,
+    overruns. If the execution had e.g. taken 230 tics the current time is 123 + 230 = 353 -
+    or 97 due to its cyclic character. The demanded resume time 223 is 126 tics ahead,
     which is considered a future time - no task overrun is recognized. The problem appears
     if the overrun lasts more than half the system time cycle. With uint16_t this problem
     becomes negligible.\n
@@ -228,9 +228,32 @@
     for the integer. Therefore we choose its name \a uintTime_t similar to the common
     integer types.\n
       The argument of the macro, which actually makes the required typedefs is set to
-    either 8, 16 or 32; the meaning is number of bits. */
+    either 8, 16 or 32; the meaning is number of bits.
+      @remark
+    Please ignore the appendix _DOXYGEN_TAG in the displayed name of the macro. This is a
+    work around as the doxygen parser gets confused about the true (nested) macro syntax.
+    Inspect the header file to see. */
+#define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME_DOXYGEN_TAG
 RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
 
+
+/** Normally, when the overrun of a regular task has been recognized the task is made due
+    immediately (instead of sticking to the nominal due time, which will be reached only in
+    the next system timer cycle).\n
+      If the short system timer is chosen and if there are regular tasks having a cycle
+    time greater than half the timer cycle (i.e. above 127 tics) the probability of faulty
+    recognizing task overruns is close to one (see above). In this situation it can make
+    sense not to react on a recognized task overrun, i.e. not to make the task due
+    immediately. Since faster tasks are more typical than very slow tasks the feature is
+    active by standard even for the short system timer. An application may however turn it
+    off (with care) if it uses that slow regular tasks.\n
+      The counters for task overruns are still supported even if this feature is turned
+    off. The counter for the very slow task should not be evaluated. If you turn this
+    feature off you anticipate false task overrun recognitions for this task.\n
+      If the 16 or 32 Bit system timer is in use it makes no sense to turn the feature off;
+    moreover, it is dangerous to do, as a true, properly recognized task overrun would lead
+    to an almost dead task. */
+#define RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE  RTOS_FEATURE_ON
 
 
 /*

@@ -1,6 +1,6 @@
 /**
  * @file tc03_RTTasks.c
- *   Test case 03 of RTuinoOS. Several tasks of different priority are defined. Task
+ *   Test case 03 of RTuinOS. Several tasks of different priority are defined. Task
  * switches are counted and reported in the idle task.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
@@ -117,7 +117,8 @@ static void task00_class00(uint16_t initCondition)
     {
         ++ _noLoopsTask00_C0;
 
-        /* This tasks cycles with about 200ms. */
+        /* This tasks cycles with about 200ms but it is nearly always suspended and doesn't
+           produce significant CPU load. */
         rtos_delay(80);
         rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 100);
     }
@@ -143,7 +144,16 @@ static void task01_class00(uint16_t initCondition)
     {
         ++ _noLoopsTask01_C0;
 
-        /* For test purpose only: This task consumes the CPU for most of the cycle time. */
+        /* For test purpose only: This task consumes the CPU for most of the cycle time and
+           while the task is active. The call of delay produces a CPU load of about 80%.
+           This is less self-explaining as it looks on the first glance. The Arduino
+           function delay is implemented as loop, which compares the current system time
+           with a target time, the desired time of return. The current system time is
+           clocked by an interrupt independent of RTuinOS. This loop will basically run
+           during 80 ms in a cycle of about 100 ms - but not continuously. The task of
+           higher priority will frequently interrupt and shortly halt the loop. Therefore
+           the 80% of CPU load do not result from this task (as it may seem) but from this
+           task and all others which may interrupt it while it is looping inside delay. */
         delay(80 /*ms*/);
         
         /* This tasks cycles with about 100ms. */
@@ -240,8 +250,9 @@ void setup(void)
  * there's some execution time left. It's interrupted by any other task when it becomes
  * due.
  *   @remark
- * Different to all other tasks, the idle task routine may and should termninate. This has
- * been designed in accordance with the meaning of the original Arduino loop function.
+ * Different to all other tasks, the idle task routine may and should return. (The task as
+ * such doesn't terminate). This has been designed in accordance with the meaning of the
+ * original Arduino loop function.
  */ 
 
 void loop(void)

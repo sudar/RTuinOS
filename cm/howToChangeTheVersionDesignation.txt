@@ -1,0 +1,4 @@
+The version is found as literal in
+RTuinOS\version.txt (i.e. in the root directory)
+RTuinOS\code\RTOS\rtos.h as macro RTOS_RTUINOS_VERSION
+RTuinOS\doc\doxygen\doxyfile as variable PROJECT_NUMBER
