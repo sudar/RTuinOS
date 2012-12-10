@@ -32,6 +32,7 @@ make
 popd
 pushd "..\..\doc\doxygen"
 doxygen
+popd
 
 
 
