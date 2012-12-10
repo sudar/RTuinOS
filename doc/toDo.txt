@@ -18,10 +18,7 @@ has already been a step in the same direction.
 it.
 
 Implement EnterLeaveCriticalSection (cli/sei and only TIMER2):
-  Done but not tested at all. Even not compiled as it is a macro. First
-inspect the assembly listing if the bit operation on TIMSK2 is as
-desired. Than write concurrance example with and without protection. Is
-there an effect? Stays the system alive and virulent?
+  Done
 
 Implement get/setRoundRobin?
 

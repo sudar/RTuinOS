@@ -15,12 +15,15 @@ Real time operating systems, or RTOS, strongly simplify the implementation
 of technical applications which typically do things in a quite regular
 way, like checking inputs and setting outputs accordingly every (fixed)
 fraction of a second. For example, the temperature controller for a
-heating installation could be designed this way. Furthermore, a real time
-system could coincidentally and regularly update a display to provide
-feedback - at the same or any other rate. Regular, time based programming
-can be done without the need of CPU consuming waiting loops as used in the
-implementation of Arduino's library function \a delay. Real time operating
-systems characterize the professional use of micro controllers.
+heating installation could be designed this way. Temperature sensors,
+which report the room temperatures are evaluated and the burner and maybe
+some valves are controlled to yield the desired target temperature.
+Furthermore, using a real time system the program could coincidentally and
+regularly update a display to provide feedback - at the same or any other
+rate. Regular, time based programming can be done without the need of CPU
+consuming waiting loops as used in the implementation of Arduino's library
+function \a delay. Real time operating systems characterize the
+professional use of micro controllers.
 
 RTuinOS is a small real time operating system (RTOS) for the Arduino
 environment. It is simple to use and fits well into the existing Arduino

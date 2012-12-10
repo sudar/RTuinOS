@@ -85,6 +85,13 @@ if ERRORLEVEL 1 (
 :: Go to the directory in the got file where the setup creation will take place.
 pushd "%tmpCheckoutFolder%\cm\createSetup"
 
+:: Create the dependent documentary files which are not under source control but which need
+:: to be in the setup. An external script is applied although it just contains a few,
+:: simple commands: As the other script is part of the exported revision, these commands
+:: can become subject to changes in the life cycle of the software (as opposed to this
+:: script which must not undergo any essential changes).
+call makeDoc.cmd
+
 :: Create a version description.
 if /I not "%rev%" == "" (
     echo Source: %url%> version.txt
