@@ -2,7 +2,7 @@
 \label{secInrto}
 
 Arduino\footnote{See www.arduino.cc} is a popular open source and open
-hardware \uC{} platform for various purposes, mainly located in leisure
+hardware micro controller platform for various purposes, mainly located in leisure
 time projects. Arduino comes along with a simple to use integrated
 development en\-vi\-ron\-ment, which contains the complete tool chain to
 write source code, to browse through samples and libraries, to compile and
@@ -21,8 +21,8 @@ Furthermore, using a real time system the program could coincidentally and
 regularly update a display to provide feedback -- at the same or any other
 rate. Regular, time based programming can be done without the need of CPU
 consuming waiting loops as used in the implementation of Arduino's library
-function \ident{delay}. Real time operating systems characterize the
-professional use of \uC{}s.
+functions \ident{delay} and \ident{delayMicroseconds}. Real time operating
+systems characterize the professional use of micro controllers.
 
 \rtos{} is a small real time operating system (RTOS) for the Arduino
 environment. It is simple to use and fits well into the existing Arduino
@@ -46,12 +46,12 @@ function\footnote{The GNU C compiler is quite uncomplicated in mixing C
 and C++ files. Although \rtos{} is written in C it's no matter do
 implement task functions in C++ if only the general rules of combining C
 and C++ and the considerations about using library functions (particularly
-\ident{new}) in a multi-tasking environment are obeyed. Class member
-functions are obviously no candidates for a task function.}, which becomes
-the so called task function. Once entering the traditional Arduino loop,
-all of these task functions are executed in parallel to one another and to
-the repeated execution of function \ident{loop}. We say, \ident{loop}
-becomes the idle task of the RTOS.
+\ident{new}) in a multi-tasking environment are obeyed. Non-static class
+member functions are obviously no candidates for a task function.}, which
+becomes the so called task function. Once entering the traditional Arduino
+loop, all of these task functions are executed in parallel to one another
+and to the repeated execution of function \ident{loop}. We say,
+\ident{loop} becomes the idle task of the RTOS.
 
 A characteristic of \rtos{} is that the behavior of a task is not fully
 predetermined at compile time. \rtos{} supports regular, time-controlled
