@@ -65,17 +65,18 @@ notify what happened. The LED task will now use an event to become active
 and subsequently it'll use the execute-at-time pattern a number of times
 to realize the sequence of flashes. The LED stays dark as long as the
 event is not posted to the task. After the blink sequence the task will
-again start to wait for the next occurrence of the event. The active time of
-this task is still close to zero: Every time it is executed it'll just use
-a few statements to toggle the LED state and to inform the RTOS about the
-next condition under which to become active again. The main task, which
-implements the communication can proceed nearly as if there was no LED
-task. There's however an extension to its implementation. In case of a
-significant status change it has to indicate the number of according
-flashes and to post the event. The former can be done by a write to a
-global variable and the latter is a simple call of an \rtos{} API
-function. The global variable is shared by both tasks, the LED task will
-read it when being activated by the event.
+again start to wait for the next occurrence of the event.\footnote{An
+implementation of this pattern can be found in test application
+\ident{tc08}}. The active time of this task is still close to zero: Every
+time it is executed it'll just use a few statements to toggle the LED
+state and to inform the RTOS about the next condition under which to
+become active again. The main task, which implements the communication can
+proceed nearly as if there was no LED task. There's however an extension
+to its implementation. In case of a significant status change it has to
+indicate the number of according flashes and to post the event. The former
+can be done by a write to a global variable and the latter is a simple
+call of an \rtos{} API function. The global variable is shared by both
+tasks, the LED task will read it when being activated by the event.
 
 If there are more tasks the scenario becomes more complicated and we need
 a new term. If two tasks tell the RTOS the time they want to be activated
@@ -96,13 +97,13 @@ CPU from the earlier task. The earlier task is still due (as it didn't
 return the CPU voluntarily so far) but no longer active. The later task is
 both, due (it's point in time has reached) and active (it got the CPU).
 
-When the active, later task tells \rtos{} to not longer need the CPU, the
+When the active, later task tells \rtos{} to no longer need the CPU, the
 earlier still due task will again get the CPU and continue to execute.
 
-If a task tells the system to no longer require the CPU (by notifying:
-"Continue my execution at/when") we say it is suspended. If it becomes due
-again, we say it is resumed. If it is executed again, we say it is
-activated.
+If a task tells the system to momentarily no longer require the CPU (by
+notifying: "Continue my execution at/when") we say it is suspended. If it
+becomes due again, we say it is resumed. If it is executed again, we say
+it is activated.
 
 There's always one and only one active task. What if all tasks in the
 system did suspend themselves because they are waiting for a point in time
@@ -197,16 +198,19 @@ initial resume condition for a task. It'll start immediately.
 In the implementation a time event results from a system timer tic. The
 core of the scheduler is a clock based interrupt. In \rtos{} this clock
 has a default clock rate of about 2~ms, but this can be altered by the
-application code. In the interrupt service routine (ISR), a variable
-holding the absolute, current system time is incremented. (The rate of the
-interrupt is the unit of all timing operations regardless of the actual
-physical value.) The new value of the system time is compared against the
-\emph{when} parameter of all suspended tasks which suspended with a
-resume-at condition. If there's equality, the absolute time event is
-notified to this task. For all tasks which had suspended themselves with a
-resume-after condition, the \emph{when} parameter of this condition is
-decremented. If it reaches null, the desired suspend time has elapsed and
-the relative time event is notified to the task.
+application code.\footnote{\rtos uses timer 2 as source for clocking its
+system time. In Arduino this timer -- intended for PWM output -- cycles
+with about 2~ms. \rtos doesn't change Arduino's timer configuration in its
+standard configuration.} In the interrupt service routine (ISR), a
+variable holding the absolute, current system time is incremented. (The
+rate of the interrupt is the unit of all timing operations regardless of
+the actual physical value.) The new value of the system time is compared
+against the \emph{when} parameter of all suspended tasks which suspended
+with a resume-at condition. If there's equality, the absolute time event
+is notified to this task. For all tasks which had suspended themselves
+with a resume-after condition, the \emph{when} parameter of this condition
+is decremented. If it reaches null, the desired suspend time has elapsed
+and the relative time event is notified to the task.
 
 The third time based event is available only if the system is compiled
 with round robin feature. Now a task may have a time slice defined. The
@@ -267,13 +271,14 @@ As a matter of fact, a call of \ident{rtos\_setEvent} will never make the
 calling task undue (i.e. suspended), outermost inactive. This is the
 reason, why \ident{rtos\_setEvent} may even be called by the idle task.
 
-Side note: There is a crosswise relationship between \ident{rtos\_setEvent} and
-the suspend commands. From the perspective of the task code switching
-tasks appears as follows: The suspend function is invoked but it returns
-out of a call of \ident{rtos\_setEvent} of another task or out of the suspend
-command of a task which became due meanwhile. If a task calls
-\ident{rtos\_setEvent} it doesn't need to return but could for example return
-out of the initially mentioned suspend command.
+Side note: There is a crosswise relationship between
+\ident{rtos\_setEvent} and the suspend commands. From the bird's eye view
+on the system task code switching appears as follows: The suspend function
+is invoked but it returns out of a call of \ident{rtos\_setEvent} of
+another task or out of the suspend command of a task which became due
+meanwhile. If a task calls \ident{rtos\_setEvent} it doesn't need to
+return but could for example return out of the initially mentioned suspend
+command.
 
 
 \section{Application Interrupts}
@@ -291,12 +296,12 @@ task execution. If the posted event makes a task due which has a higher
 priority than the interrupted task, the interrupted task is made inactive
 (but it remains still due) and the other task will become active.
 
-Typically, there will be such a task waiting for the event and having a
-higher priority. Thus causing a task switch. There's only one use case for
-this kind of scheduler invocation: The interrupt triggers a dedicated task
--- indirectly via the hidden call of \ident{rtos\_setEvent} --, which actually
-serves as interrupt handler, doing all sort of things which are needed by
-the interrupt. This tasks will be implemented as an infinite
+There's only one use case for this kind of scheduler invocation.
+Typically, an application will define a task of high priority waiting for
+the event. The interrupt triggers this dedicated task -- indirectly via
+the hidden call of \ident{rtos\_setEvent} --, which actually serves as
+interrupt handler, doing all sort of things which are needed by the
+interrupt. This tasks will be implemented as an infinite
 \ident{while}-loop, where the \ident{while}-condition is the suspend
 command that waits for the interrupt event and where the body of the loop
 is the actual handler of the interrupt.
@@ -327,7 +332,7 @@ of the due list of given priority class. From now on, since the task is no
 longer suspended, no further events will be posted to this task and nor
 will they be stored in the task object. Thus, the very set of events, which
 made the task due is now frozen in the task object. When the task, which
-is due now, becomes the active task again, the code flow of the task
+is due now, becomes the active task again the code flow of the task
 returns from the suspend command it had initially invoked. At this
 occasion, the stored, frozen set of events, which had made the task due is
 returned as return value of the suspend command.
@@ -337,8 +342,8 @@ events it had made due. This is of particular interest if a task suspends
 waiting for a combination of events. In practice this will be most often
 the combination of an application event and a relative-time event, which
 this way gets the meaning of a timeout. Obviously, the task needs to
-behave differently whether it received the expected event or if there was
-a timeout.
+behave differently whether it received the expected event or if a timeout
+occurred.
 
 By the way, what has been said for the return from a suspend command also
 holds true for the initial entry into a task function. Any task is
@@ -366,7 +371,7 @@ that maintaining this pointer actually is all the scheduler has to do.
 The idle task object can be considered the only member of the due list of
 lowest possible priority. This task is needed as fall back if no due task
 is found in any of the priority classes and the scheduler has a constant
-pointer to this specific task object. If \rtos{} is idle, both pointers have
+pointer to this specific task object. If \rtos{} is idle both pointers have
 the same value; they point to the idle task object.
 
 Arrow 1 depicts the round robin action. Round robin activities can only
@@ -553,7 +558,7 @@ addresses.} -- and these bytes will become the initial values of the data
 registers of the CPU when the task is activated the very first time
 (general purpose and status registers). And in front of these 33 bytes it
 places the two or three bytes of the wanted PC (depending on the type of
-AVR \uC). At runtime this is the program memory location where to continue
+AVR micro controller). At runtime this is the program memory location where to continue
 a task; now at initialization time it's obviously the start address of the
 task or -- in C -- the pointer to the task function. The address where the
 last byte has been placed is the value of the stack pointer that has to be
@@ -746,10 +751,10 @@ task code.
 
 Typically, task functions cycle around (similar to the function
 \ident{loop} in a traditional Arduino sketch). Some other RTOS offer a
-task termination but \rtos{} doesn't. In \rtos{} a task needs to cycle
-around and it must never end. If it ever did it would "return" to the reset
-vector of the Arduino board and your application would start up again --
-and probably stay in a loop of repeatedly doing so.
+task termination but \rtos{} doesn't. In \rtos{} a task must never end. If
+it ever did it would "return" to the reset vector of the Arduino board and
+your application would start up again -- and probably stay in a loop of
+repeatedly doing so.
 
 The stack area of the task is specified by a pointer to a reserved address
 space in RAM and by the length of this reserved area. \emph{Reserved} means
@@ -761,8 +766,11 @@ consider some dynamic allocation operations. Just define an array of
 Caution: Reserved also means that the specified stack area must never be
 touched by your application code.
 
-If you configured \rtos{} to support the round robin strategy, you will
-specify the duration of the time slices the task gets.
+If you configured \rtos{} to support the round robin strategy you will
+specify the duration of the time slices the task gets. Not all the tasks
+need to be subject to the round robin scheduling. If the duration of the
+time slice is set to 0 there is no such behavior for this task; with other
+words its time slice is of unlimited duration.
 
 Another important part of the task specification is the initial resume
 condition. It is specified exactly like at runtime when using the suspend
@@ -811,7 +819,7 @@ The specification of the interrupt source is one detail of the \rtos{}
 configuration made in \ident{rtos.con\-fig.h}.
 
 Currently, \rtos{} implements up to two application interrupts (i.e.
-\textless nn\textgreater{} is either 01 or 02), but it's simple and
+\textless nn\textgreater{} is either 00 or 01), but it's simple and
 straight forward to extend the implementation to more interrupts if
 required.
 
@@ -905,8 +913,8 @@ static void regularTask(uint16_t initialResumeCondition)
 #define MY_TASK_CYCLE_TIME 1 /* Unit is system timer tic, e.g. 1 ms */
     do
     {
-      /* Actual task implementation: read ADC, process value... */
-      ...
+        /* Actual task implementation: read ADC, process value... */
+        readADCAndProcess1ms();
     }
     while(rtos_waitForEvent( RTOS_EVT_ABSOLUTE_TIMER
                            , /* waitForAllEvents */ false
@@ -928,7 +936,7 @@ the implementation, which is updated in every loop. To avoid this, the
 parameter \emph{when} is defined to be a difference, the difference to the
 last recent reference to the absolute timer. This would mean in our typical
 use case, that parameter \emph{when} becomes a constant. In every loop,
-the parameter simply is 1~ms in the call of \ident{rtos\_waitForEvent}.
+the parameter simply is 1~[ms] in the call of \ident{rtos\_waitForEvent}.
 
 
 \subsection{\ident{rtos\_suspendTaskTillTime}}
@@ -980,8 +988,8 @@ waiting for this event.
 
 Be aware, an event is broad-casted only to the currently suspended tasks
 and is not stored besides that. If a task suspends shortly after another
-has posted an event, the suspend task will never receive this event and
-may stay suspended forever.
+one has posted an event, the suspended task will never receive this event
+and may stay suspended forever.
 
 
 \section{Data access: \ident{rtos\_enter/leaveCriticalSection}}
@@ -997,7 +1005,7 @@ application interrupt which can easily cause a task switch. A task can be
 in-activated while it is busy updating the data and another task can
 continue operating on the same, half way completed data. The results are
 unpredictable and surely wrong. Be aware, even an atomic looking operation
-like \verb$++u;$, where \ident{u} is a of type \ident{uint8\_t}, is unsafe
+like \verb$++u$, where \ident{u} is a of type \ident{uint8\_t}, is unsafe
 and requires protection.
 
 The pair of API functions \ident{rtos\_enterCriticalSection} and
@@ -1027,7 +1035,7 @@ The pair of functions \ident{cli} and \ident{sei} from the AVR library
 nearly has the same meaning and can also be used to make data access
 operations atomic. The difference is that they inhibit all interrupts. The
 responsiveness of the system could be somewhat degraded without need, e.g.
-the Arduino time functions like \ident{delay} or \ident{millis} would
+the Arduino time functions like \ident{delay} or \ident{millis} could
 suffer. On the other hand, these two functions are a bit cheaper. We
 suggest to use them if the protected code sequence is rather short, e.g.
 just one or a few simple assignments and to use
@@ -1036,7 +1044,7 @@ just one or a few simple assignments and to use
 In \rtos{} a task of higher priority will never become inactive in favor
 of a lower prioritized task as long as it doesn't suspend itself
 voluntarily. And if the task is not a round robin task it'll even never
-become inactive in favor of a equally prioritized task (as long as it
+become inactive in favor of an equally prioritized task (as long as it
 doesn't suspend itself). Therefore,
 \begin{itemize}
   \item a normal task of same or higher priority doesn't need atomic
@@ -1048,7 +1056,7 @@ doesn't suspend itself). Therefore,
 But vice versa, their counterparts of same or lower priority of course need to
 protect their access code to the same, shared data.
 
-In cooperative systems task generally don't need to protect their access
+In cooperative systems tasks generally don't need to protect their access
 to shared data as tasks will never be interrupted at unforeseeable (and
 undesirable) points in time. In \rtos{} cooperative multi-tasking
 applications are implemented by tasks all belonging to the same priority
@@ -1085,12 +1093,35 @@ runtime. Evaluating the counters should be considered a kind of debug
 information, a hint at development and testing time that the
 implementation is still insufficient and needs changes.
 
+There are two pitfalls. The function checks for a task overrun as part of
+a suspend command submitted by a task. It recognizes a task overrun if the
+demanded time of resume is found to be already over. The current system
+time is compared to the demanded time of resume. The comparison may cause
+an arithmetic overflow because of the limited length of the internally
+used system time. Particularly if an application uses the 8 Bit system
+time there's a significant probability of taking the false decision:
+
+If a regular task chooses a too long period time a task overrun might be
+recognized where actually no such overrun occurs. This will not only lead
+to a wrong counter value but also to bad task timing. A task found to be
+overdue is made due immediately, which is the wrong decision in this
+case.
+
+If a task excessively exceeds its nominal regular execution time the task
+overrun won't be recognized. Task calls are silently skipped.
+
+Please refer to section \ref{secSystemTime}. Here you find a discussion
+how to choose the appropriate system time for your application.
+
+The function \ident{rtos\_getTaskOverrunCounter} may be called by any task,
+including the idle task.
+
 
 \section{Diagnosis: \ident{rtos\_getStackReserve}}
 
 A simple algorithm determines the usage of the task stacks. (In any RTOS,
 each task has its own, dedicated stack.) The maximum size of the stacks is
-predetermined at compile time and determining the actual stack usahe at
+predetermined at compile time and determining the actual stack usage at
 runtime is just a development tool. If the maximum stack size of any task
 is exceeded the system will surely crash and the cause of the crash will
 be hard to find. Allocating the stack sizes much too large is too
@@ -1104,9 +1135,9 @@ which is typically not written into the stack at runtime. However, it
 could be written at runtime with a low but significant probability. As a
 result, the actual stack usage can be one Byte more than computed with a
 probability that must not be neglected. It's however much less probable
-that two such bytes will be written subsequently into the stack at runtime
--- the probability that the computed number of bytes is too little by two
-is much less. And so forth. If you add a number of five Byte to the
+that two such bytes will be written consecutively into the stack at
+runtime -- the probability that the computed number of bytes is too little
+by two is much less. And so forth. If you add a number of five Byte to the
 computed stack usage the remaining probability that this is less than the
 actual stack usage is negligible.
 
@@ -1119,11 +1150,14 @@ testing code ran through all code paths, particularly through the deepest
 nested sub-functions. You can ensure this by dedicated test routines. But
 can you also be sure that a system interrupt occurred in the very instance
 of being inside the deepest nested sub-routine? If not, it'll surely
-happen later and another 36 Byte of stack will be consumed. It's good
-practice to add another 36 Byte to the computed stack usage.
+happen sooner or later and another 36 Byte of stack will be consumed. It's
+good practice to add another 36 Byte to the computed stack usage.
 
 Summarizing, you should add 41 Byte to the computed stack usage before
 reducing the stack size to the really needed value.
+
+The function \ident{rtos\_getStackReserve} may be called by any task,
+including the idle task.
 
 
 \chapter{Writing an \rtos{} Application}
@@ -1190,11 +1224,18 @@ section \ref{secEnterLeaveCritSec}.
 
 Compile your application using the generic makefile. If you placed all
 your code in the single folder created at the beginning, all you have to
-do now is to run \verb+make -s APP=myFolderName build+.
+do now is to run
+
+\verb+make -s APP=myFolderName clean build+
 
 Start your application using the makefile. Your Arduino board is connected
-via the USB cable. Run 
-\verb+make -s APP=myFolderName COM_PORT=\\.\COM6 upload+.
+via the USB cable. Be this COM6.\footnote{Use the Arduino IDE to find out
+to which port your board is connected. Typically, after connecting your board
+it'll be the last port shown in menu Tools/Serial Port. Or open the
+Windows Device Manager and look at "Ports (COM \& LPT)". Here you find your
+connected board with name and assigned COM port.} Now run
+
+\verb+make -s APP=myFolderName COM_PORT=\\.\COM6 upload+
 
 The \rtos{} source file \refRTOSC{} must not be touched at all. Just open
 it for reading if you what to understand how \rtos{} works.
@@ -1207,15 +1248,15 @@ it for reading if you what to understand how \rtos{} works.
 be compiled with your application. (Without application code you'd end up
 with unresolved externals when linking the code.) However, \rtos{} is
 distributed with some autonomous test cases which are true \rtos{}
-applications. All of these can be build and uploaded using the make
-processor, which is part of the Arduino installation and the makefile
-which is part of the \rtos{} distribution.
+applications. All of these can be build and uploaded using the make tool,
+which is part of the Arduino installation and the makefile which is part
+of the \rtos{} distribution.
 
 You can organize your applications similar to the test cases and will then
-be able to use the makefile without changes for your applications also. If
-your application grows and needs a more complex folder structure to keep
-the source code as the test cases then you will still be able to use the
-makefile, however with some simple changes.
+be able to use the makefile without changes for your application, too.
+Even if your application grows and needs a more complex folder structure
+than the test cases to keep the source code you will still be able to
+use the makefile, however with some simple changes.
 
 Most often, you will do as follows: Open a Windows Command Prompt (or
 Powershell window) and cd to the root directory of the \rtos{} folder.
@@ -1273,7 +1314,7 @@ library \ident{core.a}. To do so, it needs to know, where the Arduino sources
 -- which are not part of this project -- are located. It expects an
 environment variable \ident{ARDUINO\_HOME} to point to the Arduino
 installation directory, e.g.
-c:\textbackslash{}Program~Files\textbackslash\-arduino-1.0.1. You will
+c:\textbackslash{}ProgramFiles\textbackslash\-arduino-1.0.1. You will
 probably have to add such a variable to your system variables as it is not
 defined by the Arduino standard installation process.
 
@@ -1296,11 +1337,11 @@ library \ident{core.a}.
 Post processing steps create the binary files as required for upload to
 the Arduino board.
 
-An optional, final rule permits to upload the binary code to the
-Arduino board. If your application makes use of the USB communication with
+An optional, final rule permits to upload the binary code to the Arduino
+board. If your application makes use of the USB communication with
 \ident{Serial} all you still have to do to make your application visibly
-run is an ALT-TAB to switch to the (open) Arduino IDE and a Ctrl-Shft-m to
-open the console window.
+run is an ALT-TAB to switch to the (open) Arduino IDE and a Ctrl-Shift-m
+to open the console window.
 
 On the compilation output side, for sake of simplicity of the makefile,
 the folder structure of the source code is not retained. All compilation
@@ -1399,23 +1440,23 @@ explicitly command make to re-compile everything.
 The target platform is selected as value of macro
 \ident{targetMicroController} in the makefile. However, not all Arduino
 boards are currently supported by the implementation of \rtos{}. If you
-select a \uC, which is not yet supported, you will run into error
+select a micro controller, which is not yet supported, you will run into error
 directives in the source code. Please refer to section
 \ref{secArduinoBoards} for more.
 
 The makefile has not been tested with any Arduino boards other than the
-Arduino Mega 2560. Please be aware, that additional changes on the
+Arduino Mega 2560. Please be aware that additional changes on the
 makefile could be necessary: Different controllers may require different
 command line options of compiler, linker and flash tool. These differences
 are not yet anticipated by the makefile. You need to double-check all
-command lines, which are typically compiled from variables like
+command lines, which are typically compiled from macros like
 \ident{targetMicroController}, \ident{cFlags} and \ident{lFlags}.
 
 You can use the Arduino IDE to find out, which command lines are
 appropriate in your specific environment. In the file menu of the IDE you
-can navigate to the properties dialog. Here, you can check the verbose
+can navigate to the properties dialog. Here, you should check the verbose
 output for both, compilation and upload. Now select, build and upload
-any of the sample sketches in the IDE. Copy the contents of the IDE's
+one of the sample sketches in the IDE. Copy the contents of the IDE's
 output window and paste them into a text editor. You will find appropriate
 command lines for all the tools.
 
@@ -1424,8 +1465,8 @@ uses a protocol which unfortunately requires an additional, preparatory
 reset command. This protocol works with the makefile only if you press the
 reset button shortly before avrdude is run, which is at least inconvenient
 if not unacceptable. The makefile uses a quite similar protocol, which
-works well and doesn't require the reset. Place "-cWiring" in the command
-line of avrdude.
+works well and doesn't require the reset. Place \verb+-cWiring+ in the
+command line of avrdude instead of \verb+-cstk500v2+.
 
 
 \subsection{Selecting the USB Port}
@@ -1437,7 +1478,7 @@ the command line of the makefile (type e.g. \verb+COM_PORT=\\.\COM6+).
 
 However, in your specific environment you'll probably end up with the
 always same port designation, so it might be handy to choose this port
-designation as makefile's default. Look for the initial assignment of
+designation as the makefile's default. Look for the initial assignment of
 macro \ident{COM\_PORT} in the makefile.
 
 
@@ -1448,11 +1489,11 @@ macro \ident{COM\_PORT} in the makefile.
 The makefile includes the compiler generated *.d files. The *.d files
 contain makefile rules, which describe the dependencies of object files on
 source files. They are created as "side-effect" of the compilation of a
-source file. This means, they are not present at the beginning and after a
-clean and they are invalid after configuration changes which have an
-impact on the actual tree of nested include statements. Particularly in
-the latter situation the recognition of dependencies is not reliable and
-the compilation result could be bad.
+source file. This means, they are not present at the very beginning and
+after a clean and they are invalid after source code or configuration
+changes which have an impact on the actual tree of nested include
+statements. Particularly in the latter situation the recognition of
+dependencies is not reliable and the compilation result could be bad.
 
 Consequently, in all cases of non-trivial changes of preprocessor macros
 and include statements you should always call the rules to rebuild the
@@ -1462,7 +1503,7 @@ application. This is also mandatory if you switch from compiling one
 
 \subsubsection{Building the required Output Directories}
 
-If you compile an \rtos{} application the very first time, the directories
+If you compile an \rtos{} application the very first time the directories
 intended to hold the compilation products will probably not exist on your
 machine yet. The makefile has a rule to create these directories but we
 didn't manage to integrate these rules into the normal rule hierarchy of
@@ -1494,10 +1535,10 @@ can exist. In an RTOS, when a task is suspend for an unpredicted while,
 this can make an operation timeout and fail. However, even in a single
 threaded system, the code execution speed is not fully predictable as it
 depends on compiler settings and interruptions by all the system
-interrupts. Particularly, when serving the hardware device is done in a
-task of high priority, the discontinuity of the code execution should not
-be that much worse, that a timeout becomes a severe risk. Respectively,
-time critical code should not be placed in the idle task.
+interrupts. Particularly, if serving the hardware device is done in a task
+of high priority the discontinuity of the code execution should not be
+that much worse that a timeout becomes a severe risk. Accordingly, time
+critical code should not be placed in the idle task.
 
 Existing library functions could use static data, i.e. data which is not
 local to the invocation of the function. This can be data defined using
@@ -1645,11 +1686,12 @@ recommend to choose the timer tic duration identical with the period time
 of the fasted task. Now each interrupt will really cause a task switch and
 there's no (useless) overhead just to clock the time. The timing
 resolution is identical to the task period. This means that the fastest
-task can barely operate with timeouts, e.g. if it needs to wait for events
-posted by other tasks. The only timeout condition it can use is to state
-the next regular due time. Nonetheless, reasonable error handling code is
-still possible as the task code can distinguish between becoming active
-because of the timeout or because it's its normal due time.
+task can barely operate with timeouts, for example if it needs to wait for
+events posted by other tasks. The only timeout condition it can use is to
+state the next regular due time. Nonetheless, reasonable error handling
+code is still possible as the task code can distinguish between becoming
+active because of the received event, the timeout or because it's its
+normal due time.
 
 
 \subsection{Upper Limit of the Task Period Time}
@@ -1662,17 +1704,21 @@ recognition can fail if this rule is disregarded.
 
 A task overrun recognition is implemented in \rtos{} to support the use case
 of regular tasks. The system decides on a task overrun if a task referring
-to the absolute timer demands to be resumed in the past.
+to the absolute timer demands to be resumed in the past. The
+implementation uses signed operations, which undergo an arithmetic
+overflow at the middle of the binary range of the data type. This is where
+the limitation comes from.
 
 Here's an example of the normal situation: The tic duration of the system
 time is 1~ms and a regular task of 100~ms period time is implemented. The
 system time has 8 Bit. An infinite loop is implemented, which uses
 \verb+while(rtos_suspendTaskTillTime(100))+ as always true condition.
 Given the task execution takes between 45 and 67~ms the \rtos{} code will
-safely find the next demanded due time between 55 and 33~ms in the future
-and will not see a task overrun as 100-45 and 100-67 both is positive in
-the chosen 8 Bit arithmetics. Given a bad, too long task execution time of
-e.g. 102~ms \rtos{} would recognize a task overrun as 100-102 is negative.
+safely find the next demanded due time between 55 and 33~ms in the future.
+It won't see a task overrun as 100-45 and 100-67 both is positive in the
+chosen 8 Bit signed arithmetics. Given a bad, too long task execution time
+of e.g. 102~ms \rtos{} would recognize a task overrun as 100-102 is
+negative.
 
 Let's assume the period time of the same regular task would be changed to
 180~ms. There's definitely no risk of getting into task overruns. However,
@@ -1680,12 +1726,12 @@ at the end of the task execution, when the next resume time is demanded it
 depends if this demanded time is seen in the future or in the past. If the
 execution took 67~ms the remaining time to suspend the task is 180-67=113,
 which is a positive number, whereas 180-45=135 in case of the shorter task
-execution time is the negative number -121 in the chosen 8 Bit
-arithmetics. For \rtos{} the demanded resume time is seemingly in the past
-and decides on a task overrun.
+execution time is interpreted as the negative number -121 in the chosen 8
+Bit signed arithmetics. For \rtos{} the demanded resume time is seemingly
+in the past and it decides on a task overrun.
 
 Caution, the false decision on a task overrun, which actually isn't an
-overrun is much worse than just an increment of the diagnostics counter
+overrun, is much worse than just an increment of the diagnostics counter
 (see \ident{rtos\_getTaskOverrunCounter}). If the demanded resume time of
 a task is found to be in the past this task is not suspended but made due
 immediately. Our example task would not be made due (and active) every
@@ -1697,7 +1743,7 @@ half the range of the chosen system timer. If a task period of 127 tics to
 too little you will have to choose the 16 Bit time, which produces of
 course more system overhead.
 
-If we follow the recommendation made before this means that the ratio of
+As a simple implication for systems applying regular tasks, the ratio of
 period times of slowest and fastest task is limited by half the range of
 the chosen system timer. If you implement regular tasks of e.g. 10~ms,
 100~ms and 1000~ms period time, this could be handled with a
@@ -1719,25 +1765,25 @@ Data type be \ident{uint8\_t}. A task is implemented as regular task of
 100 units period time. Thus, at the end of the functional code it suspends
 itself with time increment 100 units. Let's say it had been resumed at
 time 123. In normal operation -- no task overrun -- it will end e.g. 87
-tics later, i.e. at 210. The demanded next resume time is 123+100 = 223, which
-is seen as +13 in the future. If the task execution was too long and ended
-e.g. after 110 tics, the system time was 123+110 = 233. The demanded
+tics later, i.e. at 210. The demanded next resume time is 123+100 = 223,
+which is seen as +13 in the future. If the task execution was too long and
+ended e.g. after 110 tics, the system time was 123+110 = 233. The demanded
 resume time 223 is seen in as 10 tics in the past and a task overrun is
-recognized.\footnote{When a task overrun is recognized this way the task
-becomes due immediately. It is not omitted but activated significantly too
-late.} A problem appears at excessive task overruns. If the execution had
-e.g. taken 230 tics the current time was 123 + 230 = 353 -- or 97 due to
-its cyclic character. The demanded resume time 223 is 126 tics ahead,
-which is considered a future time -- no task overrun is
-recognized.\footnote{One call of the task has been silently omitted and
-the next one is timely again.} The problem appears if the overrun lasts
-more than half the cycle time of the system timer. With \ident{uint16\_t}
-this problem becomes negligible.
+recognized.\footnote{When a task overrun is recognized the task becomes
+due immediately. The task call is not omitted but made somewhat too late.}
+A problem appears at excessive task overruns. If the execution had e.g.
+taken 230 tics the current time was 123 + 230 = 353 -- or 97 due to its
+cyclic character. The demanded resume time 223 is 126 tics ahead, which is
+considered a future time -- no task overrun is recognized.\footnote{One
+call of the task has been silently omitted and the next one is timely
+again.} The problem appears if the overrun lasts more than half the cycle
+time of the system time. With \ident{uint16\_t} this problem becomes
+negligible.
 
 
 \subsection{Summary}
 
-Here's a short summary of the timer data type discussion:
+Here's a short summary of the system time data type discussion:
 \begin{itemize}
   \item Choose the data type of the system time as short as possible
   
@@ -1833,13 +1879,13 @@ application.
 In the AVR environment, an ISR is implemented using the macro \ident{ISR}
 as function prototype. A specific interrupt source is associated with the
 ISR by the macro's parameter. The name of the interrupt source is stated.
-(A pre-defined, \uC{} dependent list of those exists, please refer to
-\refATmegaManual, section 14.) In \rtos{} the parameter of macro
-\ident{ISR}, the name of the interrupt source, is implemented as other
-macro \ident{RTOS\_ISR\_SYSTEM\_TIMER\_TIC},
-which is defined in the application owned configuration file
-\refRTOSConfigH. By simply changing the macro definition any other
-interrupt source can be chosen.
+A pre-defined, micro controller dependent list of available interrupt
+sources exists, please refer to \refATmegaManual, section 14. In \rtos{}
+the parameter of macro \ident{ISR}, the name of the interrupt source, is
+implemented as other macro \ident{RTOS\_ISR\_SYSTEM\_TIMER\_TIC}, which is
+defined in the application owned configuration file \refRTOSConfigH. By
+simply changing the macro definition any other interrupt source can be
+chosen.
 
 Typically, a few hardware related operations are needed to make a
 peripheral device a useful interrupt source. In case of timers, the timing
@@ -1847,16 +1893,17 @@ conditions have to be stated (how often to see an interrupt); and
 generally, most peripherals require to set a so called interrupt mask bit
 in order to enable it as interrupt source.
 
-The \rtos{} standard configuration uses timer 2 as it is in the Arduino
+The \rtos{} standard configuration uses timer 2 as is in the Arduino
 standard configuration. Arduino uses this timer for PWM output and has
 chosen appropriate settings. The only thing \rtos{} adds to the
 configuration of the timer is to set the interrupt mask bit of the
-overflow event. The Arduino configuration causes an overflow event about
-every 2~ms.\footnote{The precise value can be found as a macro in the
-\rtos{} configuration file \refRTOSConfigH. Changing the definition of
-this macro belongs to the code adaptations, which are required if the
-system timer interrupt is reconfigured.} This is thus the system clock of
-\rtos{}.
+overflow event. The frequency of the interrupt is not changed the Arduino
+PWM functionality is not affected at all. The Arduino configuration causes
+an overflow event about every 2~ms.\footnote{The precise value can be
+found as a macro in the \rtos{} configuration file \refRTOSConfigH.
+Changing the definition of this macro belongs to the code adaptations,
+which are required if the system timer interrupt is reconfigured.} This is
+thus the standard system clock of \rtos{}.
 
 The hardware configuration of the interrupt source is done in the void
 function \ident{rtos\_enable\-IRQ\-Ti\-mer\-Tic}. The function is
@@ -1909,10 +1956,10 @@ meaning this particular event gets; it should never be set by an ordinary
 task.
 
 The existing ISR is associated with the interrupt source your application
-needs by means of macro \ident{RTOS\_ISR\_USER\_00}. The value of this
+demands by means of macro \ident{RTOS\_ISR\_USER\_00}. The value of this
 macro is set to the name of the interrupt source. A table of available
 interrupt sources is found in the manual of your specific controller, see
-e.g. \refATmegaManual, section 14, for the \uC{} of the Arduino Mega
+e.g. \refATmegaManual, section 14, for the micro controller of the Arduino Mega
 board.
 
 The switch \ident{RTOS\_USE\_APPL\_INTERRUPT\_00} and the macro
@@ -1936,9 +1983,13 @@ when the system timer of \rtos{} is already running. This means that all
 multi-tasking considerations already take effect. You need to anticipate
 task switches and resulting race conditions. Actually, the invocation of
 \ident{rtos\_enableIRQUser00} is done early from within the idle task,
-just before \ident{loop} is executed the very first time. Consider to use
-the function pair \ident{rtos\_en\-ter/leave\-Cri\-ti\-cal\-Sec\-tion} to
-sort out all possible problems.
+just before \ident{loop} is executed the very first time.\footnote{Take
+care designing your application: If you define a set of tasks, which do
+not leave any time for ideling your application interrupts won't be safely
+started. Take a set of always due round robin tasks as an example.
+Consider to start those tasks with a delay.} Consider to use the function
+pair \ident{rtos\_en\-ter/leave\-Cri\-ti\-cal\-Sec\-tion} to sort out all
+possible problems.
 
 \begin{lstlisting}[float, caption={Initialization of an application interrupt},
 label=lstEnableAppInt, captionpos=b]
@@ -1965,12 +2016,13 @@ to be made by the application programmer. The function pair
 re-enables all those interrupts, which may lead to a task switch -- which
 your interrupt evidently belongs to (see section
 \ref{secEnterLeaveCritSec}). The functions need to additionally inhibit
-and re-enable the interrupts you chose as source. They are implemented as
+and re-enable the interrupts you choose as source. They are implemented as
 macros in the application owned configuration file \refRTOSConfigH{} and
-can thus be changed easily. Please consider that
-\ident{rtos\_leave\-Cri\-ti\-cal\-Sec\-tion} partly implements what
-\ident{rtos\_enableIRQUser00} is expected to do, refer to listing
-\ref{lstEnableAppInt} for more.
+can thus be changed easily.
+
+Please consider that \ident{rtos\_leave\-Cri\-ti\-cal\-Sec\-tion} partly
+implements what \ident{rtos\_enableIRQUser00} is expected to do, refer to
+listing \ref{lstEnableAppInt} for more.
 
 The second available application interrupt 1 is handled accordingly, you
 just have to replace the index 00 by 01 in all function and macro names
@@ -1982,20 +2034,20 @@ referred to before.
 
 \rtos{} has been developed on an Arduino Mega 2560 board and this is the
 only supported board so far. There are some obvious dependencies on the
-\uC:
+micro controller:
 \begin{itemize}
   \item The size of the program counter is three Byte for an ATmega2560
     but only two Byte for some other derivates
-  \item The availability of peripheral devices depends on the \uC{} and
+  \item The availability of peripheral devices depends on the micro controller and
     moreover,
-  \item the naming of the registers may differ between \uC{}s even for the
+  \item the naming of the registers may differ between micro controllers even for the
     same peripheral.
 \end{itemize}
 The implementation of \rtos{} uses a preprocessor switch based on the
 macro \ident{\_\_AVR\_ATmega2560\_\_} from the AVR library anywhere we have
 such an obvious platform dependency. The else case is "implemented" as
 error directive so that you are directly pointed to all these code locations
-by simply doing a compilation with another \uC{} selected in the makefile.
+by simply doing a compilation with another micro controller selected in the makefile.
 
 All code locations, where such an error directive is placed are easy and
 straight forward to modify. You will find some guidance in the code
@@ -2007,7 +2059,7 @@ dependencies than currently anticipated in the code. This can only be
 found out by doing the migration and testing. Feedback is welcome.
 
 The makefile controlled build process depends on the Arduino board, too.
-An obvious change is the specification of the \uC{} in use when compiling
+An obvious change is the specification of the micro controller in use when compiling
 the code. However, there are more changes required in the makefile. Please
 refer to section \ref{secMakefileSelectBoard} for more.
 
@@ -2025,16 +2077,16 @@ length. All priority classes use a list of identical length. This has been
 decided just because of the limitations of constant compile time
 expressions and macros. The code would run without any change if the
 rectangular array holding all lists would be replaced by a linear array of
-pointers, which are initialized to point to class-individual linear arrays.
-This construction would save RAM space in applications which have priority
-classes of significantly differing size. Besides some saved RAM and the
-less transparent initialization on application side\footnote{We don't like
-to do dynamic initialization using a loop and a call of \ident{malloc}
-inside in an embedded environment. This would probably consume RAM space
-on the heap in the same magnitude than what can be saved by the changed
-layout of the data structure.} there's absolutely no difference of
-both approaches and therefore the urgency for this change is not high
-enough to actually do it.
+pointers, which are initialized to point to class-individual linear
+arrays. This construction would save RAM space in applications which have
+priority classes of significantly differing size. Besides some saved RAM
+and the less transparent initialization on application side\footnote{We
+don't like to do dynamic initialization using a loop and a call of
+\ident{malloc} inside in an embedded environment. This would probably
+consume administrative RAM space on the heap in the same magnitude than
+what can be saved by the changed layout of the \rtos{} data structure.}
+there's absolutely no difference of both approaches and therefore the
+urgency of this change isn't considered high enough to actually do it.
 
 Currently, the idle task is described by an additional object in the task
 array -- although it lacks most of the properties of a true task.
@@ -2046,16 +2098,15 @@ saved.
 
 The priority of a task could be switched at runtime if only the arrays are
 large enough -- but this is anyway in the responsibility of the
-application. (Condensed array implementation by pointers to
-in\-di\-vi\-dual arrays became impossible in this scenario.) The
-implementation is simple as it is close to existing code. The API function
-would be implemented as software interrupt similar to the suspend
-commands. The active task would be taken out of its class list and put at
-the end of the targeted class list. The list lengths would be adapted
-accordingly. Then the normal step of looking for the now most due task and
-making this the active one would end the operation. \ident{rtos\_setEvent}
-would probably be the best fitting starting point of the implementation.
-This idea has not been implemented as we don't see a use case for it.
+application. The implementation is simple as it is close to existing code.
+The API function would be implemented as software interrupt similar to the
+suspend commands. The active task would be taken out of its class list and
+put at the end of the targeted class list. The list lengths would be
+adapted accordingly. Then the normal step of looking for the now most due
+task and making this the active one would end the operation.
+\ident{rtos\_setEvent} would probably be the best fitting starting point
+of the implementation. This idea has not been implemented as we don't see
+a use case for it.
 
 Currently, the round robin time (including round robin mode on/off by
 setting the time to 0) is predetermined at compile time -- but without any
@@ -2067,7 +2118,7 @@ round robin counter.
 
 There's no strong technical reason, why a task should not end. At the
 moment the return address of a task function is the reset address of the
-\uC{}. By modifying \ident{prepareTaskStack} it could become any other
+micro controller. By modifying \ident{prepareTaskStack} it could become any other
 address, e.g. the address of a function implemented similar to the suspend
 commands. It would not put the active task into the list of suspended
 tasks but in a new list of terminated tasks. This list is required as task
@@ -2079,7 +2130,7 @@ Starting a new task at runtime would mean to let \ident{prepareTaskStack}
 operate on a currently unused task object and to place the object in a
 critical section into the list of suspended tasks. As currently, the
 application is responsible for obeying the size of the lists, in
-particular if there's still room in the priority class.
+particular if there's still room in the targeted priority class.
 
 Since we do not want to introduce dynamic memory allocation into the
 application, any started task needs to be pre-configured. It has to be
@@ -2130,3 +2181,23 @@ strongly resemble the current event handling and significant parts of the
 existing event code could be used for mutexes without changes. Because of
 this, the next release of \rtos{} will likely support at least mutexes if
 not semaphores.
+
+Last but not least, the measurement of the system load is an important
+development tool for RTOS applications. The system load gives a indication
+of the average usage of the CPU, i.e. the time the CPU spends on task
+execution in comparison to the time left, its idle time. This value
+completes the information provided by the API function
+\ident{rtos\_getTaskOverrunCounter}. An accurate measurement of this
+quantity is difficult and \rtos{} doesn't offer it. However, a sample
+implementation of a system load measurement has been made as part of one
+of the test cases. There are barely prerequisites to apply the
+implementation without changes in your \rtos{} application. Just copy the
+header and source code file into your application folder and call function
+\ident{gsl\_getSystemLoad}. Please refer to \refGSLSystemLoadH{} and
+\refGSLSystemLoadC{} for details.
+
+The proposed implementation has not been integrated into \rtos{} itself as
+it has the disadvantage of either consuming all the system idle time or
+only returning estimated samples of the system load. It depends on the
+application design and the configuration of the function how well the
+samples match the reality.

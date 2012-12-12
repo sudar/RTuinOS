@@ -119,7 +119,7 @@ static volatile uint32_t _cntLoopsT0_C2 = 0
 /** The application interrupt handler counts missing interrupt events (timeouts) as errors. */
 static volatile uint16_t _errT0_C2 = 0;
 
-/** Input for the blink-task: If it is triggered, it'll read this varaible and produce a
+/** Input for the blink-task: If it is triggered, it'll read this variable and produce a
     sequence of flashes of according length. */
 static volatile uint8_t _blink_noFlashes = 0;
    
