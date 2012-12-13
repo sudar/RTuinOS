@@ -378,15 +378,15 @@ typedef struct
  * Local prototypes
  */
 
-void RTOS_DEFAULT_FCT rtos_enableIRQTimerTic(void);
+RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void);
 static RTOS_TRUE_FCT bool onTimerTic(void);
 static RTOS_TRUE_FCT bool setEvent(uint16_t eventVec);
-volatile RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
-static void RTOS_TRUE_FCT waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
-volatile uint16_t RTOS_NAKED_FCT rtos_waitForEvent( uint16_t eventMask
-                                                  , bool all
-                                                  , uintTime_t timeout
-                                                  );
+RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
+static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
+                                         , bool all
+                                         , uintTime_t timeout
+                                         );
 
 
 /*
@@ -1090,7 +1090,7 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
 # error This code must not be compiled with optimization off. See source code comments for more
 #endif
 
-volatile void rtos_setEvent(uint16_t eventVec)
+void rtos_setEvent(uint16_t eventVec)
 {
     /* This function is a pseudo-software interrupt. A true interrupt had reset the global
        interrupt enable flag, we inhibit any interrupts now. */
@@ -1357,7 +1357,7 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 # error This code must not be compiled with optimization off. See source code comments for more
 #endif
 
-volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 {
     /* This function is a pseudo-software interrupt. A true interrupt had reset the global
        interrupt enable flag, we inhibit any interrupts now. */
