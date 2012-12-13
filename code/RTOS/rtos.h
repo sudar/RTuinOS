@@ -264,10 +264,10 @@ void rtos_initRTOS(void);
 
 /* Post a set of events to all suspended tasks. Suspend the current task if the events
    release another task of higher priority. */
-volatile void rtos_setEvent(uint16_t eventVec);
+void rtos_setEvent(uint16_t eventVec);
 
 /* Suspend task until a combination of events appears or a timeout elapses. */
-volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
 
 /* How often could a real time task not be reactivated timely? */
 uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, bool doReset);
