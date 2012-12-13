@@ -194,18 +194,18 @@
     The shorter the type the less the system overhead. Be aware that many operations in
     the kernel are time based.\n
       The longer the type the larger is the maximum ratio of period times of slowest and
-    fastest task. This maximum ratio is half the maxmum number. If you implement tasks of
-    e.g. 10ms, 100ms and 1000ms, this could be handeld with a uint8_t. If you want to have
-    an additional 1ms task, uint8 will no longer suffice, you need at least uint16_t.
+    fastest task. This maximum ratio is half the maximum number. If you implement tasks of
+    e.g. 10 ms, 100 ms and 1000 ms, this could be handled with a uint8_t. If you want to have
+    an additional 1 ms task, uint8 will no longer suffice, you need at least uint16_t.
     (uint32_t is probably never useful.)\n
       The longer the type the higher can the resolution of timeout timers be chosen when
     waiting for events. The resolution is the tic frequency of the system time. With an 8
     Bit system time one would probably choose a tic frequency identical to the repetition
     speed of the fastest task (or at least only higher by a small factor). Then, this task
     can only specify a timeout which ends at the next regular due time of the task. The
-    statement made before needs refinement: The cylce time of the system time limits the
-    ratio of the period time of the slowest task and the resolution of timeout
-    specifications.\n
+    statement made before needs refinement: Half the maximum number of the chosen data type
+    is the possible maximum of the ratio of the period time of the slowest task and the
+    resolution of timeout specifications.\n
       The shorter the type the higher the probability of not recognizing task overruns when
     implementing the use case mentioned before: Due to the cyclic character of the time
     definition a time in the past is seen as a time in the future, if it is past more than
@@ -229,6 +229,9 @@
     integer types.\n
       The argument of the macro, which actually makes the required typedefs is set to
     either 8, 16 or 32; the meaning is number of bits.
+      @remark
+    Please find a more detailed discussion of the configuration of the system time data
+    type in the RTuinOS manual.
       @remark
     Please ignore the appendix _DOXYGEN_TAG in the displayed name of the macro. This is a
     work around as the doxygen parser gets confused about the true (nested) macro syntax.
