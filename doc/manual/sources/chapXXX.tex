@@ -1,4 +1,5 @@
 \chapter{How does \rtos{} work?}
+\label{secHowDoesRTuinOSWork}
 
 In a traditional sketch, the function \ident{loop} defines all actions
 which have to be executed. The execution of the code is strictly
@@ -685,7 +686,7 @@ code.
 
 The variable \ident{postedEventVec} is cleared to null when activating the
 task, i.e. when doing the task switch to this task. Now it is prepared for
-the next cycle active $\rightarrow$ due $\rightarrow$ active or active
+the next cycle active $\rightarrow$ due $\rightarrow$ active, or active
 $\rightarrow$ suspended $\rightarrow$ due $\rightarrow$ active
 respectively.
 
@@ -1222,9 +1223,11 @@ When implementing the functional code always be aware of the discussion of
 protecting the access to data shared between tasks; please refer to
 section \ref{secEnterLeaveCritSec}.
 
-Compile your application using the generic makefile. If you placed all
-your code in the single folder created at the beginning, all you have to
-do now is to run
+Compile your application using the generic makefile. Double-check your
+environment: The make tool needs to be on the Windows search path and
+variable \ident{ARDUINO\_HOME} needs to point to your Arduino installation (see
+section \ref{secPrerequisites}). If you placed all your code in the single
+folder created at the beginning, all you have to do now is to run
 
 \verb+make -s APP=myFolderName clean build+
 
@@ -1292,6 +1295,7 @@ presence may be restricted to a development compilation configuration.
 
 
 \subsection{Prerequisites}
+\label{secPrerequisites}
 
 The name of the makefile is GNUmakefile. It is located in the root
 directory of the \rtos{} installation. The makefile is compatible with the
@@ -1519,125 +1523,6 @@ To overcome the problem you need to run the makefile with target
 configuration. The required directories are created and the problems
 should disappear. The directories are not deleted by a \ident{clean} or
 \ident{rebuild}.
-
-
-\section{Usage of Arduino Libraries}
-
-The biggest problem using \rtos{} is the lack of adequate multi-tasking
-libraries. It's not generally forbidden to still use the Arduino libraries
-but this introduces some risks. 
-
-For some reasons an existing library function can not be used just like
-that:
-
-Particularly when addressing to hardware devices, strict timing conditions
-can exist. In an RTOS, when a task is suspend for an unpredicted while,
-this can make an operation timeout and fail. However, even in a single
-threaded system, the code execution speed is not fully predictable as it
-depends on compiler settings and interruptions by all the system
-interrupts. Particularly, if serving the hardware device is done in a task
-of high priority the discontinuity of the code execution should not be
-that much worse that a timeout becomes a severe risk. Accordingly, time
-critical code should not be placed in the idle task.
-
-Existing library functions could use static data, i.e. data which is not
-local to the invocation of the function. This can be data defined using
-the keyword \verb+static+ but also hardware registers, which do exist only
-in a single, global instance. In this case arbitrary invocation from
-different tasks will surely produce unpredictable results including the
-chance of a crash. Since most Arduino library functions deal with hardware
-entities, it's highly probable that they belong to this group.
-
-Using the Arduino libraries is still possible if your tasks cooperatively
-share the global entities. If there's e.g. only one task which serves the
-PWM outputs and which lets other tasks access them only indirectly -- via
-application owned, safely implemented inter-task communication.
-
-A specific example is the global object \ident{Serial}, which performs
-high level, stream based communication via USB. There's obviously no
-chance to access this channel in an uncontrolled, arbitrary fashion by
-several tasks. However, if only a single tasks does the console output at
-a time it works fine, even if this task is the most heavily interrupted
-idle task. By experience, \ident{Serial} is quite tolerant against timing
-discontinuities of the invoking code and can be used for debugging purpose
-during application development.
-
-Even more, \ident{Serial} is implemented as blocking function; the call of
-e.g. \ident{println} returns only after all characters have been processed.
-Therefore the object can be successfully passed on from one task to another
-after return from a \ident{println}. Any task gets its turn to write a
-message. This can be done by a shared flag indicating the availability
-(mutual exclusion by a semaphore) or by non-preemptive, cooperative
-multitasking.
-
-When \rtos{}' function \ident{setup} is executed, no multi-tasking is
-active yet. Here you can use the Arduino libraries without more. In
-particular, you can initialize all required ports and devices and the
-communication with \ident{Serial}.
-
-It's similar for library \ident{LiquidCrystal}. The implementation is
-basically thread-safe; the library can be used. Of course, the tasks must
-cooperatively implement a mutual exclusion when accessing the display. The
-source code contains some hardware-required delays, which are of
-course not implemented RTOS conform and which could be replaced by
-\ident{rtos\_delay} as an improvement of the library for \rtos. 
-
-The delay is implemented using Arduino's library function
-\ident{delayMicroseconds}, which is based on a CPU consuming waiting loop.
-This does not necessarily mean that task switches are inhibited or
-delayed; just avoid to use the library in a task of high priority.
-Nonetheless, the CPU time is lost; these function calls raise the CPU load
-without need.\footnote{Arduino's delay function \ident{delay}
-is different. It compares the desired return time with the
-global system time, which is updated by an interrupt. If a task using
-\ident{delay} is interrupted by other tasks and if the time it gets
-re-activated again is ahead the desired return time it'll not continue to
-loop and consume the CPU like \ident{delayMicroseconds} would.}
-
-Most of the significant, CPU consuming delays occur in the initialization
-of the display and this can be done in \ident{setup} before multitasking
-actually takes place. The only other undesired delays are found in the
-control commands \ident{clear} and \ident{home} -- if these are avoided or
-if their waste of CPU time causes no pain there's no concern to use
-\ident{LiquidCrystal} from \rtos{} tasks.\footnote{At point of release
-this still needs to be proven by testing. The data is written into the
-display chip by toggling one of its inputs up and down as a clock signal.
-The implementation ensures a minimum time for the clock impulse. Due to
-task switching it can however be arbitrarily prolonged. Whether the
-hardware of the display accepts this is still unclear. If it gets
-confused, the few clock commands would need to be put into a critical
-section.}
-
-Despite of all, using a library developed for single tasking in a
-multi-tasking environment remains a risk, which must not be taken in a
-production system. In a production system, any library function needs to
-be reviewed before using it. Fortunately, all Arduino code is available as
-source code, so that a code review can be done.
-
-%DEBUG compilation and particularly ASSERT requires initialization of Serial
-%Note on ASSERT: Serial, wait, reset
-
-
-\subsection{Changes of Arduino's \ident{main} Function}
-
-The file main.cpp of the Arduino standard sketch has been replaced by
-main.c of \rtos. The implementation of the contained function \ident{main}
-is nearly the same. The standard sketch finally enters a short, infinite
-loop, which repeatedly invokes the application's "task-function"
-\ident{loop}. The same loop continues to exist in \rtos{} (although it has
-been moved to the end of \ident{rtos\_initRTOS}) with one major change: In
-the standard sketch the loop contains the following code, which is
-executed alternatingly with function \ident{loop}:
-\begin{verbatim}
-		if (serialEventRun) serialEventRun();
-\end{verbatim}
-We are not sure about the meaning of this code and which library
-functionality depends on it. Moreover, we can't per se be sure that it
-cooperates well with \rtos{}' multitasking and decided not to put it into
-the \rtos{} code. Whoever knows to need it can try to place the statement
-into function \ident{loop} of his \rtos{} application. Now, the behavior
-is just the same as in the standard sketch -- besides all the obvious
-differences because of task switches.
 
 
 \section{Configuring the System Time}
@@ -2029,6 +1914,125 @@ just have to replace the index 00 by 01 in all function and macro names
 referred to before.
 
 
+\section{Usage of Arduino Libraries}
+
+The biggest problem using \rtos{} is the lack of adequate multi-tasking
+libraries. It's not generally forbidden to still use the Arduino libraries
+but this introduces some risks. 
+
+For some reasons an existing library function can not be used just like
+that:
+
+Particularly when addressing to hardware devices, strict timing conditions
+can exist. In an RTOS, when a task is suspend for an unpredicted while,
+this can make an operation timeout and fail. However, even in a single
+threaded system, the code execution speed is not fully predictable as it
+depends on compiler settings and interruptions by all the system
+interrupts. Particularly, if serving the hardware device is done in a task
+of high priority the discontinuity of the code execution should not be
+that much worse that a timeout becomes a severe risk. Accordingly, time
+critical code should not be placed in the idle task.
+
+Existing library functions could use static data, i.e. data which is not
+local to the invocation of the function. This can be data defined using
+the keyword \verb+static+ but also hardware registers, which do exist only
+in a single, global instance. In this case arbitrary invocation from
+different tasks will surely produce unpredictable results including the
+chance of a crash. Since most Arduino library functions deal with hardware
+entities, it's highly probable that they belong to this group.
+
+Using the Arduino libraries is still possible if your tasks cooperatively
+share the global entities. If there's e.g. only one task which serves the
+PWM outputs and which lets other tasks access them only indirectly -- via
+application owned, safely implemented inter-task communication.
+
+A specific example is the global object \ident{Serial}, which performs
+high level, stream based communication via USB. There's obviously no
+chance to access this channel in an uncontrolled, arbitrary fashion by
+several tasks. However, if only a single tasks does the console output at
+a time it works fine, even if this task is the most heavily interrupted
+idle task. By experience, \ident{Serial} is quite tolerant against timing
+discontinuities of the invoking code and can be used for debugging purpose
+during application development.
+
+Even more, \ident{Serial} is implemented as blocking function; the call of
+e.g. \ident{println} returns only after all characters have been processed.
+Therefore the object can be successfully passed on from one task to another
+after return from a \ident{println}. Any task gets its turn to write a
+message. This can be done by a shared flag indicating the availability
+(mutual exclusion by a semaphore) or by non-preemptive, cooperative
+multitasking.
+
+When \rtos{}' function \ident{setup} is executed, no multi-tasking is
+active yet. Here you can use the Arduino libraries without more. In
+particular, you can initialize all required ports and devices and the
+communication with \ident{Serial}.
+
+It's similar for library \ident{LiquidCrystal}. The implementation is
+basically thread-safe; the library can be used. Of course, the tasks must
+cooperatively implement a mutual exclusion when accessing the display. The
+source code contains some hardware-required delays, which are of
+course not implemented RTOS conform and which could be replaced by
+\ident{rtos\_delay} as an improvement of the library for \rtos. 
+
+The delay is implemented using Arduino's library function
+\ident{delayMicroseconds}, which is based on a CPU consuming waiting loop.
+This does not necessarily mean that task switches are inhibited or
+delayed; just avoid to use the library in a task of high priority.
+Nonetheless, the CPU time is lost; these function calls raise the CPU load
+without need.\footnote{Arduino's delay function \ident{delay}
+is different. It compares the desired return time with the
+global system time, which is updated by an interrupt. If a task using
+\ident{delay} is interrupted by other tasks and if the time it gets
+re-activated again is ahead the desired return time it'll not continue to
+loop and consume the CPU like \ident{delayMicroseconds} would.}
+
+Most of the significant, CPU consuming delays occur in the initialization
+of the display and this can be done in \ident{setup} before multitasking
+actually takes place. The only other undesired delays are found in the
+control commands \ident{clear} and \ident{home} -- if these are avoided or
+if their waste of CPU time causes no pain there's no concern to use
+\ident{LiquidCrystal} from \rtos{} tasks.\footnote{At point of release
+this still needs to be proven by testing. The data is written into the
+display chip by toggling one of its inputs up and down as a clock signal.
+The implementation ensures a minimum time for the clock impulse. Due to
+task switching it can however be arbitrarily prolonged. Whether the
+hardware of the display accepts this is still unclear. If it gets
+confused, the few clock commands would need to be put into a critical
+section.}
+
+Despite of all, using a library developed for single tasking in a
+multi-tasking environment remains a risk, which must not be taken in a
+production system. In a production system, any library function needs to
+be reviewed before using it. Fortunately, all Arduino code is available as
+source code, so that a code review can be done.
+
+%DEBUG compilation and particularly ASSERT requires initialization of Serial
+%Note on ASSERT: Serial, wait, reset
+
+
+\subsection{Changes of Arduino's \ident{main} Function}
+
+The file main.cpp of the Arduino standard sketch has been replaced by
+main.c of \rtos. The implementation of the contained function \ident{main}
+is nearly the same. The standard sketch finally enters a short, infinite
+loop, which repeatedly invokes the application's "task-function"
+\ident{loop}. The same loop continues to exist in \rtos{} (although it has
+been moved to the end of \ident{rtos\_initRTOS}) with one major change: In
+the standard sketch the loop contains the following code, which is
+executed alternatingly with function \ident{loop}:
+\begin{verbatim}
+		if (serialEventRun) serialEventRun();
+\end{verbatim}
+We are not sure about the meaning of this code and which library
+functionality depends on it. Moreover, we can't per se be sure that it
+cooperates well with \rtos{}' multitasking and decided not to put it into
+the \rtos{} code. Whoever knows to need it can try to place the statement
+into function \ident{loop} of his \rtos{} application. Now, the behavior
+is just the same as in the standard sketch -- besides all the obvious
+differences because of task switches.
+
+
 \section{Support of different Arduino Boards}
 \label{secArduinoBoards}
 
@@ -2183,18 +2187,18 @@ this, the next release of \rtos{} will likely support at least mutexes if
 not semaphores.
 
 Last but not least, the measurement of the system load is an important
-development tool for RTOS applications. The system load gives a indication
-of the average usage of the CPU, i.e. the time the CPU spends on task
-execution in comparison to the time left, its idle time. This value
-completes the information provided by the API function
+development tool for RTOS applications. The system load gives an
+indication of the average usage of the CPU, i.e. the time the CPU spends
+on task execution in comparison to the time left, its idle time. This
+value completes the information provided by the API function
 \ident{rtos\_getTaskOverrunCounter}. An accurate measurement of this
 quantity is difficult and \rtos{} doesn't offer it. However, a sample
 implementation of a system load measurement has been made as part of one
 of the test cases. There are barely prerequisites to apply the
 implementation without changes in your \rtos{} application. Just copy the
 header and source code file into your application folder and call function
-\ident{gsl\_getSystemLoad}. Please refer to \refGSLSystemLoadH{} and
-\refGSLSystemLoadC{} for details.
+\ident{gsl\_getSystemLoad} from the idle task. Please refer to
+\refGSLSystemLoadH{} and \refGSLSystemLoadC{} for details.
 
 The proposed implementation has not been integrated into \rtos{} itself as
 it has the disadvantage of either consuming all the system idle time or

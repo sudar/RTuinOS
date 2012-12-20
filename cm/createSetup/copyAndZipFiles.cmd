@@ -32,6 +32,7 @@ xcopy /S doc\manual\manual.pdf %output%\doc\manual
 xcopy /S doc\manual\readMe.txt %output%\doc\manual
 xcopy /S doc\manual\*.tex %output%\doc\manual
 xcopy /S doc\manual\*.jpg %output%\doc\manual
+xcopy /S doc\manual\*.png %output%\doc\manual
 
 :: The source code
 mkdir %output%\code
