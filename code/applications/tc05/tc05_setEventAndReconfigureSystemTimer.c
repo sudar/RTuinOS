@@ -3,7 +3,7 @@
  *   Test case 05 of RTuinOS. Several tasks of different priority are defined. Task
  * switches are partly controlled by posted events and counted and reported in the idle
  * task.\n
- *   A task of low priority wait for events posted by the idle task.\n
+ *   A task of low priority waits for events posted by the idle task.\n
  *   A task of high priority is triggered once by an event posted by a second task of low
  * priority. The triggering task is a regular task of high frequency. The dependent,
  * triggered task is expected to cycle synchronously.\n
@@ -15,19 +15,20 @@
  *   Observations:\n
  * The waitForEvent operation in the slow task T00_C0 times out irregularly. The
  * asynchronous idle task posts the event sometimes but not frequently enough to satisfy
- * the task. Due to the irregularity of the idle task we see more or less timeout events.\n
+ * the task. Due to the irregularity of the idle task we see more or fewer timeout
+ * events.\n
  *   The code inside the tasks proves that the second task of low priority is tightly
  * coupled with the task of high priority. The display of the counters on the console seems
  * to indicate the opposite. However, this is a multitasking effect only: The often
  * interrupted idle task samples the data of the different tasks at different times and
  * does not apply a critical section to synchronize the data.\n
- *   The limitations of the recognition of task overruns can be seen in the slow task T00_C0.
- * It has a cycle time of more than half the system timer (the 8 Bit timer is chosen) and
- * then there's a significant probability of seeing overruns which actually aren't any. The
- * code in the task proves the correct task timing.\n
- *   The display of the task stack consumption is demonstrated. To prove operability, one
- * the task T00_C0 invokes a subroutine only after a while. The console output shows a
- * related decrease of the stack reserve.
+ *   The limitations of the recognition of task overruns can be seen in the slow task
+ * T00_C0. It has a cycle time of more than half the system timer (the 8 Bit timer is
+ * chosen) and then there's a significant probability of seeing overruns which actually
+ * aren't any. The code in the task proves the correct task timing.\n
+ *   The display of the task stack consumption is demonstrated. To prove operability the
+ * task T00_C0 invokes a subroutine only after a while. The console output shows a related
+ * decrease of the stack reserve.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -271,7 +272,12 @@ static void task00_class00(uint16_t initCondition)
             ++ _task00_C0_cntWaitTimeout;
         }
 
-        /* This tasks cycles with the lowest frequency, once per system timer cycle. */
+        /* This tasks cycles with the lowest frequency, once per system timer cycle.
+            CAUTION: Normally, this is not permitted. If the suspend time is more than
+           half the range of the data type chosen for its system time RTuinOS is no longer
+           capable to safely recognize task overruns. False recognitions would lead to bad
+           task timing as the corrective action is to make the (only seemingly) late task
+           due immediately. */
         rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 0);
 
         /* A task period of more than half the system timer cycle leads to a high

@@ -185,7 +185,10 @@
  * absolute time at which this task had been resumed. This time is defined by the last
  * recent call of either this function or \a rtos_waitForEvent with parameter
  * #RTOS_EVT_ABSOLUTE_TIMER. In the very first call of the function it refers to the point
- * in time the task was started.
+ * in time the task was started.\n
+ *   The value of \a deltaTimeTillRelease must neither be 0 nor exceed half the range of
+ * the data type configured for the system time. Otherwise a false task overrun recognition
+ * and bad task timing could result. Please, refer to the RTuinOS manual for details.
  *   @remark
  * This function actually is a macro calling \a rtos_waitForEvent using fixed parameters.
  *   @see rtos_waitForEvent
@@ -264,10 +267,10 @@ void rtos_initRTOS(void);
 
 /* Post a set of events to all suspended tasks. Suspend the current task if the events
    release another task of higher priority. */
-volatile void rtos_setEvent(uint16_t eventVec);
+void rtos_setEvent(uint16_t eventVec);
 
 /* Suspend task until a combination of events appears or a timeout elapses. */
-volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
 
 /* How often could a real time task not be reactivated timely? */
 uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, bool doReset);

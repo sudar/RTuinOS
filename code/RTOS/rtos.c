@@ -378,15 +378,15 @@ typedef struct
  * Local prototypes
  */
 
-void RTOS_DEFAULT_FCT rtos_enableIRQTimerTic(void);
+RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void);
 static RTOS_TRUE_FCT bool onTimerTic(void);
 static RTOS_TRUE_FCT bool setEvent(uint16_t eventVec);
-volatile RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
-static void RTOS_TRUE_FCT waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
-volatile uint16_t RTOS_NAKED_FCT rtos_waitForEvent( uint16_t eventMask
-                                                  , bool all
-                                                  , uintTime_t timeout
-                                                  );
+RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
+static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
+                                         , bool all
+                                         , uintTime_t timeout
+                                         );
 
 
 /*
@@ -1090,7 +1090,7 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
 # error This code must not be compiled with optimization off. See source code comments for more
 #endif
 
-volatile void rtos_setEvent(uint16_t eventVec)
+void rtos_setEvent(uint16_t eventVec)
 {
     /* This function is a pseudo-software interrupt. A true interrupt had reset the global
        interrupt enable flag, we inhibit any interrupts now. */
@@ -1324,8 +1324,9 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  *   The absolute time the task becomes due again at latest. The time designation is
  * relative; it refers to the last recent absolute time at which this task had been
  * resumed. See #rtos_suspendTaskTillTime for details.\n
- *   Now specifying 0 means that the timeout elapses as late as possible - after a complete
- * cycle of the system timer.\n
+ *   Now the range of the parameter is 1 till the half the range of the data type which is
+ * configured for the system time, e.g. 127 in case of uint8_t. Otherwise proper task
+ * timing can't be guaranteed.\n
  *   If neither #RTOS_EVT_DELAY_TIMER nor #RTOS_EVT_ABSOLUTE_TIMER is set in the event mask,
  * this parameter should be zero.
  *   @remark
@@ -1340,7 +1341,7 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  * code. There's absolutely no work around; when the earliest code, we can write inside
  * the function is executed, the stack is already corrupted in a harzardous way. A crash is
  * unavoidable.\n
- *   A (less helpful) discussion of the issue can be found at
+ *   A discussion of the issue can be found at
  * http://lists.gnu.org/archive/html/avr-gcc-list/2012-08/msg00014.html.\n
  *   To avoid this problem we forbid to compile the code with optimization off.
  * Nonetheless, who will ever know or understand under which circumstances, e.g. which
@@ -1357,7 +1358,7 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 # error This code must not be compiled with optimization off. See source code comments for more
 #endif
 
-volatile uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 {
     /* This function is a pseudo-software interrupt. A true interrupt had reset the global
        interrupt enable flag, we inhibit any interrupts now. */
