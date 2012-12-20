@@ -1,12 +1,13 @@
 Dear Arduino Fans,
 
-I've made a small RTOS for Arduino, called RTuinOS.
+I've made a small Real Time Operation System (RTOS) for Arduino, called
+RTuinOS.
 
 Meanwhile a number of test cases are running stable and I decided to
-publish it now. Instead of lots of explanation, I put the chapter
-"introduction" of the manual here. Please find the complete installation
-(including the complete manual) attached to this thread. The manual should
-be your starting point of reading.
+publish it now. Instead of lots of explanation I put chapter "Introduction"
+of the manual here. Please find the complete installation (including the
+complete manual) attached to this thread. The manual should be your
+starting point of reading.
 
 Thank you for your kind interest in RTuinOS; your feedback is welcome.
 
@@ -35,8 +36,8 @@ Furthermore, using a real time system the program could coincidentally and
 regularly update a display to provide feedback - at the same or any other
 rate. Regular, time based programming can be done without the need of CPU
 consuming waiting loops as used in the implementation of Arduino's library
-function delay. Real time operating systems characterize the professional
-use of micro controllers.
+functions delay and delayMicroseconds. Real time operating systems
+characterize the professional use of micro controllers.
 
 RTuinOS is a small real time operating system (RTOS) for the Arduino
 environment. It is simple to use and fits well into the existing Arduino
@@ -87,18 +88,30 @@ RTuinOS is organized as a package which combines the RTuinOS source file
 with some sample applications which are the test cases at the same time.
 The source code of each sample application is held in a separate folder,
 named tc<nn>. Any of these can be selected for compilation. You may add
-more folders, holding the source code of your RTuinOS application. A
+more folders, holding the source code of your RTuinOS applications. A
 starting point of your application folder can be a copy of any of the
 folders tc<nn>. The compilation always is the same. Run the makefile,
 where the name of the folder (which doesn't need to be tc<nn>) is an
-option of the command line. See the manual for more.
+option on the command line. Refer to the manual for more.
 
 The most relevant document to read is the manual of RTuinOS, found as
 manual.pdf. The manual introduces the basic concept of RTuinOS and gives
-an overview of its features and limitations. Some core considerations of
-the implementation are highlighted, but the relevant documentation of the
-implementation is the code itself. It is commented using doxygen tags
-(www.doxygen.org); the compiled doxygen documentation is what you see here
-but it contains only the documentation of the global objects of RTuinOS.
-To understand the implementation you will have to inspect the source code
-itself, please refer to rtos.c, rtos.h and rtos.config.template.h.
+an overview of its features and limitations:
+
+Chapter 2 explains the basic principles of operation. Some core
+considerations of the implementation are highlighted, but the relevant
+documentation of the implementation is the code itself. It is commented
+using doxygen (www.doxygen.org) tags; the compiled doxygen documentation
+is part of this project. It contains only the documentation of the global
+objects of RTuinOS; to fully understand the implementation you will have
+to inspect the source code itself, please refer to [1], [2], [3].
+
+Chapter 3 lists and documents all elements of RTuinOS' API.
+
+Chapter 4 explains how to write a well-working RTuinOS-application. The
+chapter starts with a short recipe, which guarantees soon success. Here is
+where you may start reading if you are already familiar with the concept
+of an RTOS.
+
+The manual closes with chapter 5, which gives an overview of possible
+improvements and still missing and maybe later released features.

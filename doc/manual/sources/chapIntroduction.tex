@@ -90,13 +90,27 @@ doesn't need to be tc\textless nn\textgreater) is an option on the
 command line. See section \ref{secMakefile} for more.
 
 This document introduces the basic concept of \rtos{} and gives an
-overview of its features and limitations. Some core considerations of the
-implementation are highlighted, but the relevant documentation of the
-implementation is the code itself. It is commented using
-doxygen\footnote{See http://www.doxygen.org} tags; the compiled doxygen
-documentation is part of this project but will contain only the
-documentation of the global objects of \rtos. To understand the
-implementation you will have to inspect the source code itself, please
+overview of its features and limitations:
+
+Chapter \ref{secHowDoesRTuinOSWork} explains the basic principles of
+operation. Some core considerations of the implementation are highlighted,
+but the relevant documentation of the implementation is the code itself.
+It is commented using doxygen\footnote{See http://www.doxygen.org} tags;
+the compiled doxygen documentation is part of this project. It contains
+only the documentation of the global objects of \rtos; to fully understand
+the implementation you will have to inspect the source code itself, please
 refer to \refRTOSC, \refRTOSH, \refRTOSConfigTemplateH.
 
+
+Chapter \ref{secAPI} lists and documents all elements of
+\rtos' API.
+
+Chapter \ref{secHowToWriteApp} explains how to write a well-working
+\rtos-application. The chapter starts with a short recipe, which
+guarantees soon success. Here is where you may start reading if you are
+already familiar with the concept of an RTOS.
+
+The manual closes with chapter \ref{secOutlook}, which gives an overview
+of possible improvements and still missing and maybe later released
+features.
 
