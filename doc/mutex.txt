@@ -1,0 +1,50 @@
+Semaphor, Mutex: Semaphor erfordert 8 Bit Zählvariable
+
+Mutex kann durch Bit addressiert werden, dann könnte es in bestehenden
+Event Mechanismus eingefügt werden. Wenn auf ein Mutex gewartet wird, gibt
+release einen (Semaphor n) Task frei.
+
+Wegen der Priorisierung muss die Warteliste nun sortiert sein.
+
+Unterschied zu Events: Es muss darüber Buch geführt werden. Wenn ein Event
+Bit gesetzt wird, muss zugeordneter Zähler dekrementiert werden. Bei
+reinen Mutex kann das dann offensichtlich über Bitmasken etwas optimaler
+gehandhabt werden. Evtl. also beide Features einführen.
+
+Freigabe Mutex/Semaphor: Alle Zähler bei gesetzten Bits inkrementieren.
+Das ist ein einfaches Or für Mutex (mit einem assert auf Nullbits zuvor).
+Dann alle Tasks durchgehen, ob sie auf ein Mutex warten. Wenn ja, Zähler
+wieder runter, Bit in des Tasks EventMask setzen. Doppelte Schleife: Über
+alle Semaphore in der Maske und jeweils über alle suspendierten Tasks. Bei
+Mutex kann Scheife über alle Sempahore wahrscheinlich entfallen, da durch
+Bitoperation alle auf einmal handhabbar sein sollten. Abschließend die
+Suspended-Liste ganz normal nach neuen Due-Tasks absuchen. Dieser Code
+kann wiederverwendet werden.
+
+Semaphore: Erfordern Anwendungsabhängige Initialisierung der Zähler. Mutexe
+könnten grundsätzlich auf 1 initialisiert werden.
+
+Semaphor/Mutex/Event in der EventMask wird nicht spezifiziert. Der
+Anwender bestimmt durch Auswahl der API Funktion, was er haben möchte. Man
+kann dasselbe Bit als Event setzen, oder als Mutex/Sem freigeben.
+
+Semaphor mit mehreren Zählern anfordern gelingt so nicht mehr. Die
+Suspended-Liste kann dann nicht mehr mit Bits arbeiten, sondern es müsste
+auch hier mit Zählern gearbeitet werden. Due, wenn Zähler auf Null
+angekommen ist. Die meisten Anwendungen werden aber nur jeweils eine
+Instanz anfordern, das ist akzeptabel. In anderen Fällen muss die
+Anwendung zwei Instanzen nach einander anfordern. Das ist wegen der
+Timeoutbehandlung und evtl. möglichen Kombination mit anderen
+Events/Mutexes absolut nicht dasselbe, aber in der Praxis auf jeden Fall
+ausreichend.
+
+Anfordern: Wenn Zähler größer Null, dekrementieren und return zum selben
+Task. Sonst an prioritätsabhängig richtiger Position in die
+Suspended-Liste einfügen und nach neuem aktiven Task sehen (bestehenden
+Code weiterverwenden). Hier kann nicht ohne weiteres eine Mischung von
+Evenets und Mutexen erfolgen. Wir fordern eine Menge an, wobei nun alle
+Elemente Mutexe sein sollten, wenn die Sache nicht zu kompliziert werden
+soll. Sonst wäre zwei Masken zu übergeben. Eine Eventmenge führt
+grundsätzlich zum Suspend und wird in der EventMask gesetzt. Für alle
+Mutex/sem in der Mutexmenge: Wenn Zähler größer Null, dann dekrementieren.
+Ansonsten Bit in der EventMask setzen und in Suspend-Liste einfügen.
