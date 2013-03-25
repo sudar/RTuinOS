@@ -7,7 +7,7 @@ RTuinOS itself in the manual.
 
 The manual is written in LaTeX. The applied TeX compiler is MikTeX
 (MiKTeX-pdfTeX 2.9.3962 (1.40.11) (MiKTeX 2.9)). This tool needs to be
-installed; pdflatex.exe needs to be found in the Windows search path.
+installed; pdflatex.exe needs to be found on the Windows search path.
 
 Once the environment is set up you just need to open a Command Prompt (or
 Powershell), cd here into directory manual and type:
