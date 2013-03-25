@@ -12,9 +12,10 @@
  *   Observations:\n
  *   The frequency of the timer interrupts (timers 4 and 5 have been used) can be varied in
  * a broad range. In this test case the application interrupt 00 is configured to occur
- * with 1024 Hz, which is more than double the frequency of the RTuinOS system clock, which
- * determine the highest frequency of calling regular tasks. This doesn't matter, the
- * scheduler easily handles task switches faster than the system timer.\n
+ * with about 1 kHz. This is more than double the frequency of the RTuinOS system clock,
+ * which determines the highest frequency of calling regular tasks. Having an even faster
+ * application interrupt doesn't matter, the scheduler easily handles task switches faster
+ * than the system timer.\n
  *   The start of the application interrupts is significantly delayed. The first interrupts
  * are seen only 2 or 3 seconds after reset. The application reports an according number of
  * timeouts at the beginning. This is a strange, still unexplained behavior. It's probably
