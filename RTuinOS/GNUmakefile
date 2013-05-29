@@ -1,4 +1,9 @@
-# 
+# TODO:
+#   Test "pit-fall" with too large code size for short jumps
+#   Update documentation with respect to: Nesecity of makeDir and clean in case of switch
+# of application, CONFIGURATION became CONFIG
+
+#
 # Generic Makefile for Arduino Project
 #
 # Compilation and linkage of C(++) code into binary files and upload to the controller.
@@ -6,7 +11,7 @@
 # Help on the syntax of this makefile is got at
 # http://www.gnu.org/software/make/manual/make.pdf.
 #
-# Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+# Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
 #
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Lesser General Public License as published by the
@@ -23,7 +28,7 @@
 #
 # Preconditions
 # =============
-# 
+#
 # The makefile is intended to be executed by the GNU make utility coming along with the
 # Arduino package.
 #   The name of the project can be assigned to the makefile macro project, see heading part
@@ -41,15 +46,10 @@
 # by environment variable ARDUINO_HOME. The variable holds the name of the folder which
 # arduino.exe is located in. Caution: This variable is not created by the original Arduino
 # installation process but needs to be created manually.
-#   The Windows path needs to contain the location of the GNU compiler/linker etc. This is
-# the folder containing e.g. avr-gcc.exe down in the Arduino installation. Typically this
-# can be derived from the environment variable as $(ARDUINO_HOME)\hardware\tools\avr\bin,
-# but we want to have these tools directly available. You will probably have to extend the
-# Windows environment variable PATH.
 #   For your convenience, the Windows path should contain the location of the GNU make
 # processor. If you name this file either makefile or GNUmakefile you will just have to
 # type "make" in order to get your make process running. Typically, the path to the
-# executable is $(ARDUINO_HOME)\hardware\tools\avr\utils\bin. Consider to extend the
+# executable is $(ARDUINO_HOME)hardware/tools/avr/utils/bin. Consider to extend the
 # Windows environment variable PATH accordingly.
 #   This makefile does not handle blanks in any paths or file names. Please rename your
 # paths and files accordingly prior to using this makefile.
@@ -66,7 +66,7 @@
 #
 # Options may be passed on the command line.
 #   The follow options may be used:
-#   CONFIGURATION: The compile configuration is one out of DEBUG (default) or PRODUCTION. By
+#   CONFIG: The compile configuration is one out of DEBUG (default) or PRODUCTION. By
 # means of defining or undefining macros for the C compiler, different code configurations
 # can be produced. Please refer to the comments below to get an explanation of the meaning
 # of the supported configurations and which according #defines have to be used in the C
@@ -108,35 +108,40 @@ targetMicroController := atmega2560
 
 # Communication port to be used by the flash tool. The default may be adjusted here to your
 # environment or you may override the variable setting on the make processor's command line.
-COM_PORT ?= \\.\COM8
+COM_PORT ?= COM8
+
+# Exclusion list: Basically all C/C++ source files found in the source directories are
+# compiled and linked. Here, you can specify some particular files, which must not be
+# included in the build.
+#   TODO Edit the blank separated list of excluded file names (without path).
+cFileListExcl := dummy.cpp
+
 
 # RTuinOS can't be linked without an application. Select which one. Here, all applications
 # are considered test cases.
 APP ?= TC01
 ifneq ($(origin APP), command line)
-    $(warning Please select an RTuinOS application. Add APP=<myRTuinOSApp> to the command line, otherwise $(APP) will be used)
+    $(warning Please select an RTuinOS application. Add APP=<myRTuinOSApp> to the command line, otherwise APP=$(APP) will be used)
 endif
 
 # Access help as default target or by several names. This target needs to be the first one
 # in this file.
 .PHONY: h help targets usage
 h help targets usage:
-	$(info Usage: make [-s] APP=<myRTuinOSApplication> [CONFIGURATION=<configuration>] [COM_PORT=<portName>] {<target>})
-	$(info where <myRTuinOSApplication> is the name of the source code folder of your application, located at code\applications)
+	$(info Usage: make [-s] APP=<myRTuinOSApplication> [CONFIG=<configuration>] [COM_PORT=<portName>] {<target>})
+	$(info where <myRTuinOSApplication> is the name of the source code folder of your application, located at code/applications)
 	$(info and where <configuration> is one out of DEBUG (default) or PRODUCTION)
 	$(info and <portName> is an a USB port identifying string to be used for the upload.)
 	$(info The default port ($(COM_PORT)) is configured in the makefile. See help of avrdude for more.)
 	$(info Available targets are:)
-	$(info   - build: Build the hex files for flashing onto uC. Includes all others but help)
-	$(info   - compile: Compile all C(++) source files, but no linkage etc.)
+	$(info   - build: Build the hex files for flashing onto uC)
 	$(info   - clean: Delete all application files generated by the build process)
 	$(info   - cleanCore: Delete the compilation core.a of the Arduino standard library files)
-	$(info   - makeDir: Create folder structure for generated files. Needs to be called first)
 	$(info   - rebuild: Same as clean and build together)
-	$(info   - bin\<configuration>\obj\<cFileName>.o: Compile a single C(++) module)
+	$(info   - bin/<configuration>/obj/<cFileName>.o: Compile a single C(++) module)
 	$(info   - upload: Build first, then flash the device)
+	$(info   - makeDir: Create folder structure for generated files)
 	$(info   - help: Print this help)
-	$(info CAUTION: Always use a clean first when switching between applications)
 	$(error)
 
 # Concept of compilation configurations:
@@ -145,33 +150,36 @@ h help targets usage:
 # - no self-test code
 # - no debug output
 # - no assertions
-# 
+#
 # Configuration DEBUG:
 # + all self-test code
 # + debug output possible
 # + all assertions active
 #
-CONFIGURATION ?= DEBUG
-ifeq ($(CONFIGURATION), PRODUCTION)
+CONFIG ?= DEBUG
+ifeq ($(CONFIG), PRODUCTION)
     $(info Compiling production code)
-    cDefines := -D$(CONFIGURATION) -DNDEBUG
-else ifeq ($(CONFIGURATION), DEBUG)
+    cDefines := -D$(CONFIG) -DNDEBUG
+else ifeq ($(CONFIG), DEBUG)
     $(info Compiling debug code)
-    cDefines := -D$(CONFIGURATION)
+    cDefines := -D$(CONFIG)
 else
-    $(error Please set CONFIGURATION to either PRODUCTION or DEBUG)
+    $(error Please set CONFIG to either PRODUCTION or DEBUG)
 endif
-#$(info $(CONFIGURATION) $(cDefines))
+#$(info $(CONFIG) $(cDefines))
 
 # Where to place all generated products?
-targetDir := bin\$(CONFIGURATION)
-coreDir := bin\core
+targetDir := bin/$(APP)/$(CONFIG)/
+coreDir := bin/core/
 
 # Double-check environment.
 #   The original Arduino code is referenced in the Arduino installation directory. By
 # default the location of this is not known. To run this makefile an environment variable
 # needs to point to the right location. This is checked now.
-ifndef ARDUINO_HOME
+ifdef ARDUINO_HOME
+    # Ensure a trailing slash at the end of this externally set variabale.
+	ARDUINO_HOME := $(patsubst %/,%,$(subst \,/,$(ARDUINO_HOME)))/
+else
     $(error Variable ARDUINO_HOME needs to be set prior to running this makefile. It points \
 to the installation directory of the Arduino environment, where arduino.exe is located)
 endif
@@ -179,38 +187,32 @@ endif
 
 # Ensure existence of target directory.
 .PHONY: makeDir
-makeDir: | $(targetDir)\obj $(coreDir)\obj
-$(targetDir)\obj:
-	-mkdir $(targetDir)     2> nul
-	-mkdir $(targetDir)\obj 2> nul
-$(coreDir)\obj:
-	-mkdir $(coreDir)     2> nul
-	-mkdir $(coreDir)\obj 2> nul
+makeDir: | $(targetDir)obj $(coreDir)obj
+
+$(targetDir)obj $(coreDir)obj:
+	-$(mkdir) -p $@
 
 # Determine the list of files to be compiled.
 #   Specify a blank separated list of directories holding source files.
-srcDirList := code\RTOS code\applications\$(APP) #
+srcDirList := code/RTOS/ code/applications/$(APP)/
 # Create a blank separated list file patterns matching possible source files.
-srcPatternList := $(foreach path, $(srcDirList), $(addprefix $(path), \*.c \*.cpp))
+srcPatternList := $(foreach path, $(srcDirList), $(addprefix $(path), *.c *.cpp))
 # Get all files matching the source file patterns in the directory list. Caution: The
 # wildcard function will not accept Windows style paths.
-cFileList := $(wildcard $(subst \,/, $(srcPatternList)))
+cFileList := $(wildcard $(srcPatternList))
 # Remove the various paths. We assume unique file names across paths and will search for
 # the files later. This strongly simplyfies the compilation rules. (If source file names
 # were not unique we could by the way not use a shared folder obj for all binaries.)
 cFileList := $(notdir $(cFileList))
 # Exclusion list: Replace names of those files to be excluded from build by the empty
-# string.
-#   TODO Edit the blank separated list of excluded files.
-cFileListExcl := dummy.cpp
-# Subtract each excluded file from the list.
+# string. Subtract each excluded file from the list.
 cFileList := $(filter-out $(cFileListExcl), $(cFileList))
 #$(info cFileList := $(cFileList))
 # Translate C source file names in target binary files by altering the extension and adding
 # path information.
 objList := $(cFileList:.cpp=.o)
 objList := $(objList:.c=.o)
-objListWithPath := $(addprefix $(targetDir)\obj\, $(objList))
+objListWithPath := $(addprefix $(targetDir)obj/, $(objList))
 #$(info objListWithPath := $(objListWithPath))
 
 # Include the dependency files. Do this with a failure tolerant include operation - the
@@ -221,29 +223,35 @@ objListWithPath := $(addprefix $(targetDir)\obj\, $(objList))
 # rules for compilation.
 VPATH := $(srcDirList) 																\
          $(targetDir)                                                               \
-         $(ARDUINO_HOME)\hardware\arduino\cores\arduino                             \
-         $(ARDUINO_HOME)\libraries\LiquidCrystal
+         $(ARDUINO_HOME)hardware/arduino/cores/arduino/                             \
+         $(ARDUINO_HOME)libraries/LiquidCrystal/
 
 # Pattern rules for compilation of C and C++ source files.
 #   TODO You may need to add more include paths here.
-cFlags =  $(cDefines) -c -g -Os -Wall -fno-exceptions -ffunction-sections           \
+cFlags =  $(cDefines) -c -Wall -fno-exceptions -ffunction-sections                  \
           -fdata-sections -mmcu=$(targetMicroController) -DF_CPU=16000000L -MMD     \
           -DUSB_VID=null -DUSB_PID=null -DARDUINO=101                               \
           -Wa,-a=$(patsubst %.o,%.lst,$@)                                           \
           -Winline                                                                  \
           $(foreach path, $(srcDirList), -I$(path))                                 \
-          -I$(ARDUINO_HOME)\hardware\arduino\cores\arduino                          \
-          -I$(ARDUINO_HOME)\hardware\arduino\variants\mega                          \
-          -I$(ARDUINO_HOME)\libraries\LiquidCrystal                                 \
-          -I$(ARDUINO_HOME)\libraries\LiquidCrystal\utility
+          -I$(ARDUINO_HOME)hardware/arduino/cores/arduino/                          \
+          -I$(ARDUINO_HOME)hardware/arduino/variants/mega/                          \
+          -I$(ARDUINO_HOME)libraries/LiquidCrystal/                                 \
+          -I$(ARDUINO_HOME)libraries/LiquidCrystal/utility/
+ifeq ($(CONFIG),DEBUG)
+	cDbgFlags := -ggdb3 -Os
+else
+	cDbgFlags := -g -Os
+endif
+#$(info cFlags := $(cFlags))
 
-$(targetDir)\obj\\%.o: %.c
+$(targetDir)obj/%.o: %.c
 	$(info Compiling C file $<)
-	avr-g++ $(cFlags) -o $@ $<
+	$(avr-g++) $(cDbgFlags) $(cFlags) -o $@ $<
 
-$(targetDir)\obj\\%.o: %.cpp
+$(targetDir)obj/%.o: %.cpp
 	$(info Compiling C++ file $<)
-	avr-g++ $(cFlags) -o $@ $<
+	$(avr-g++) $(cDbgFlags) $(cFlags) -o $@ $<
 
 
 # Compile and link all (original) Arduino core files into libray core.a. Although not
@@ -254,76 +262,90 @@ $(targetDir)\obj\\%.o: %.cpp
 objListCore = WInterrupts.o wiring.o wiring_analog.o wiring_digital.o wiring_pulse.o    \
               wiring_shift.o CDC.o HardwareSerial.o HID.o IPAddress.o new.o      		\
               Print.o Stream.o Tone.o USBCore.o WMath.o WString.o LiquidCrystal.o
-objListCoreWithPath = $(addprefix $(coreDir)\obj\, $(objListCore))
+objListCoreWithPath = $(addprefix $(coreDir)obj/, $(objListCore))
 #$(info objListCoreWithPath := $(objListCoreWithPath))
 
-$(coreDir)\obj\\%.o: %.c
+$(coreDir)obj/%.o: %.c
 	$(info Compiling C file $<)
-	avr-g++ $(cFlags) -o $@ $<
+	$(avr-g++) -g -Os $(cFlags) -o $@ $<
 
-$(coreDir)\obj\\%.o: %.cpp
+$(coreDir)obj/%.o: %.cpp
 	$(info Compiling C++ file $<)
-	avr-g++ $(cFlags) -o $@ $<
+	$(avr-g++) -g -Os $(cFlags) -o $@ $<
 
-$(coreDir)\core.a: $(objListCoreWithPath)
-	avr-ar rcs $@ $^
+$(coreDir)core.a: $(objListCoreWithPath)
+	$(info Creating Arduino standard library $@)
+	$(avr-ar) rcs $@ $^
 
 
 # A general rule enforces rebuild if one of the configuration files changes
-$(objListWithPath) $(objListCoreWithPath): GNUmakefile
+#$(objListWithPath) $(objListCoreWithPath): GNUmakefile
 
 # Let the linker create the binary ELF file.
-#   Here we have serious pit-fall. We know from the Arduino IDE, that the compiled Arduino
-# standard files are bundled in the archive file core.a and that the program is linked
-# against this archive. We started doing the same. Following problem appears: The vector
-# table at the beginning of the code section uses short 12 Bit jumps to the implementation
-# of the interrupt service routines. These jumps can't be changed, as there's no source code
-# available. If we place core.a behind the object files of the program the size of the
-# program is limited by the 12 Bit jump from before till behind - which is unacceptable. If
-# we place core.a in front of the program's object files we end up with numerous unresolved
-# references since the linker doesn't seem to do two passes across an archive as naturally
-# for a set of object files. The work around is to not use the archive but to place all the
-# distinct object files into the command line. Now the object files from the Arduino files
-# may come first (i.e. safely inside the 12 Bit range) followed by the object files of the
-# program itself. We keep the file core.a nonetheless but only as a kind of structural
-# element of the compilation process. It is used as target of the Arduino file compilation
-# and as prerequisite for the linkage of the RTuinOS application. If it is up-to-date, we
-# can be sure, that all Arduino object file are also up-to-date.
+#   Here we have a serious pit-fall. We know from the Arduino IDE, that the compiled
+# Arduino standard files are bundled in the archive file core.a and that the program is
+# linked against this archive. We started doing the same. Following problem appears: The
+# vector table at the beginning of the code section uses short 12 Bit jumps to the
+# implementation of the interrupt service routines. These jumps can't be changed, as
+# there's no source code available. If we place core.a behind the object files of the
+# program the size of the program is limited by the 12 Bit jump from before till behind -
+# which is unacceptable. If we place core.a in front of the program's object files we end
+# up with numerous unresolved references since the linker doesn't seem to do two passes
+# across an archive as naturally for a set of object files. The work around is to not use
+# the archive but to place all the distinct object files into the command line. Now the
+# object files from the Arduino files may come first (i.e. safely inside the 12 Bit range)
+# followed by the object files of the program itself. We keep the file core.a nonetheless
+# but only as a kind of structural element of the compilation process. It is used as target
+# of the Arduino file compilation and as prerequisite for the linkage of the RTuinOS
+# application. If it is up-to-date, we can be sure, that all Arduino object file are also
+# up-to-date.
 #   Remark: It seems that only the vectors to the ISRs in HardwareSerial use short jumps.
 # The implementation of some other ISRs (e.g. in rtos.o) is definitly allowed to be more
 # than 4 kByte away from the vector table.
-lFlags = -Os -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)			\
+#   TODO The loader permits the usage of "--start-group archives --end-group" and it
+# permits to place the same archive repeatedly in the command line. These options should
+# solve the problem.
+#   Done: Both possibilities are accepted by the linker, the SW is built. However,
+# currently we don't have any example, where we would run into the mentioned problem - all
+# sample's code is too little. Therefore, we removed the first use of $< (before
+# $(objListWithPath)) in order to provoke the error in the future. If it pops up, we will
+# see if it disappears by reinserting the $<. The previous work around as commented above
+# looked like:
+#	$(avr-gcc) $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm       	\
+#              -Wl,-M > $(targetDir)$(project).map
+lFlags = -Os -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)		\
          --fatal-warnings --no-undefined --reduce-memory-overheads --stats
-$(targetDir)\$(project).elf: $(coreDir)\core.a $(objListWithPath)
-	$(info Linking project. Ouput is redirected to $(targetDir)\$(project).map)
-	avr-gcc $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm               \
-            -Wl,-M > $(targetDir)\$(project).map
-	avr-size -C --mcu=$(targetMicroController) $@
+$(targetDir)$(project).elf: $(coreDir)core.a $(objListWithPath)
+	$(info Linking project. Ouput is redirected to $(targetDir)$(project).map)
+	$(avr-gcc) $(lFlags) -o $@ $(objListWithPath) $(coreDir)core.a -lm       		\
+               -Wl,-M > $(targetDir)$(project).map
+	$(avr-size) -C --mcu=$(targetMicroController) $@
 
 # Derive eep and hex file formats from the ELF file.
-$(targetDir)\$(project).eep: $(targetDir)\$(project).elf
-	avr-objcopy -O ihex -j .eeprom --set-section-flags=.eeprom=alloc,load               \
+$(targetDir)$(project).eep: $(targetDir)$(project).elf
+	$(avr-objcopy) -O ihex -j .eeprom --set-section-flags=.eeprom=alloc,load        \
                 --no-change-warnings --change-section-lma .eeprom=0 $< $@
 
-$(targetDir)\$(project).hex: $(targetDir)\$(project).elf
-	avr-objcopy -O ihex -R .eeprom $< $@
+$(targetDir)$(project).hex: $(targetDir)$(project).elf
+	$(avr-objcopy) -O ihex -R .eeprom $< $@
 
 # Upload compiled software on the controller.
 #   Option -cWiring: The Arduino IDE uses a quite similar protocol which unfortunately
 # requires an additional, preparatory reset command. This protocol can't therefore be
 # applied in an automated process. Here we need to use protocol Wiring instead.
 .PHONY: upload
-upload: $(targetDir)\$(project).hex $(targetDir)\$(project).elf $(targetDir)\$(project).eep \
-          $(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf
-	avrdude -C$(ARDUINO_HOME)\hardware\tools\avr\etc\avrdude.conf -v                        \
-	        -p$(targetMicroController) -cWiring -P$(COM_PORT) -b115200 -D -Uflash:w:$<:i
-	avr-size -C --mcu=$(targetMicroController) $(targetDir)\$(project).elf
+upload: makeDir																				\
+        $(targetDir)$(project).hex $(targetDir)$(project).elf $(targetDir)$(project).eep	\
+        $(ARDUINO_HOME)hardware/tools/avr/etc/avrdude.conf
+	$(avrdude) -C$(ARDUINO_HOME)hardware/tools/avr/etc/avrdude.conf -v                      \
+	        -p$(targetMicroController) -cWiring -P$(COM_PORT) -b115200 -D                   \
+            -Uflash:w:$(targetDir)$(project).hex:i
+	$(avr-size) -C --mcu=$(targetMicroController) $(targetDir)$(project).elf
 
 
-# Run the complete build process with compilation, linkage and a2l and binary file
-# modifications.
+# Run the complete build process with compilation, linkage and binary file modifications.
 .PHONY: build
-build: $(targetDir)\$(project).eep $(targetDir)\$(project).hex
+build: makeDir $(targetDir)$(project).eep $(targetDir)$(project).hex
 
 # Rebuild all.
 .PHONY: rebuild
@@ -331,26 +353,43 @@ rebuild: clean build
 
 # Compile all C source files.
 .PHONY: compile
-compile: $(coreDir)\core.a $(objListWithPath)
+compile: makeDir $(coreDir)core.a $(objListWithPath)
 
 # Delete all application products ignoring (-) the return code from Windows.
-#   Caution: Using rm requires folder arduino-1.0.1\hardware\tools\avr\utils\bin to be in
-# the Windows search path.
-#	rm.exe -fr $(targetDir)
 .SILENT: clean
 .PHONY: clean
 clean:
-	-del /S/Q $(targetDir)\*.* 2> nul > nul
+	-$(rm) -f $(targetDir)$(project).* 2> nul
+	-$(rm) -fr $(targetDir)obj 2> nul
 
 # Delete the core compilation (Arduino standard files) ignoring (-) the return code from
 # Windows. This target is not part of clean as rebuilding the Arduino library is usually
 # not necessary during development of an application - you won't alter any Arduino files.
 # An exception would of course be the cahnge of a compilation flag, but changing the
 # makefile will anyway enforce a rebuild also of core.a.
-#   Caution: Using rm requires folder arduino-1.0.1\hardware\tools\avr\utils\bin to be in
-# the Windows search path.
-#	rm.exe -fr $(coreDir)
 .SILENT: cleanCore
 .PHONY: cleanCore
 cleanCore:
-	-del /S/Q $(coreDir)\*.*   2> nul > nul
+	-$(rm) -r $(coreDir)core.a 2> nul
+	-$(rm) -fr $(coreDir)obj 2> nul
+
+# Quite typical, the GNU tools reside on a system at several locations as they come along
+# with many applications. Hard to locate problems due to arbitrary order of references in
+# the Windows search PATH can easily reuslt. To avoid these problems we reference all tools
+# by absolute path. The path is known as we have the Arduino installation directory.
+make := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/make.exe
+mkdir := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/mkdir.exe
+rmdir := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/rmdir.exe
+cat := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/cat.exe
+echo := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/echo.exe
+rm := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/rm.exe
+gawk := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/gawk.exe
+awk := $(gawk)
+touch := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/touch.exe
+mv := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/mv.exe
+avr-gcc := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-gcc.exe
+avr-g++ := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-g++.exe
+avr-ar := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-ar.exe
+avr-objcopy := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-objcopy.exe
+avr-size := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-size.exe
+avrdude := $(ARDUINO_HOME)hardware/tools/avr/bin/avrdude
