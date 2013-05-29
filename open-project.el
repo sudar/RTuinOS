@@ -188,6 +188,9 @@ C and M files in the scope of this project."
   ) ; End of (let Prepare list of compile commands)
 
 
+  ; Select this project as default for new instances of the I-Explorer.
+  (shell-command (concat "setCurrentProject.cmd " project-path-win32 "code\\applications"))
+
   ; Start interaction with user by switching to and presenting the most relevant source
   ; directory.
   (cd project-path)
