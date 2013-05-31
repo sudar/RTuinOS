@@ -1,7 +1,7 @@
 /**
  * @file rtos.c
  *   Implementation of a Real Time Operating System for the Arduino Mega board in the
- * Arduino environment 1.0.1.\n
+ * Arduino environment 1.0.5.\n
  *   The implementation is dependent on the board (the controller) and the GNU C++ compiler
  * (thus the release of the Arduino environment) but should be easily portable to other
  * boards and Arduino releases. See manual for details.

@@ -1229,16 +1229,16 @@ variable \ident{ARDUINO\_HOME} needs to point to your Arduino installation (see
 section \ref{secPrerequisites}). If you placed all your code in the single
 folder created at the beginning, all you have to do now is to run
 
-\verb+make -s APP=myFolderName clean build+
+\verb+make -s APP=myFolderName build+
 
 Start your application using the makefile. Your Arduino board is connected
 via the USB cable. Be this COM6.\footnote{Use the Arduino IDE to find out
-to which port your board is connected. Typically, after connecting your board
+which port your board is connected to. Typically, after connecting your board
 it'll be the last port shown in menu Tools/Serial Port. Or open the
 Windows Device Manager and look at "Ports (COM \& LPT)". Here you find your
 connected board with name and assigned COM port.} Now run
 
-\verb+make -s APP=myFolderName COM_PORT=\\.\COM6 upload+
+\verb+make -s APP=myFolderName COM_PORT=COM6 upload+
 
 The \rtos{} source file \refRTOSC{} must not be touched at all. Just open
 it for reading if you what to understand how \rtos{} works.
@@ -1251,24 +1251,24 @@ it for reading if you what to understand how \rtos{} works.
 be compiled with your application. (Without application code you'd end up
 with unresolved externals when linking the code.) However, \rtos{} is
 distributed with some autonomous test cases which are true \rtos{}
-applications. All of these can be build and uploaded using the make tool,
+applications. All of these can be built and uploaded using the make tool,
 which is part of the Arduino installation and the makefile which is part
 of the \rtos{} distribution.
 
-You can organize your applications similar to the test cases and will then
-be able to use the makefile without changes for your application, too.
-Even if your application grows and needs a more complex folder structure
-than the test cases to keep the source code you will still be able to
-use the makefile, however with some simple changes.
+You can organize your applications similar to the test cases. Then you
+will be able to use the makefile without changes for your application,
+too. Even if your application grows and needs a more complex folder
+structure than the test cases to organize the source code you will still
+be able to use the makefile, however with some simple changes.
 
 Most often, you will do as follows: Open a Windows Command Prompt (or
 Powershell window) and cd to the root directory of the \rtos{} folder.
 This is where the file GNUmakefile is located. Connect your Arduino MEGA
-board to the USB port, e.g. port number 6.\footnote{Other boards need some
-code customization first. Please, refer to section
-\ref{secArduinoBoards}.} Now type
+board\footnote{Other boards need some code customization first. Please,
+refer to section \ref{secArduinoBoards}.} to the USB port, e.g. port
+number 6. Now type
 
-\verb+make -s APP=tc05 COM_PORT=\\.\COM6 upload+
+\verb+make -s APP=tc05 COM_PORT=COM6 upload+
 
 and test case (or application) \ident{tc05} is compiled and uploaded
 to the board. The Arduino board is reset and the \rtos{} application is
@@ -1299,26 +1299,27 @@ presence may be restricted to a development compilation configuration.
 
 The name of the makefile is GNUmakefile. It is located in the root
 directory of the \rtos{} installation. The makefile is compatible with the
-GNU make of Arduino 1.0.1, which is "GNU Make 3.81".
+GNU make of Arduino 1.0.5, which is "GNU Make 3.81".
 
-Caution: There are dozens of derivates of the make tool around and most
-of these are incompatible with respect to the syntax of the makefile. Even
-GNU make 3.80 won't work with \rtos' makefile as it didn't know the
-macro \verb+$(info)+ yet.
+Caution: There are dozens of derivates of the make tool around and most of
+these are incompatible with respect to the syntax of the makefile. Even
+GNU make 3.80 won't work with \rtos' makefile as it didn't know the macro
+\verb+$(info)+ yet. Furthermore, there are incompatible Windows ports of
+the GNU make tool, e.g. by MinGW and Cygwin.
 
 To run the make tool it might be required to add the path to the binary to
 the front of -- to avoid shadowing by an incompatible derivate of make --
 your Windows search path.\footnote{After installation, type make --version
-to find out.} Inside your Arduino 1.0.1 installation, you'll find the make
+to find out.} Inside your Arduino 1.0.5 installation, you'll find the make
 tool as
-arduino-1.0.1\textbackslash\-hard\-ware\textbackslash\-tools\textbackslash\-avr\textbackslash\-utils\textbackslash\-bin\textbackslash\-make.exe.
+arduino-1.0.5\textbackslash\-hard\-ware\textbackslash\-tools\textbackslash\-avr\textbackslash\-utils\textbackslash\-bin\textbackslash\-make.exe.
 
 The makefile compiles the Arduino standard source files to the standard
 library \ident{core.a}. To do so, it needs to know, where the Arduino sources
 -- which are not part of this project -- are located. It expects an
 environment variable \ident{ARDUINO\_HOME} to point to the Arduino
 installation directory, e.g.
-c:\textbackslash{}ProgramFiles\textbackslash\-arduino-1.0.1. You will
+c:\textbackslash{}ProgramFiles\textbackslash\-arduino-1.0.5. You will
 probably have to add such a variable to your system variables as it is not
 defined by the Arduino standard installation process.
 
@@ -1421,23 +1422,6 @@ during development, when configuration \ident{DEBUG} is used. Please see
 \refRTOSAssertH.
 
 
-\subsection{Switching Applications}
-
-Basically, switching work from one application to another just means to
-change the value of macro \ident{APP} in the command line of make; but
-please, in order to avoid running into severe, hard to find trouble, always
-start your work on another application with a \ident{clean} or
-\ident{rebuild} as target in the command line.
-
-Why do we need a rebuild all? Any \rtos{} application will use its own
-configuration; it'll have its own customized copy of
-\ident{rtos.config.h}. The compilation of \rtos{} strongly depends on this
-file. If you switch the application by changing the value of macro
-\ident{APP} in the command line make can't safely find out that there's
-another copy of \ident{rtos.config.h} in place. Therefore you need to
-explicitly command make to re-compile everything.
-
-
 \subsection{Selecting the Arduino Board}
 \label{secMakefileSelectBoard}
 
@@ -1478,7 +1462,7 @@ command line of avrdude instead of \verb+-cstk500v2+.
 The USB (or COM) port which is used for the connection between PC and
 Arduino board has to be known by the rule, which uploads (and flashes)
 the compiled and linked application. You can specify the port as part of
-the command line of the makefile (type e.g. \verb+COM_PORT=\\.\COM6+).
+the command line of the makefile (type e.g. \verb+COM_PORT=COM6+).
 
 However, in your specific environment you'll probably end up with the
 always same port designation, so it might be handy to choose this port
@@ -1501,28 +1485,7 @@ dependencies is not reliable and the compilation result could be bad.
 
 Consequently, in all cases of non-trivial changes of preprocessor macros
 and include statements you should always call the rules to rebuild the
-application. This is also mandatory if you switch from compiling one
-\rtos{} application (or test case) to compiling another one.
-
-
-\subsubsection{Building the required Output Directories}
-
-If you compile an \rtos{} application the very first time the directories
-intended to hold the compilation products will probably not exist on your
-machine yet. The makefile has a rule to create these directories but we
-didn't manage to integrate these rules into the normal rule hierarchy of
-compiling and linking.
-
-Even worse, the error message you get in case of missing folders won't
-lead you to the cause of the problem. Somewhat indirectly, the compiler
-complains about some dependency files which can't be created. This is
-caused by the file-write error because of the missing directories.
-
-To overcome the problem you need to run the makefile with target
-\ident{makeDir}. This has to be repeated for each compilation
-configuration. The required directories are created and the problems
-should disappear. The directories are not deleted by a \ident{clean} or
-\ident{rebuild}.
+application.
 
 
 \section{Configuring the System Time}
