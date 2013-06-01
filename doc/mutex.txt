@@ -301,3 +301,40 @@ Wenn das Konzept einer tiefergehenden Überprüfung standhält und die
 Komplexität der Implementierung handhabbar ist, sollte Konzept 1 trotz des
 deutlich höheren Aufwands und größeren Fehlschlagrisikos umgesetzt
 werden.
+
+
+Erste Hinweise zur Machbarkeit von Konzept 1
+
+Die Sortierung der Liste der Suspendierten kann problemlos als erstes
+implementiert werden. Alle Testfälle müssen danach unverändert laufen und
+temporärer Testcode könnte die jederzeitige Sortierung überprüfen.
+
+Problem: waitForEvent hat bislang bedingungslos suspendiert. Jetzt hängt
+es aber vom Zustand der Sync Objekte ab, ob es zur Suspendierung kommt
+oder nicht. Zu definieren ist zunächst, ob es bei Nicht-Suspendierung zum
+Wechsel Active->Due kommen soll bzw. nicht darf. Vorläufige Antwort: Es
+darf, aber besser wäre nicht. Wenn nicht, darf der zwangsläufige erste
+Schritt, die Suspendierung gar nicht erst ausgeführt werden. Wenn wohl,
+dann könnte er unverändert erfolgen, die Routine müsste aber wie setEvent
+bereits heute mit dem Aufruf checkForTaskActivation enden.
+
+Der Aufruf checkForTaskActivation sollte unverändert funktionieren, ist
+aber sub-optimal, da er alle Suspendierten auf Fälligkeit prüft. In neuen
+Kontext könnte aber nur die aufrufende, bisher aktive, soeben suspendierte
+Task für ein Fälligwerden infrage kommen. Der Code ist zu inperformant, um
+ihn bedingungslos zu verwenden.
+
+Beide Argumente zusammengelegt, kommt man zur Fallunterscheidung. Erst
+Sync Objekte behandeln, dabei festhalten, ob Suspendierung erforderlich.
+Ja, erforderlich, wenn wenigstens ein "normales" Event verlangt wird oder
+wenn wenigstens ein Sync Objekt nicht verfügbar ist. Wenn Suspendierung
+nicht erforderlich ist, dann Rücksprung (mit entsprechend gesetztem Return
+Code). Sonst weitermachen wie bisher, angefangen mit Suspendierung. Der
+erwähnte Return Code sollte immer die angeforderte Maske mit
+ausgeblendeten Timer-Bits sein, denn wenn wenigstens ein Bit nicht mit
+einem verfügbaren Sync Objekt korrespondierte, käme es nicht zum
+Rücksprung.
+
+Zu prüfen: Ist der bedingte Rücksprung mit den vorhanden "Code Patterns"
+umsetzbar? Kann der Return Code damit realisiert werden? (Oder kommt er
+immer aus der EventMsk?)
