@@ -1175,7 +1175,7 @@ static inline void storeResumeCondition( task_t * const pT
     {   
         /* This suspend command wants a reactivation at a certain time. The new time is
            assigned by the += in the conditional expression.
-             Task overrun detection: The new time must not more than half a cycle in the
+             Task overrun detection: The new time must be no more than half a cycle in the
            future. The test uses a signed comparison. The unsigned comparison >= 0x80 would be
            equivalent but probably less performant (TBC). */
         if((intTime_t)((pT->timeDueAt+=timeout) - _time) <= 0)
@@ -1375,6 +1375,7 @@ uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
        context switch if it is active. (The idle task has illicitly called a suspend
        command.) However, all implementation rates performance higher than failure
        tolerance, and so do we here. */
+    //assert(_pActiveTask != _pIdleTask);
        
     /* The actual implementation of the task switch logic is placed into a sub-routine in
        order to benefit from the compiler generated stack frame for local variables (in
