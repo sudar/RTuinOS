@@ -1421,6 +1421,12 @@ nothing if \ident{DEBUG} is not defined (as in configuration
 during development, when configuration \ident{DEBUG} is used. Please see
 \refRTOSAssertH.
 
+The configuration is chosen by the value of the makefile variable CONFIG.
+The default value is DEBUG but this may be overridden on the command line
+of the makefile; please find an example:
+
+\verb+make -s APP=myFolderName CONFIG=PRODUCTION COM_PORT=COM6 upload+
+
 
 \subsection{Selecting the Arduino Board}
 \label{secMakefileSelectBoard}
