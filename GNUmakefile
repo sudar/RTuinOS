@@ -1,7 +1,5 @@
 # TODO:
 #   Test "pit-fall" with too large code size for short jumps
-#   Update documentation with respect to: Nesecity of makeDir and clean in case of switch
-# of application, CONFIGURATION became CONFIG
 
 #
 # Generic Makefile for Arduino Project
