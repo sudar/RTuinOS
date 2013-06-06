@@ -39,6 +39,10 @@
     {                                                                                   \
         if(!(cond))                                                                     \
         {                                                                               \
+            asm volatile                                                                \
+            (                                                                           \
+                "sei \n\t"                                                              \
+            );                                                                          \
             volatile uint32_t u = 0x400000ul;                                           \
             Serial.print("Assertion failed in file " __FILE__ ", line ");               \
             Serial.println(__LINE__);                                                   \
