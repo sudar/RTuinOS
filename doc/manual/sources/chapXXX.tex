@@ -247,9 +247,8 @@ situations. The first one is the event explicitly posted by an application
 task. \rtos{} knows a predefined number of general purpose events, which
 can be posted by one task and which another task can wait for. The latter
 task suspends itself and specifies the event as resume condition. Under
-application determined conditions, the
-former task calls the \rtos{} API function \ident{rtos\_setEvent} and the latter
-task will resume. 
+application defined conditions, the former task calls the \rtos{} API
+function \ident{rtos\_setEvent} and the latter task will resume.
 
 In this situation it depends on the priorities of the two tasks how
 \ident{rtos\_setEvent} returns. If the event-setting task has the same or higher
@@ -280,6 +279,79 @@ another task or out of the suspend command of a task which became due
 meanwhile. If a task calls \ident{rtos\_setEvent} it doesn't need to
 return but could for example return out of the initially mentioned suspend
 command.
+
+
+\subsection{Events of Kind Mutex}
+\label{secExplicitlyPostEventMutex}
+
+An event can be a mutex, a synchronization object for mutual exclusion
+of tasks from a resource. The kind of an event is specified at compile
+time, it's part of the configuration of \rtos.
+
+If a mutex event is in the set of explicitly posted events its handling
+differs from ordinary events. While these are notified to all currently
+suspended tasks a mutex is notified to outermost one task. If one or more
+suspended tasks are currently waiting for the mutex the one belonging to
+the highest priority class will get it. If there are several suspended
+tasks of this class the one will get it, which waits for it the longest.
+If there's no suspended task waiting for the mutex it is stored inside
+\rtos{} and can be acquired later by any task. Saving a posted event for
+future use is different to ordinary events: They have no effect if nobody
+is currently waiting for them.
+
+Under all conditions a posted mutex event is recorded somewhere and the
+calling task looses the ownership of the mutex. Either the ownership is
+immediately passed to a waiting task or the mutex is stored in the kernel
+for later acquisition. The application needs to keep track of this.
+Normally, owning a mutex means to a task to have access to a related,
+managed resource. In \rtos{} it can't be queried by an API call who
+currently is the owner of a mutex; actually \rtos{} isn't even aware of
+it. The task code needs to keep track about, e.g. by implementing a
+related Boolean variable.\footnote{Such a Boolean variable could be hidden
+a C++ class embedding all calls of \ident{rtos\_waitForEvent} and
+\ident{rtos\_setEvent} into member functions like \ident{acquireMutex} and
+\ident{releaseMutex}. Each task would have its own, local object of this
+class. However, this concept is simple only if waiting for combinations
+of events is excluded -- which won't be a painful restriction for most
+applications.}
+
+
+\subsection{Events of Kind Semaphore}
+\label{secExplicitlyPostEventSemaphore}
+
+An event can also be a semaphore, a synchronization object for managing access
+to a pool of resources shared between different tasks. The kind of an
+event is specified at compile time, it's part of the configuration of
+\rtos.
+
+If a semaphore event is in the set of explicitly posted events its
+handling differs from ordinary events. While these are notified to all
+currently suspended tasks a semaphore is notified to outermost one task.
+If one or more suspended tasks are currently waiting for the semaphore the
+one belonging to the highest priority class will get it. If there are
+several suspended tasks of this class the one will get it, which waits for
+it the longest. If there's no suspended task waiting for the semaphore the
+counter of the semaphore is incremented (the counter is implemented inside
+\rtos), indicating a released instance which is not required by any task
+at the time being but which can be acquired in the future. Saving a posted
+event for future use is different to ordinary events: They have no effect
+if nobody is currently waiting for them.
+
+Under all conditions a posted semaphore event is recorded somewhere, it's
+either notified to a waiting task or it's counted in the kernel, and the
+application needs to keep track of this. Normally, the acquired number of
+instances of a semaphore (or its counter values respectively) corresponds
+with the number of instances from a managed pool of resources the task
+was granted access to. The number of instances a task has accumulated
+across a series of \ident{rtos\_waitForEvent} and \ident{rtos\_setEvent}
+can't be queried by an API call; actually \rtos{} isn't even aware of it.
+The application code needs to keep track of, e.g. by implementing a
+related counter variable.\footnote{An appropriate way of doing could be a
+C++ class embedding all calls of \ident{rtos\_waitForEvent} and
+\ident{rtos\_setEvent} into member functions like \ident{acquireSemaphore}
+and \ident{releaseSemaphore}. However, this concept is simple only if
+waiting for combinations of events is excluded -- which is no painful
+restriction for most applications.}
 
 
 \section{Application Interrupts}
@@ -939,6 +1011,98 @@ last recent reference to the absolute timer. This would mean in our typical
 use case, that parameter \emph{when} becomes a constant. In every loop,
 the parameter simply is 1~[ms] in the call of \ident{rtos\_waitForEvent}.
 
+Please note, if a task waits for a set of events and it wants to be
+released when all events are posted to the task, then the condition
+\emph{all} does only refer to the application events (ordinary, mutex or
+semaphore) but not to a timer event. Timer events will still release the
+task as soon as they occur. The meaning of timer events being timeouts is
+not affected by the choice waiting for all or for any event.
+
+
+\subsection{Events of Kind Mutex}
+
+An event can be a mutex, a synchronization object for mutual exclusion
+of tasks from a resource. The kind of an event is specified at compile
+time, it's part of the configuration of \rtos.
+
+From the perspective of a task waiting for a mutex is just like waiting
+for ordinary events. The task is suspended until the mutex is available.
+This will be the case when the other task, which currently owns the mutex
+will release it using \ident{rtos\_setEvent}. Or immediately, if no other
+task currently owns the mutex. 
+
+If a task suspends waiting for a mutex it can happen that
+\ident{rtos\_waitForEvent} doesn't suspend the task but immediately
+returns. Please refer to section \ref{secNoteOnWaitingForMutexes} for
+more.
+
+
+\subsection{Events of Kind Semaphore}
+\label{secWaitForSemaphores}
+
+
+An event can be a semaphore, a synchronization object for managing access
+to a pool of resources shared between different tasks. The kind of an
+event is specified at compile time, it's part of the configuration of
+\rtos.
+
+Waiting for a semaphore and getting it means to decrement the semaphores
+internal count. The task is granted access to one instance of the
+resources which are managed by the semaphore.
+
+Please note, that handling semaphores as Boolean valued events (being
+there or not being there) hinders to provide a more generalized
+API to semaphores. In \rtos{} is by principle impossible to acquire several
+instances from the resource pool at once. An application which needs to
+have several instances is obliged to repeat the invocation of
+\ident{rtos\_waitForEvent} that number of times. Although this eventually
+leads to the required number of instances it's not equivalent with respect
+to the distribution pattern of the shared resources.
+
+From the perspective of a task waiting for a semaphore is just like
+waiting for ordinary events. The task is suspended until one instance (or
+counter value respectively) of the semaphore is available. This will be
+the case when any other task releases such an instance using
+\ident{rtos\_setEvent}. Or immediately, if there's currently at least one
+instance left in the semaphore.
+
+If a task suspends waiting for a semaphore it can happen that
+\ident{rtos\_waitForEvent} doesn't suspend the calling task but
+immediately returns. Please refer to section
+\ref{secNoteOnWaitingForMutexes} for more.
+
+
+\subsection{Notes on waiting for Events of Kind Mutex or Semaphore}
+\label{secNoteOnWaitingForMutexes}
+
+It may happen that immediately available mutexes or semaphores satisfies
+the wait condition of the calling task: It waits for any event among which
+an immediately available mutex or semaphore. Or it waits for all events
+out of a set, but all of these are immediately available. If so, the call
+of function \ident{rtos\_waitForEvent} won't suspend the task. Instead
+\ident{rtos\_waitForEvent} simply returns like an ordinary sub-routine and
+the return value indicates the acquired mutexes and semaphores.
+
+If a task waits for one or more mutexes or semaphores it needs to evaluate
+the return code of the function. If a set bit corresponds to a mutex event
+the task is the new owner of this mutex. If a set bit corresponds to a
+semaphore event the task got access to one instance of the resource pool
+managed by this semaphore. It'll own the mutex or have access to the
+resource until it voluntarily releases the mutex or semaphore using
+\ident{rtos\_setEvent}. Since wait conditions can be complex, the return
+from the function as such is no safe indication that a mutex or semaphore
+has been acquired by the task. The simplest example is a wait for a mutex
+event with timeout and the timeout elapses before the mutex is released by
+the it owning task.
+
+Caution, properly keeping track of the ownership of mutexes and instances
+of semaphores is fully in the responsibility of the application. \rtos{}
+won't bother with who has which mutexes or semaphore. It'll accept a
+mutex/semaphore release command by any task regardless
+whether this task actually owns it or not. By means of the return value of
+\ident{rtos\_waitForEvent} \rtos{} just provides the information to the
+application to enable it to implement proper ownership handling.
+
 
 \subsection{\ident{rtos\_suspendTaskTillTime}}
 
@@ -979,19 +1143,31 @@ application interrupt events must be posted; there remain (dependent on
 the configuration of \rtos{}) twelve to fourteen events, which are
 directly handled by the application task code.
 
+There are three kinds of events: Ordinary events, mutex events and
+semaphore events. The type of each of the available events is defined at
+compile time as part of the configuration of \rtos{} done in~\refRTOSConfigH.
+
 There are predefined names for the available events, please refer to
-\refRTOSH. Regardless, you may also define your own, suitable names.
+\refRTOSH. Regardless, you may also define your own, suitable names. Each
+name is defined to be the value of the event bit; consequently, sets of
+events can be expressed by sums or binary OR (\verb+|+) terms of these
+names.
 
 A typical use case of application handled events are producer-consumer
 models. One task prepares some data and signals availability to the data
 consuming task by setting an event. Obviously, the consumer starts with
 waiting for this event.
 
-Be aware, an event is broad-casted only to the currently suspended tasks
+An ordinary event is broad-casted only to the currently suspended tasks
 and is not stored besides that. If a task suspends shortly after another
-one has posted an event, the suspended task will never receive this event
-and may stay suspended forever.
+one has posted such an event, the suspended task will never receive this
+event and may stay suspended forever.
 
+Mutex and semaphore events differ and are the better choice to handle
+inter-task communication in many use cases. Please, refer to sections
+\ref{secExplicitlyPostEventMutex} and
+\ref{secExplicitlyPostEventSemaphore} for details about the meaning and
+handling of these kinds of events.
 
 \section{Data access: \ident{rtos\_enter/leaveCriticalSection}}
 \label{secEnterLeaveCritSec}
