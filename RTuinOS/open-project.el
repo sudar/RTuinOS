@@ -189,7 +189,7 @@ C and M files in the scope of this project."
 
 
   ; Select this project as default for new instances of the I-Explorer.
-  (shell-command (concat "setCurrentProject.cmd " project-path-win32 "code\\applications"))
+  (shell-command (concat "setCurrentProject.cmd " project-path-win32 "code\\RTOS"))
 
   ; Start interaction with user by switching to and presenting the most relevant source
   ; directory.

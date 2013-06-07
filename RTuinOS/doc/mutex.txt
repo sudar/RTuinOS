@@ -338,3 +338,7 @@ Rücksprung.
 Zu prüfen: Ist der bedingte Rücksprung mit den vorhanden "Code Patterns"
 umsetzbar? Kann der Return Code damit realisiert werden? (Oder kommt er
 immer aus der EventMsk?)
+
+Prüfen: Ist das direkte nehmen von verfügbaren Mutexen/Semaphoren in jedem
+Fall korrekt im Hinblick auf priorisierte Vergabe? Kann es sein, dass eine
+höherpriore, jetzt nicht aktive Task vorberechtigt ist?
