@@ -61,6 +61,12 @@
     array. */
 #define IDLE_TASK_ID    (RTOS_NO_TASKS)
 
+/** A bit mask, which selects all the mutex events in an event vector. */
+#define MASK_EVT_IS_MUTEX   ((0x0001u<<(RTOS_NO_MUTEX_EVENTS))-1u)
+
+/** A bit mask, which selects all timer events in a vector of events. */
+#define MASK_EVT_IS_TIMER (RTOS_EVT_ABSOLUTE_TIMER | RTOS_EVT_DELAY_TIMER)
+
 /** A pattern byte, which is used as prefill byte of any task stack area. A simple and
     unexpensive stack usage check at runtime can be implemented by looking for up to where
     this pattern has been destroyed. Any value which is not the null and which is
@@ -208,6 +214,8 @@
       The routine depends on a reset global interrupt flag.\n
       The implementation must be compatible with a naked function. In particular, it must
     not define any local data! */
+    // TODO A single variable _tmpVarCxAsm should suffice if first the high bytes, then both low bytes are exchanged. Check, if there are other code locations where really both variables are required
+    // TODO Comment, why macros are split in two parts are no longer correct. Now we simply need only the second part for waitFor(Immediately available mutexes)
 #define SWITCH_CONTEXT                                                                      \
 {                                                                                           \
     /* Switch the stack pointer to the (saved) stack pointer of the new active task. */     \
@@ -230,7 +238,7 @@
 
 /** An important code pattern, which is used in every interrupt routine (including the
     suspend commands, which can be considered pseudo-software interrupts). Immediately
-    after a context switch, the code fragment decides whether the task we had switched to
+    after a context switch, the code fragment decides whether the task we switch to
     had been inactivated by a timer or application interrupt or by a suspend command.
     (Only) in the latter case the return value of the suspend command is put onto the
     stack. From there it'll be loaded into the CPU when ending the interrupt routine.\n
@@ -382,7 +390,7 @@ RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void);
 static RTOS_TRUE_FCT bool onTimerTic(void);
 static RTOS_TRUE_FCT bool setEvent(uint16_t eventVec);
 RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
-static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+static RTOS_TRUE_FCT bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
 RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
                                          , bool all
                                          , uintTime_t timeout
@@ -432,6 +440,13 @@ static task_t *_pSuspendedTaskAry[RTOS_NO_TASKS];
 
 /** Number of currently suspended tasks. */
 static uint8_t _noSuspendedTasks;
+
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+/** All of the mutex events are combined in a bit vector. The mutexes are initially
+    released, all according bits are set. All remainig bits are don't care bits. */
+// @todo Remove test code
+static uint16_t _mutexVec = 0;// MASK_EVT_IS_MUTEX;
+#endif
 
 /** Temporary data, internally used to pass information between assembly and C code. */
 volatile uint16_t _tmpVarAsmToC_u16;
@@ -622,18 +637,14 @@ static bool checkForTaskActivation(
            does not include the timer events. All postable events need to be set in both
            the mask and the vector of posted events OR any of the timer events in the mask
            are set in the vector of posted events. */
-/** \cond */
-#define TIMER_EVT_MASK (RTOS_EVT_ABSOLUTE_TIMER | RTOS_EVT_DELAY_TIMER)
-/** \endcond */
         eventVec = pT->postedEventVec;
         if((pT->waitForAnyEvent &&  eventVec != 0)
            ||  (!pT->waitForAnyEvent
-                &&  (((eventVec ^ pT->eventMask) & ~TIMER_EVT_MASK) == 0
-                     ||  (eventVec & pT->eventMask & TIMER_EVT_MASK) != 0
+                &&  (((eventVec ^ pT->eventMask) & ~MASK_EVT_IS_TIMER) == 0
+                     ||  (eventVec & pT->eventMask & MASK_EVT_IS_TIMER) != 0
                     )
                )
           )
-#undef TIMER_EVT_MASK
         {
             uint8_t u
                   , prio = pT->prioClass;
@@ -654,8 +665,13 @@ static bool checkForTaskActivation(
             _pDueTaskAryAry[prio][_noDueTasksAry[prio]++] = pT;
             -- _noSuspendedTasks;
             for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
+// @todo remove temporary test code
+{
                 _pSuspendedTaskAry[u] = _pSuspendedTaskAry[u+1];
-
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+ASSERT(_pSuspendedTaskAry[u]->prioClass <= pT->prioClass);
+#endif
+}
             /* Since a task became due there might be a change of the active task. */
             isNewActiveTask = true;
         }
@@ -855,11 +871,10 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
     PUSH_CONTEXT_ONTO_STACK
 
 	/* We must not exclude that the zero_reg is temporarily altered in the arbitrarily
-       interrupted code. To make the local code here running, we need to aniticpate this
+       interrupted code. To make the local code here running, we need to anticipate this
        situation and clear the register. */
     asm volatile
-    ("LabClrR0InOnTi: \n\t"
-     "clr __zero_reg__ \n\t"
+    ("clr __zero_reg__ \n\t"
     );
 
     /* Check for all suspended tasks if this change in time is an event for them. */
@@ -881,7 +896,7 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
     /* @todo It's worth a consideration if too many task switches at a time can really
        happen: While restoring the new context is running, the only source for those task
        switches would be a new timer tic and this comes deterministically far in the
-       future.*/
+       future. Hint: Consider application interrupts also. */
 
     /* The stack pointer points to the now active task (which will often be still the same
        as at function entry). The CPU context to continue with is popped from this stack. If
@@ -1216,6 +1231,50 @@ static inline void storeResumeCondition( task_t * const pT
 
 
 
+/**
+ * Waiting for events doesn't necessarily means waiting: If the wait condition includes
+ * mutexes and semaphores these may already be available on entry in the wait function.
+ * This routine checks all demanded sync objects and locks and allocates all those objects
+ * to the calling task, which are currently free.
+ *   @return
+ * Finally the routine checkes if the wait condition of the suspend command is already
+ * fulfilled with the found sync objects. If and only if so it returns true and the suspend
+ * command won't actually block the calling task.
+ *   @param eventMask
+ * See function \a rtos_waitForEvent for details.
+ *   @param all
+ * See function \a rtos_waitForEvent for details.
+ *   @see
+ * void rtos_waitForEvent(uint16_t, bool, uintTime_t)
+ *   @remark
+ * This function is inlined for performance reasons.
+ */
+ 
+static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
+
+{
+    /* Check for immediate availability of all/any mutex. These mutexes are locked now and
+       entered in the calling task's postedEventVec. */
+    ASSERT(_pActiveTask->postedEventVec == 0);
+    _pActiveTask->postedEventVec = eventMask & _mutexVec;
+    
+    /* Lock the demanded mutexes. Bits in eventMask which do not correspond to mutex events
+       don't need to be masked. They may reset some anyway reset don't-care bits in
+       _mutexVec. */ 
+    _mutexVec &= ~eventMask;
+    
+    /* @todo Add test and decrement code here for all demanded semaphores. The next
+       condition is-wait-condition-fulfilled should not be affect (TBC). */
+
+    /* postedEventVec now contains all requested mutexes, which were currently available.
+       If these were all demanded events, we don't need to suspend the task but can
+       immediately and successfully return. The timer bits (events 14 and 15) don't matter
+       as they are always OR terms. We definitly don't need to wait for them. */ 
+    return (!all &&  _pActiveTask->postedEventVec != 0)
+           || (all &&  ((_pActiveTask->postedEventVec ^ eventMask) & ~MASK_EVT_IS_TIMER) == 0);
+
+} /* End of acquireFreeSyncObjs */
+
 
 
 
@@ -1243,13 +1302,22 @@ static inline void storeResumeCondition( task_t * const pT
  * operate only if all interrupts are disabled.
  */
 
-static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 {
     /* Avoid inlining under all circumstances. See attributes also. */
     asm("");
 
+    /* Here, we could double-check _pActiveTask for the idle task and return without
+       context switch if it is active. (The idle task has illicitly called a suspend
+       command.) However, all implementation rates performance higher than failure
+       tolerance, and so do we here. */
+    ASSERT(_pActiveTask != _pIdleTask);
+
+    if(acquireFreeSyncObjs(eventMask, all))
+        return false;
+        
     int8_t idxPrio;
-    uint8_t idxTask;
+    int8_t idxTask;
 
     /* Take the active task out of the list of due tasks. */
     task_t * const pT = _pActiveTask;
@@ -1260,12 +1328,30 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 
     /* This suspend command wants a reactivation by a combination of events (which may
        include the timeout event). Save the resume condition in the task object. The
-       operation is implemented as inline function to be able to resuse the code in the
+       operation is implemented as inline function to be able to reuse the code in the
        task initialization routine. */
     storeResumeCondition(pT, eventMask, all, timeout);
 
-    /* Put the task in the list of suspended tasks. */
-    _pSuspendedTaskAry[_noSuspendedTasks++] = _pActiveTask;
+    /* Put the task in the list of suspended tasks. If mutexes or semaphores are in use
+       this list is sorted with decreasing priority. */
+#if RTOS_USE_MUTEX == RTOS_FEATURE_OFF
+    _pSuspendedTaskAry[_noSuspendedTasks++] = pT;
+#else
+    /* < rather than <=: The now suspended task becomes the last one in its prio class. The
+       others of same priority are waiting longer and will receive a later posted event
+       with priority. */
+    int8_t idxPos;
+    for(idxPos=0; idxPos<_noSuspendedTasks; ++idxPos)
+        if(_pSuspendedTaskAry[idxPos]->prioClass < prio)
+            break;
+    
+    /* Shift rest of the list one to the end. This loop requires a signed index. */
+    for(idxTask=_noSuspendedTasks++ - 1; idxTask>=idxPos; --idxTask)
+        _pSuspendedTaskAry[idxTask+1] = _pSuspendedTaskAry[idxTask];
+    
+    /* Insert the suspended task at the priority determined right position. */
+    _pSuspendedTaskAry[idxPos] = pT;
+#endif
 
     /* Record which task suspends itself for the assembly code in the calling function
        which actually switches the context. */
@@ -1283,6 +1369,9 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
             break;
         }
     }
+    
+    return true;
+
 } /* End of waitForEvent */
 
 
@@ -1290,7 +1379,9 @@ static void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 
 /**
  * Suspend the current task (i.e. the one which invokes this method) until a specified
- * combination of events occur.\n
+ * combination of events occur. In the special case, that the specified combination of
+ * events can be satisfied with currently available synchronization objects (mutexes and
+ * semaphores) the function will return immediately without suspending the calling task.\n
  *   A task is suspended in the instance of calling this method. It specifies a list of
  * events. The task becomes due again, when either the first one or all of the specified
  * events have been posted by other tasks.\n
@@ -1371,27 +1462,26 @@ uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
        active task. */
     PUSH_CONTEXT_WITHOUT_R24R25_ONTO_STACK
 
-    /* Here, we could double-check _pActiveTask for the idle task and return without
-       context switch if it is active. (The idle task has illicitly called a suspend
-       command.) However, all implementation rates performance higher than failure
-       tolerance, and so do we here. */
-    //assert(_pActiveTask != _pIdleTask);
-
     /* The actual implementation of the task switch logic is placed into a sub-routine in
        order to benefit from the compiler generated stack frame for local variables (in
        this naked function we must not have declared any). The call of the function is
-       immediately followed by some assembly code which processes the return value of the
-       function, found in register pair r24/25. */
-    waitForEvent(eventMask, all, timeout);
-
-    /* Switch the stack pointer to the (saved) stack pointer of the new active task and
-       push the function result onto the new stack - from where it is loaded into r24/r25
-       by the subsequent pop-context command. */
-    SWITCH_CONTEXT
+       immediately followed by some assembly code which computes the return value of the
+       function and places it in register pair r24/25. */
+    if(waitForEvent(eventMask, all, timeout))
+    {
+        /* The wait condition could be fulfilled immediately, we need to suspend the task.
+           Switch the stack pointer to the (saved) stack pointer of the new active task. */
+        SWITCH_CONTEXT
+     }
+     
+     /* Regardless whether we had switched the task the suspend command ends with returning
+        the information about the task releasing events. Push this function result onto the
+        (maybe new) stack - from where it is loaded into r24/r25 by the subsequent pop-context
+        command. */
     PUSH_RET_CODE_OF_CONTEXT_SWITCH
 
-    /* The stack pointer points to the now active task (which will often be still the same
-       as at function entry). The CPU context to continue with is popped from this stack. If
+    /* The stack pointer points to the now active task (which may be still the same as at
+       function entry). The CPU context to continue with is popped from this stack. If
        there's no change in active task the entire routine call is just like any ordinary
        interrupt. */
     POP_CONTEXT_FROM_STACK
@@ -1698,23 +1788,23 @@ void rtos_initRTOS(void)
 #ifdef DEBUG
 # if false
         {
-            uint16_t i;
+            uint16_t u;
 
             Serial.print("Task ");
             Serial.print(idxTask);
             Serial.print(":\nStack pointer: 0x");
             Serial.println(pT->stackPointer, HEX);
-            for(i=0; i<pT->stackSize; ++i)
+            for(u=0; u<pT->stackSize; ++u)
             {
-                if(i%8 == 0)
+                if(u%8 == 0)
                 {
                     Serial.println("");
-                    Serial.print(i, HEX);
+                    Serial.print(u, HEX);
                     Serial.print(", 0x");
-                    Serial.print((uint16_t)(pT->pStackArea+i), HEX);
+                    Serial.print((uint16_t)(pT->pStackArea+u), HEX);
                     Serial.print(":\t");
                 }
-                Serial.print(pT->pStackArea[i], HEX);
+                Serial.print(pT->pStackArea[u], HEX);
                 Serial.print("\t");
             }
             Serial.println("");
@@ -1733,9 +1823,24 @@ void rtos_initRTOS(void)
         /* Initialize overrun counter. */
         pT->cntOverrun = 0;
 
-        /* Any task is suspended at the beginning. No task is active, see before. */
+        /* Any task is suspended at the beginning. No task is active, see before. If
+           mutexes or semaphores are in use this list is sorted with decreasing priority. */
+#if RTOS_USE_MUTEX == RTOS_FEATURE_OFF
         _pSuspendedTaskAry[idxTask] = pT;
+#else
+        int8_t idxPos;
+        for(idxPos=0; idxPos<idxTask; ++idxPos)
+            if(_pSuspendedTaskAry[idxPos]->prioClass < pT->prioClass)
+                break;
 
+        /* Shift rest of the list one to the end. This loop requires a signed index. */
+        int8_t i;
+        for(i=idxTask-1; i>=idxPos; --i)
+            _pSuspendedTaskAry[i+1] = _pSuspendedTaskAry[i];
+
+        /* Insert the suspended task at the priority determined right position. */
+        _pSuspendedTaskAry[idxPos] = pT;
+#endif
     } /* for(All tasks to initialize) */
 
     /* Number of currently suspended tasks: All. */

@@ -44,34 +44,108 @@
 /** Switch to make feature selecting defines readable. Here: Feature is disabled. */
 #define RTOS_FEATURE_OFF    0
 
+// @todo Remove test code
+#define RTOS_NO_MUTEX_EVENTS 1
+
+/** Derive a switch telling whether events of type mutex are in use. */
+#if RTOS_NO_MUTEX_EVENTS > 0
+# define RTOS_USE_MUTEX RTOS_FEATURE_ON
+#else
+# define RTOS_USE_MUTEX RTOS_FEATURE_OFF
+#endif
+
 /* Some global, general purpose events and the two timer events. Used to specify the
    resume condition when suspending a task.
      Conditional definition: If the application defines an interrupt which triggers an
    event, the same event gets a deviating name. */
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_00       (0x0001u<<0)
+#if 0 && RTOS_NO_MUTEX_EVENTS > 0
+# define RTOS_EVT_MUTEX_00       (0x0001u<<0)
+#else
+# define RTOS_EVT_EVENT_00       (0x0001u<<0)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_01       (0x0001u<<1)
+#if RTOS_NO_MUTEX_EVENTS > 1
+# define RTOS_EVT_MUTEX_01       (0x0001u<<1)
+#else
+# define RTOS_EVT_EVENT_01       (0x0001u<<1)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_02       (0x0001u<<2)
+#if RTOS_NO_MUTEX_EVENTS > 2
+# define RTOS_EVT_MUTEX_02       (0x0001u<<2)
+#else
+# define RTOS_EVT_EVENT_02       (0x0001u<<2)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_03       (0x0001u<<3)
+#if RTOS_NO_MUTEX_EVENTS > 3
+# define RTOS_EVT_MUTEX_03       (0x0001u<<3)
+#else
+# define RTOS_EVT_EVENT_03       (0x0001u<<3)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_04       (0x0001u<<4)
+#if RTOS_NO_MUTEX_EVENTS > 4
+# define RTOS_EVT_MUTEX_04       (0x0001u<<4)
+#else
+# define RTOS_EVT_EVENT_04       (0x0001u<<4)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_05       (0x0001u<<5)
+#if RTOS_NO_MUTEX_EVENTS > 5
+# define RTOS_EVT_MUTEX_05       (0x0001u<<5)
+#else
+# define RTOS_EVT_EVENT_05       (0x0001u<<5)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_06       (0x0001u<<6)
+#if RTOS_NO_MUTEX_EVENTS > 6
+# define RTOS_EVT_MUTEX_06       (0x0001u<<6)
+#else
+# define RTOS_EVT_EVENT_06       (0x0001u<<6)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_07       (0x0001u<<7)
+#if RTOS_NO_MUTEX_EVENTS > 7
+# define RTOS_EVT_MUTEX_07       (0x0001u<<7)
+#else
+# define RTOS_EVT_EVENT_07       (0x0001u<<7)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_08       (0x0001u<<8)
+#if RTOS_NO_MUTEX_EVENTS > 8
+# define RTOS_EVT_MUTEX_08       (0x0001u<<8)
+#else
+# define RTOS_EVT_EVENT_08       (0x0001u<<8)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_09       (0x0001u<<9)
+#if RTOS_NO_MUTEX_EVENTS > 9
+# define RTOS_EVT_MUTEX_09       (0x0001u<<9)
+#else
+# define RTOS_EVT_EVENT_09       (0x0001u<<9)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_10       (0x0001u<<10)
+#if RTOS_NO_MUTEX_EVENTS > 10
+# define RTOS_EVT_MUTEX_10       (0x0001u<<10)
+#else
+# define RTOS_EVT_EVENT_10       (0x0001u<<10)
+#endif
+
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#define RTOS_EVT_EVENT_11       (0x0001u<<11)
+#if RTOS_NO_MUTEX_EVENTS > 11
+# define RTOS_EVT_MUTEX_11       (0x0001u<<11)
+#else
+# define RTOS_EVT_EVENT_11       (0x0001u<<11)
+#endif
+
+/** @todo Complete the macros. */
+#if RTOS_NO_MUTEX_EVENTS > 12
+# error Complete the macros to support up to 14 mutexes
+#endif
 
 /* The name of the next event depends on the configuration of RTuinOS. */
 #if RTOS_USE_APPL_INTERRUPT_00 == RTOS_FEATURE_ON

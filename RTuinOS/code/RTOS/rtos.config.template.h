@@ -7,7 +7,7 @@
  * @todo Copy this file to your application code, rename it to rtos.config.h and adjust the
  * settings to the need of your RTuinOS application. Then remove this hint.
  *
- * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -39,7 +39,7 @@
 
 
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
-    will always be existent and alive. Permitted range is 0..255.\n
+    will always be existent and alive. Permitted range is 0..127.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
 #define RTOS_NO_TASKS    5
 
@@ -54,11 +54,17 @@
 /** Since many tasks will belong to distinct priority classes, the maximum number of tasks
     belonging to the same class will be significantly lower than the number of tasks. This
     setting is used to reduce the required memory size for the statically allocated data
-    structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..255,
+    structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..127,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
 #define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 2
 
+
+/** The number of events, which behave like mutexes. When posted, they are not brodcasted
+    like ordinary events but posted to only one task, which is the one of highest
+    priority, which is currently waiting for this event. If no such task exists, the
+    mutex-event is saved until the first task requests it. */
+#define RTOS_NO_MUTEX_EVENTS 3
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This
     interrupt (like all others which possibly result in a context switch) need to be
