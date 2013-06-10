@@ -44,9 +44,6 @@
 /** Switch to make feature selecting defines readable. Here: Feature is disabled. */
 #define RTOS_FEATURE_OFF    0
 
-// @todo Remove test code
-#define RTOS_NO_MUTEX_EVENTS 1
-
 /** Derive a switch telling whether events of type mutex are in use. */
 #if RTOS_NO_MUTEX_EVENTS > 0
 # define RTOS_USE_MUTEX RTOS_FEATURE_ON
@@ -59,7 +56,7 @@
      Conditional definition: If the application defines an interrupt which triggers an
    event, the same event gets a deviating name. */
 /** General purpose event, posted explicitly by rtos_setEvent. */
-#if 0 && RTOS_NO_MUTEX_EVENTS > 0
+#if RTOS_NO_MUTEX_EVENTS > 0
 # define RTOS_EVT_MUTEX_00       (0x0001u<<0)
 #else
 # define RTOS_EVT_EVENT_00       (0x0001u<<0)

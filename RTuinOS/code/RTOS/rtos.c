@@ -39,6 +39,7 @@
  *   checkForTaskActivation
  *   onTimerTic
  *   setEvent
+ *   acquireFreeSyncObjs
  *   storeResumeCondition
  *   waitForEvent
  */
@@ -444,8 +445,7 @@ static uint8_t _noSuspendedTasks;
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
 /** All of the mutex events are combined in a bit vector. The mutexes are initially
     released, all according bits are set. All remainig bits are don't care bits. */
-// @todo Remove test code
-static uint16_t _mutexVec = 0;// MASK_EVT_IS_MUTEX;
+static uint16_t _mutexVec = MASK_EVT_IS_MUTEX;
 #endif
 
 /** Temporary data, internally used to pass information between assembly and C code. */
@@ -769,6 +769,14 @@ static bool onTimerTic(void)
             if(-- pT->cntDelay == 0)
                 pT->postedEventVec |= (RTOS_EVT_DELAY_TIMER & pT->eventMask);
         }
+        
+        /* @todo Review code structure: Why don't we excute the code of
+           checkForTaskActivation right here instead of later? Here we'd do it just for
+           those tasks, which received an event, later we do it for all suspended tasks -
+           which might be significant more tests (all suspended tasks in any timer tic as
+           opposed to once per task and elapsed timer). Is it just for code reuse (release
+           condition test shared with setEvent)? */
+
     } /* End for(All suspended tasks) */
 
 
@@ -952,15 +960,54 @@ static bool setEvent(uint16_t postedEventVec)
     uint8_t idxSuspTask;
 
     /* The timer events can't be set manually. */
-    postedEventVec &= ~(RTOS_EVT_ABSOLUTE_TIMER | RTOS_EVT_DELAY_TIMER);
+    postedEventVec &= ~MASK_EVT_IS_TIMER;
+    
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+    /* We keep track of all mutex, which have to be posted (released) exactely once - to
+       the first task, which is waiting for them. This task is done, when mutexToReleaseVec
+       becomes null. */
+    uint16_t mutexToReleaseVec = postedEventVec & MASK_EVT_IS_MUTEX;
+    
+    /* Make a distinction with ordinary events. */
+    postedEventVec &= ~MASK_EVT_IS_MUTEX;
 
-    /* Post events on all suspended tasks which are waiting for it. */
+#endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
+    
+    /* Post oridinary events to all suspended tasks which are waiting for it.
+         Pass mutexes and semaphores to a single task each, those task, which is of highest
+       priority and waits the longest for it. */
     for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
     {
         task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
 
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+        /* The vector of all events this task will receive. */
+        uint16_t gotEvtVec = (postedEventVec | mutexToReleaseVec) & pT->eventMask;
+        
+        /* Collect the events in the task object. */
+        pT->postedEventVec |= gotEvtVec;
+        
+        /* Subtract the given mutexes from the vector of all, which are to release in this
+           call. It doesn't matter that the mask also contains ordinary events - all these
+           bits can do is to reset already reset bits. */
+        mutexToReleaseVec &= ~gotEvtVec;
+#else        
         pT->postedEventVec |= (postedEventVec & pT->eventMask);
-    }
+        
+#endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
+
+    } /* End for(All suspended tasks) */
+    
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+    /* The remaining mutexes are returned to the global storage for later acquisition.
+         The assertion validates application code. It fires if the application release
+       a mutex, which was not acquired. This is harmless with respect of stability of
+       the RTOS but probably a design error in the application. Maybe, you have to
+       consider using a semaphore. */ 
+    ASSERT((_mutexVec & mutexToReleaseVec) == 0);
+    _mutexVec |= mutexToReleaseVec;
+#endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
+
 
     /* Check if the task becomes due because of the posted events.
          The function has side effects: If there's a task which was suspended before and
@@ -1231,6 +1278,7 @@ static inline void storeResumeCondition( task_t * const pT
 
 
 
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
 /**
  * Waiting for events doesn't necessarily means waiting: If the wait condition includes
  * mutexes and semaphores these may already be available on entry in the wait function.
@@ -1251,7 +1299,6 @@ static inline void storeResumeCondition( task_t * const pT
  */
  
 static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
-
 {
     /* Check for immediate availability of all/any mutex. These mutexes are locked now and
        entered in the calling task's postedEventVec. */
@@ -1275,6 +1322,7 @@ static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
 
 } /* End of acquireFreeSyncObjs */
 
+#endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
 
 
 
@@ -1302,6 +1350,7 @@ static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
  * operate only if all interrupts are disabled.
  */
 
+// @todo Double-check if conditional return code pays off -- or the GNU optimizer makes this useless
 static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 {
     /* Avoid inlining under all circumstances. See attributes also. */
@@ -1313,9 +1362,11 @@ static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
        tolerance, and so do we here. */
     ASSERT(_pActiveTask != _pIdleTask);
 
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
     if(acquireFreeSyncObjs(eventMask, all))
         return false;
-        
+#endif
+
     int8_t idxPrio;
     int8_t idxTask;
 
