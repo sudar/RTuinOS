@@ -315,7 +315,7 @@ lFlags = -Os -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)		\
          --fatal-warnings --no-undefined --reduce-memory-overheads --stats
 $(targetDir)$(project).elf: $(coreDir)core.a $(objListWithPath)
 	$(info Linking project. Ouput is redirected to $(targetDir)$(project).map)
-	$(avr-gcc) $(lFlags) -o $@ $(objListWithPath) $(coreDir)core.a -lm       		\
+	$(avr-gcc) $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm   		\
                -Wl,-M > $(targetDir)$(project).map
 	$(avr-size) -C --mcu=$(targetMicroController) $@
 
