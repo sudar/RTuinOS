@@ -61,7 +61,9 @@
  *   loop
  * Local functions
  *   blink
- *   task01_class00
+ *   taskT0C0
+ *   taskT0C1
+ *   taskT0C2
  */
 
 /*
