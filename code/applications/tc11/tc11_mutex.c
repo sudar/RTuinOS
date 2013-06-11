@@ -1,21 +1,22 @@
 /**
- * @file tc09_pseudoMutex.c
- * Test case 09 of RTuinOS. Using a global flag and enter/leaveCriticalSection a kind of
- * mutex is implemented, which is applied to control the alternating use of a shared
- * resource (Serial) by several tasks. The result is a kind of pseudo mutex (pseudo because
- * some polling is required). True to-the-point waiting for a resource is not possible in
- * RTuinOS.
+ * @file tc11_mutex.c
+ * Test case 11 of RTuinOS. Test case 09 had demonstrated how to implement a safe resource
+ * managment without the availability of true operating system provided synchronization
+ * objects. In the second release of RTuinOS these objects became available. This test case
+ * re-implements test case 09 using a true mutex instead of a pseudo-mutex.
+ *   The mutex is applied to control the alternating use of a shared resource (Serial) by
+ * several tasks. With this release of RTuinOS true to-the-point waiting for a resource
+ * becomes possible in RTuinOS.
  *   Observations:
  *   The test succeeds if the Arduino console shows correct text output. The tasks, which
  * gets the resource uses the shared resource (the global object Serial) to write one line
  * of text to the console. This is purposely done in several portions of output, which are
  * interrupted by task switches. A certain percentage of the task switches will also oocur
  * in the middle of a print command. The lines must nonetheless be always complete.
- *   Although the pseudo-mutex has some deficiencies with respect to regarding task
- * priorities (see below), it must be apparent, that the task of higher priority gets the
- * resource more often than the others.
+ *   It must be apparent, that the task of higher priority gets the resource if it is
+ * concurrent with another one.
  *
- * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -48,7 +49,7 @@
 #include <arduino.h>
 #include "rtos.h"
 #include "rtos_assert.h"
-#include "tc09_applEvents.h"
+#include "tc11_applEvents.h"
 
 /*
  * Defines
@@ -118,56 +119,23 @@ static volatile bool _mutex = false;
  * same time.
  */ 
 
-static void getResource()
+static /* RTOS_TRUE_FCT */ void getResource()
 {
-    /* Basically, the mutex is implemented by a global flag and a polling loop which tests
-       the flag under mutual exclusion with other tasks (using a critical section). If the
-       resource is occupied the routine suspends the invoking task for a little while until
-       it tests the flag again.
+    /* The task which calls this routine suspends itself by waiting only for the mutex
+       which indicates ownership of the shared resource. No timeout is specified.
+       Therefore, testing the return code of the suspend command is superflous; any value
+       other than the mutex event would be an error of RTuinOS.
          Don't be confused that the same function getResource can individually suspend
        different tasks all calling this function - even overlappingly in time. This is
        what reentrant actually means: The same function code operates individually and
        independently for each caller.
-         Pure polling would basically work, but we can approach true mutexes even a little
-       bit. We do not just wait for a while but additionally for an event, which would be
-       posted in the very instance another task returns the resource.
-         Adding an event statistically shortens the wait time. If the event is posted after
-       the test-the-flag operation and after entering the suspend command it does what it
-       is expected to do: It aborts the wait time of the requesting task. But in the rare
-       case, that it is posted between the test and the suspend command, it is not received
-       by the requesting task and this task will (probably successfully) repeat the test
-       only after the complete wait time span. This is the major difference in comparison
-       to a true mutex implementation. The effect can be lowered only by choosing a small
-       timeout.
-         Another important difference of the implementation here with a true mutex is the
-       disregarding of the task priorities. If several tasks request the resource at the
-       same time and if the task of higher priority misses the event (as it is posted
-       between its test and suspend command) there's a high probability that the other task
-       of lower priority catches the event, repeats its test immediately and gets the
-       resource. One would however expect that it is always the requesting task of highest
-       priority, which gets the resource. */
-    do
-    {
-        bool copyOfMutex;
-        
-        /* The test and set operation needs to be atomic. */
-        cli();
-        if(!_mutex)
-        {
-            copyOfMutex = true;
-            _mutex      = true;
-        }
-        else
-            copyOfMutex = false;
-        sei();
-    
-        /* Did we get the resource? */
-        if(copyOfMutex)
-            return;
-        
-        /* No, we still have to wait for it. */
-    }  
-    while(rtos_waitForEvent(EVT_RESOURCE_IS_AVAILABLE | RTOS_EVT_DELAY_TIMER, false, 1));
+         Only to prove this statement we declared the functions as RTOS_TRUE_FCT. Otherwise
+       gcc would simply inline it and there was no issue with reentrance at all. */
+#ifdef DEBUG
+    uint16_t postedEvtVec =
+#endif
+    rtos_waitForEvent(EVT_MUTEX_OWNING_RESOURCE, false, 1);
+    ASSERT(postedEvtVec == EVT_MUTEX_OWNING_RESOURCE);
 
 } /* End of getResource */
 
@@ -183,13 +151,8 @@ static void getResource()
 
 static void releaseResource()
 {
-    /* No access synchronization to the flag is needed as a write-boolean is atomic as
-       such. */
-    ASSERT(_mutex);
-    _mutex = false;
-    
     /* Signal the availability of the resource to possibly waiting tasks. */
-    rtos_setEvent(EVT_RESOURCE_IS_AVAILABLE);
+    rtos_setEvent(EVT_MUTEX_OWNING_RESOURCE);
     
 } /* End of releaseResource */
 
@@ -232,12 +195,20 @@ static void taskC0(uint8_t idxTask)
         Serial.print("Now the resource Serial is released by task ");
         Serial.println(idxTask);
         
-        /* Give other tasks a chance to get the resource. After the call of release, we
-           must not immediately cycle around, otherwise the chance is high, that we get it
-           immediately again. Suspend deliberately (but as short as possible), so that
-           other tasks of the same priority class can become active. */
+        /* In the original test case tc09, demonstrating the implementation of a
+           pseudo-mutex, we had written: "Give other tasks a chance to get the resource.
+           After the call of release, we must not immediately cycle around, otherwise the
+           chance is high, that we get it immediately again since most of the concurrent
+           tasks have the same priority. Suspend deliberately (but as short as possible),
+           so that other tasks of the same priority class can become active."
+             Using a true mutex, this becomes obsolete. The call of releaseResource returns
+           the mutex, which is in the same atomic instance passed on to one of the
+           concurrent, waiting, suspended other tasks. If that is a task of same priority it
+           still holds true, that it won't interrupt the running task, but two statements
+           later, in its next loop, this running task will try to aqcuire the resource
+           again but the mutex is not available and it'll then be suspended. */
         releaseResource();
-        rtos_delay(0);
+        //rtos_delay(0);
     }
 } /* End of taskC0 */
 
@@ -306,7 +277,6 @@ static void taskT0_C1(uint16_t initCondition)
     /* The task inspects the results of the interrupt on a regular base. */
     do
     {
-        
         /* Wait until we get the resource. */
         getResource();
     
@@ -328,6 +298,11 @@ static void taskT0_C1(uint16_t initCondition)
 
         /* Give other tasks a chance to get the resource. */
         releaseResource();
+        
+        /* Here, no other task will already use the acquired resource: All concurrent tasks
+           are of lower priority. One of them will have become due but not active yet. The
+           while condition will now make this task inactive and the already due other one
+           active. */
     }
     while(rtos_suspendTaskTillTime(TIME_IN_MS(TASK_TIME_T0_C1_MS)));
 
@@ -426,10 +401,17 @@ void loop(void)
     /* Idle is used only to start the first round robin task. */
     rtos_setEvent(EVT_START_TASK_T0_C0);
 
-    /* Since we have a pseudo mutex only, which is implemented by polling (try and suspend
-       until next try) there are minor gaps in time where all tasks are suspended. To not
-       run into the setEvent again, we place an empty loop here. Having a true mutex
-       implementation, we would place an ASSERT(false) instead. */
+    /* In test case tc09 of RTuinOS we had written: "Since we have a pseudo mutex only,
+       which is implemented by polling (try and suspend until next try) there are minor
+       gaps in time where all tasks are suspended. To not run into the setEvent again, we
+       place an empty loop here. Having a true mutex implementation, we would place an
+       ASSERT(false) instead."
+         Now we have re-implemented the test case using a true mutex but the statement
+       turned out to be wrong, such an assertion fires occasionally. The reason is, that
+       the tasks apply the other suspend command rtos_delay so that it might happen that
+       all of them are suspended at the same time and idle becomes active. If all calls of
+       rtos_delay are commented out the assertion is indeed safe. */
+    //ASSERT(false);
     while(true)
         ;
 
