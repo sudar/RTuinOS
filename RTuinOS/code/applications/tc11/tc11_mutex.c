@@ -82,7 +82,7 @@
  * Local prototypes
  */
 
-static void getResource(void);
+static RTOS_TRUE_FCT void getResource(void);
 static void releaseResource(void);
 static void taskC0(uint8_t idxTask);
 static void taskEntryC0(uint16_t postedEventVec);
@@ -97,9 +97,6 @@ static uint8_t _stackT0_C0[STACK_SIZE]
              , _stackT1_C0[STACK_SIZE]
              , _stackT2_C0[STACK_SIZE]
              , _stackT0_C1[STACK_SIZE];
-
-/** The mutex, which organizes the access to the global object Serial. */   
-static volatile bool _mutex = false;
 
 
 /*
@@ -119,7 +116,7 @@ static volatile bool _mutex = false;
  * same time.
  */ 
 
-static /* RTOS_TRUE_FCT */ void getResource()
+static RTOS_TRUE_FCT void getResource()
 {
     /* The task which calls this routine suspends itself by waiting only for the mutex
        which indicates ownership of the shared resource. No timeout is specified.

@@ -6,7 +6,7 @@
  * (thus the release of the Arduino environment) but should be easily portable to other
  * boards and Arduino releases. See manual for details.
  *
- * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -63,7 +63,13 @@
 #define IDLE_TASK_ID    (RTOS_NO_TASKS)
 
 /** A bit mask, which selects all the mutex events in an event vector. */
-#define MASK_EVT_IS_MUTEX   ((0x0001u<<(RTOS_NO_MUTEX_EVENTS))-1u)
+#define MASK_EVT_IS_SEMAPHORE ((0x01<<(RTOS_NO_SEMAPHORE_EVENTS))-1)
+
+/** A bit mask, which selects all the mutex events in an event vector. */
+#define MASK_EVT_IS_MUTEX                                                   \
+        (((0x0001u<<(RTOS_NO_MUTEX_EVENTS+RTOS_NO_SEMAPHORE_EVENTS))-1u)    \
+         - (uint8_t)MASK_EVT_IS_SEMAPHORE                                   \
+        )
 
 /** A bit mask, which selects all timer events in a vector of events. */
 #define MASK_EVT_IS_TIMER (RTOS_EVT_ABSOLUTE_TIMER | RTOS_EVT_DELAY_TIMER)
@@ -769,7 +775,7 @@ static bool onTimerTic(void)
             if(-- pT->cntDelay == 0)
                 pT->postedEventVec |= (RTOS_EVT_DELAY_TIMER & pT->eventMask);
         }
-        
+
         /* @todo Review code structure: Why don't we excute the code of
            checkForTaskActivation right here instead of later? Here we'd do it just for
            those tasks, which received an event, later we do it for all suspended tasks -
@@ -961,21 +967,27 @@ static bool setEvent(uint16_t postedEventVec)
 
     /* The timer events can't be set manually. */
     postedEventVec &= ~MASK_EVT_IS_TIMER;
-    
-#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
-    /* We keep track of all mutex, which have to be posted (released) exactely once - to
-       the first task, which is waiting for them. This task is done, when mutexToReleaseVec
-       becomes null. */
-    uint16_t mutexToReleaseVec = postedEventVec & MASK_EVT_IS_MUTEX;
-    
-    /* Make a distinction with ordinary events. */
-    postedEventVec &= ~MASK_EVT_IS_MUTEX;
 
-#endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
-    
+    /* We keep track of all semaphores and mutexes, which have to be posted (released)
+       exactely once - to the first task, which is waiting for them. This task is done,
+       when the related mask, semaphoreToReleaseVec or mutexToReleaseVec becomes null. */
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+    uint8_t semaphoreToReleaseVec = postedEventVec & MASK_EVT_IS_SEMAPHORE;
+#endif
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+    uint16_t mutexToReleaseVec = postedEventVec & MASK_EVT_IS_MUTEX;
+#endif
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON  ||  RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+    /* The implementation makes a distinction between synchronization objects (mutex and
+       semaphores) and ordinary, broadcasted events. */
+    postedEventVec &= ~(MASK_EVT_IS_MUTEX | MASK_EVT_IS_SEMAPHORE);
+#endif
+
     /* Post oridinary events to all suspended tasks which are waiting for it.
          Pass mutexes and semaphores to a single task each, those task, which is of highest
-       priority and waits the longest for it. */
+       priority and waits the longest for it. This loop is the reason, why we need to have
+       the list of suspended tasks always sorted, when at least one semaphore or mutex is in
+       use. */
     for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
     {
         task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
@@ -983,27 +995,77 @@ static bool setEvent(uint16_t postedEventVec)
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
         /* The vector of all events this task will receive. */
         uint16_t gotEvtVec = (postedEventVec | mutexToReleaseVec) & pT->eventMask;
-        
+
         /* Collect the events in the task object. */
         pT->postedEventVec |= gotEvtVec;
-        
+
         /* Subtract the given mutexes from the vector of all, which are to release in this
            call. It doesn't matter that the mask also contains ordinary events - all these
            bits can do is to reset already reset bits. */
         mutexToReleaseVec &= ~gotEvtVec;
-#else        
+#else
         pT->postedEventVec |= (postedEventVec & pT->eventMask);
-        
+
 #endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
 
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+        /* Now pass all released semaphores to tasks waiting for them. This can't be done
+           all at once as semaphores are not simply a bit. We need a second loop to do so.
+             Remark: The implementation of the loops here and down below is the reason why
+           we (arbitrarily) restrict the maximum number to eight: We can use native CPU
+           machine codes for most operations instead of much more expensive 16 Bit
+           operations. */
+        uint8_t semMask = 0x01;
+        while(semaphoreToReleaseVec &&  (semMask & MASK_EVT_IS_SEMAPHORE) != 0)
+        {
+            /* Check if this task is waiting of this semaphore. */
+            if((pT->eventMask & semMask) != 0)
+            {
+                /* The semaphore release operation is handled by passing the semaphore to
+                   the task. */
+                pT->postedEventVec    |= semMask;
+                semaphoreToReleaseVec &= ~semMask;
+            }
+
+            /* Shift mask one Bit to the left to test next semaphore in next cycle. */
+            semMask <<= 1;
+        }
+#endif
     } /* End for(All suspended tasks) */
-    
+
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+    /* The remaining semaphores (more precise: semaphore counter values) are accumulated in
+       the global semaphore storage for later acquisition. */
+    uint8_t idxSem = 0;
+    while(semaphoreToReleaseVec)
+    {
+        if((semaphoreToReleaseVec & 0x01) != 0)
+        {
+            /* @todo Remove development assertion after thorough testing! */
+            ASSERT(idxSem < RTOS_NO_SEMAPHORE_EVENTS);
+            
+            ++ rtos_semaphoreAry[idxSem];
+
+            /* The assertion validates the application code. It fires if the application
+               releases/produces more semaphore counter values as fit into the data type of
+               the semphore. This is harmless with respect of stability of the RTOS but
+               probably a design error in the application. */
+            ASSERT(rtos_semaphoreAry[idxSem] != 0);
+        }
+
+        /* Test next semaphore in next cycle. */
+        semaphoreToReleaseVec >>= 1;
+        
+        /* The next event/semaphore bit is related to the next array entry. */
+        ++ idxSem;
+    }
+#endif
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
     /* The remaining mutexes are returned to the global storage for later acquisition.
          The assertion validates application code. It fires if the application release
        a mutex, which was not acquired. This is harmless with respect of stability of
        the RTOS but probably a design error in the application. Maybe, you have to
-       consider using a semaphore. */ 
+       consider using a semaphore. */
     ASSERT((_mutexVec & mutexToReleaseVec) == 0);
     _mutexVec |= mutexToReleaseVec;
 #endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
@@ -1278,9 +1340,9 @@ static inline void storeResumeCondition( task_t * const pT
 
 
 
-#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
 /**
- * Waiting for events doesn't necessarily means waiting: If the wait condition includes
+ * Waiting for events doesn't necessarily mean waiting: If the wait condition includes
  * mutexes and semaphores these may already be available on entry in the wait function.
  * This routine checks all demanded sync objects and locks and allocates all those objects
  * to the calling task, which are currently free.
@@ -1297,32 +1359,60 @@ static inline void storeResumeCondition( task_t * const pT
  *   @remark
  * This function is inlined for performance reasons.
  */
- 
+
 static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
 {
+    ASSERT(_pActiveTask->postedEventVec == 0);
+    
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
     /* Check for immediate availability of all/any mutex. These mutexes are locked now and
        entered in the calling task's postedEventVec. */
-    ASSERT(_pActiveTask->postedEventVec == 0);
     _pActiveTask->postedEventVec = eventMask & _mutexVec;
-    
+
     /* Lock the demanded mutexes. Bits in eventMask which do not correspond to mutex events
        don't need to be masked. They may reset some anyway reset don't-care bits in
-       _mutexVec. */ 
+       _mutexVec. */
     _mutexVec &= ~eventMask;
-    
-    /* @todo Add test and decrement code here for all demanded semaphores. The next
-       condition is-wait-condition-fulfilled should not be affect (TBC). */
+#endif
+
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+    /* Check for immediate availability of all/any semaphores. The counters of none zero
+       semaphores are decremented now and the related acquired-bit is set in the calling
+       task's postedEventVec. */
+    uint8_t idxSem = 0
+          , maskSem = 0x01
+          , semaphoreToAcquireVec = eventMask & MASK_EVT_IS_SEMAPHORE;
+    while(semaphoreToAcquireVec)
+    {
+        if((semaphoreToAcquireVec & 0x01) != 0)
+        {
+            /* @todo Remove development assertion after thorough testing! */
+            ASSERT(idxSem < RTOS_NO_SEMAPHORE_EVENTS);
+            
+            if(rtos_semaphoreAry[idxSem] > 0)
+            {
+                -- rtos_semaphoreAry[idxSem];
+                _pActiveTask->postedEventVec |= maskSem;
+            }
+        }
+        
+        /* Test next event bit and increment related index of semaphore in array. */
+        ++ idxSem;
+        maskSem <<= 1;
+        semaphoreToAcquireVec >>= 1;
+    }
+#endif
 
     /* postedEventVec now contains all requested mutexes, which were currently available.
        If these were all demanded events, we don't need to suspend the task but can
        immediately and successfully return. The timer bits (events 14 and 15) don't matter
-       as they are always OR terms. We definitly don't need to wait for them. */ 
+       as they are always OR terms. We definitly don't need to wait for them. */
     return (!all &&  _pActiveTask->postedEventVec != 0)
            || (all &&  ((_pActiveTask->postedEventVec ^ eventMask) & ~MASK_EVT_IS_TIMER) == 0);
 
 } /* End of acquireFreeSyncObjs */
 
-#endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
+#endif /* RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON */
 
 
 
@@ -1362,7 +1452,7 @@ static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
        tolerance, and so do we here. */
     ASSERT(_pActiveTask != _pIdleTask);
 
-#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
     if(acquireFreeSyncObjs(eventMask, all))
         return false;
 #endif
@@ -1395,11 +1485,11 @@ static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
     for(idxPos=0; idxPos<_noSuspendedTasks; ++idxPos)
         if(_pSuspendedTaskAry[idxPos]->prioClass < prio)
             break;
-    
+
     /* Shift rest of the list one to the end. This loop requires a signed index. */
     for(idxTask=_noSuspendedTasks++ - 1; idxTask>=idxPos; --idxTask)
         _pSuspendedTaskAry[idxTask+1] = _pSuspendedTaskAry[idxTask];
-    
+
     /* Insert the suspended task at the priority determined right position. */
     _pSuspendedTaskAry[idxPos] = pT;
 #endif
@@ -1420,7 +1510,7 @@ static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
             break;
         }
     }
-    
+
     return true;
 
 } /* End of waitForEvent */
@@ -1524,7 +1614,7 @@ uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
            Switch the stack pointer to the (saved) stack pointer of the new active task. */
         SWITCH_CONTEXT
      }
-     
+
      /* Regardless whether we had switched the task the suspend command ends with returning
         the information about the task releasing events. Push this function result onto the
         (maybe new) stack - from where it is loaded into r24/r25 by the subsequent pop-context

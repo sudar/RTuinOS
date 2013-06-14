@@ -73,6 +73,11 @@
 # default may be adjusted to your environment in the heading part of the code section of
 # this makefile or you may override the variable setting on the make processor's command
 # line by writing e.g. make COM_PORT=\\.\COM3.
+#   IO_FLOAT_LIB: If this flag is 0 the stdio library with reduced floating point support
+# is linked with the RTuinOS application. printf & co do nor recognize floating point
+# format characters like %f. This reduces the size of the code by about 1.5kByte, the RAM
+# size is not affected. By default this falg is set to 1 and full support of printf & co is
+# ensured.
 #
 # Input Files
 # ===========
@@ -114,6 +119,10 @@ COM_PORT ?= COM8
 #   TODO Edit the blank separated list of excluded file names (without path).
 cFileListExcl := dummy.cpp
 
+# By default we link against the library that fully supports formatted output for floating
+# point data types. Set it to 0 in order to link against the reduced floating point
+# library, which saves a bit of code size.
+IO_FLOAT_LIB ?= 1
 
 # RTuinOS can't be linked without an application. Select which one. Here, all applications
 # are considered test cases.
@@ -277,7 +286,7 @@ $(coreDir)core.a: $(objListCoreWithPath)
 
 
 # A general rule enforces rebuild if one of the configuration files changes
-#$(objListWithPath) $(objListCoreWithPath): GNUmakefile
+$(objListWithPath) $(objListCoreWithPath): GNUmakefile
 
 # Let the linker create the binary ELF file.
 #   Here we have a serious pit-fall. We know from the Arduino IDE, that the compiled
@@ -311,8 +320,11 @@ $(coreDir)core.a: $(objListCoreWithPath)
 # looked like:
 #	$(avr-gcc) $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm       	\
 #              -Wl,-M > $(targetDir)$(project).map
-lFlags = -Os -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)		\
-         --fatal-warnings --no-undefined --reduce-memory-overheads --stats
+lFlags := -Os -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)		\
+          --fatal-warnings --no-undefined --reduce-memory-overheads --stats
+ifeq ($(IO_FLOAT_LIB),1)
+    lFlags += -Wl,-u,vfprintf -lprintf_flt
+endif
 $(targetDir)$(project).elf: $(coreDir)core.a $(objListWithPath)
 	$(info Linking project. Ouput is redirected to $(targetDir)$(project).map)
 	$(avr-gcc) $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm   		\
