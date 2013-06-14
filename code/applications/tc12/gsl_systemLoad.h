@@ -1,9 +1,8 @@
-#ifndef TC09_APPLEVENTS_INCLUDED
-#define TC09_APPLEVENTS_INCLUDED
+#ifndef GSL_SYSTEMLOAD_INCLUDED
+#define GSL_SYSTEMLOAD_INCLUDED
 /**
- * @file tc09_applEvents.h
- *   Definition of application events. The application events are managed in a
- * central file to avoid inconistencies and accidental double usage.
+ * @file gsl_systemLoad.h
+ * Definition of global interface of module gsl_systemLoad.c
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -30,19 +29,6 @@
  * Defines
  */
 
-#endif  /* TC09_APPLEVENTS_INCLUDED */
-/** This event is used as start condition for task T0_C0. */
-#define EVT_START_TASK_T0_C0 (RTOS_EVT_EVENT_00)
-
-/** This event is used as start condition for task T1_C0. */
-#define EVT_START_TASK_T1_C0 (RTOS_EVT_EVENT_01)
-
-/** This event is used as start condition for task T2_C0. */
-#define EVT_START_TASK_T2_C0 (RTOS_EVT_EVENT_02)
-
-/** This event signals that the resource has been released. */
-#define EVT_RESOURCE_IS_AVAILABLE (RTOS_EVT_EVENT_03)
-
 
 /*
  * Global type definitions
@@ -58,6 +44,9 @@
  * Global prototypes
  */
 
+/** Estimate the current system load. Must be used from the idle task only and takes above
+    one second to execute. */
+uint8_t gsl_getSystemLoad(void);
 
 
-#endif  /* TC09_APPLEVENTS_INCLUDED */
+#endif  /* GSL_SYSTEMLOAD_INCLUDED */

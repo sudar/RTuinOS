@@ -60,6 +60,30 @@
 #define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 2
 
 
+/** The number of events, which behave like semaphores. When posted, they are not
+    broadcasted like ordinary events but posted to only one task, which is the one of
+    highest priority, which is currently waiting for this event. If no such task exists,
+    the semaphore-event is counted in the related semaphore for future requests of the
+    semaphore by any task.\n
+      Having semaphores in the application increases the overhead of RTuinOS significantly.
+    The number should be null as long as semaphores are not essential to the application.
+    In particular, one should not use semaphores where mutexes are possible. Mutexes are a
+    sub-set of semaphores; it are semaphores with start value one and they can be
+    implemented much more efficient by bit operations.
+      @remark To reduce the cost of the implementation of semaphores RTuinOS restricts the
+    number of semaphores to eight out of the 16 events.\n
+      @remark Two additional things have to be configured, when using at least one
+    semaphore in your application:\n
+      All semaphores are implemented as unsigned integers of a given type. The type
+    determines the counting range of the semaphores and is application dependent. Please,
+    see below for the application owned typedef \a uintSemaphore_t.\n
+      The use case of a semaphore pre-determines its initial value. To make it most easy
+    and efficient for the application the array of semaphores is declared extern to
+    RTuinOS. Please refer to rtos.h for the declaration of \a rtos_semaphoreAry and define
+    this array in your application code. */
+#define RTOS_NO_SEMAPHORE_EVENTS    0
+
+
 /** The number of events, which behave like mutexes. When posted, they are not broadcasted
     like ordinary events but posted to only one task, which is the one of highest
     priority, which is currently waiting for this event. If no such task exists, the
@@ -266,6 +290,18 @@ RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
     moreover, it is dangerous to do, as a true, properly recognized task overrun would lead
     to an almost dead task. */
 #define RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE  RTOS_FEATURE_ON
+
+
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+/** The implementation of a semaphore is a simple unsigned integer. The value means the
+    number of resources managed by the semaphore. In a resource management system it may be
+    available pooled resources, which can be still checked out by the clients, or it is the
+    number of produced object in a producer-consumer system. In any application, the
+    maximum number of managed objects need to fit into the data type of the semaphore. Use
+    the smallest possible data type, which fits to all your semaphores.\n
+      Possible data types for semaphores are uint8_t, uint16_t and uint32_t. */
+typedef uint8_t uintSemaphore_t;
+#endif
 
 
 /*
