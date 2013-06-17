@@ -966,6 +966,7 @@ static bool setEvent(uint16_t postedEventVec)
     uint8_t idxSuspTask;
 
     /* The timer events can't be set manually. */
+    // @todo Replace this by an assertion
     postedEventVec &= ~MASK_EVT_IS_TIMER;
 
     /* We keep track of all semaphores and mutexes, which have to be posted (released)
@@ -1842,6 +1843,15 @@ void rtos_initializeTask( uint8_t idxTask
 
     /* Set the start condition. */
     ASSERT(startEventMask != 0);
+    
+    /* Start condition "wait for sync object" is not yet implemented. */
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+    ASSERT((startEventMask & MASK_EVT_IS_MUTEX) == 0);
+#endif
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+    ASSERT((startEventMask & MASK_EVT_IS_SEMAPHORE) == 0);
+#endif
+
     pT->cntDelay = 0;
     pT->timeDueAt = 0;
     storeResumeCondition( pT
@@ -2006,6 +2016,8 @@ void rtos_initRTOS(void)
     pT->waitForAnyEvent = true;     /* Not used at all. */
     pT->cntOverrun = 0;             /* Not used at all. */
 
+    // @todo Initial resume condition is not checked for mutexes and semaphores 
+    
     /* Any task is suspended at the beginning. No task is active, see before. */
     for(idxClass=0; idxClass<RTOS_NO_PRIO_CLASSES; ++idxClass)
         _noDueTasksAry[idxClass] = 0;
