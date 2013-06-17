@@ -1,7 +1,18 @@
 /**
  * @file tc02_oneTask.c
- *   Test case 12 of RTuinOS. One task is defined, which runs alternatingly with the idle
- * task.
+ *   Test case 12 of RTuinOS. Two tasks implement a producer-consumer system. The procuder
+ * computes samples of the sine function and files them in a queue. The second task,
+ * which is of higher priority, waits for queued data and prints the values to the terminal
+ * output.\n
+ *   Such an architecture leads to a simple pattern. The producer puts one sample into
+ * the queue. The consumer gets immediately awaked as he has the higher priority. He
+ * consumes the sample and goes sleeping; control returns to the consumer.\n
+ *   TODO 2nd step: wait for mutex (to printf) and for ordinary event from idle to realease
+ * consumer. The AND condition is tested and both tasks become a bit asynchronous. Print
+ * number of received elements in one call of consumer. Deadlock, when consumer holds mutex
+ * while producer wants it? (Probably not, but danger of task overrun for producer.)
+ *   Remark: The idle task must not use the terminal as it can't use the suspend command to
+ * acquire the related mutex.
  *
  * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -23,7 +34,9 @@
  *   loop
  * Local functions
  *   blink
- *   task01_class00
+ *   taskT0C0_producer
+ *   tC0C0
+ *   taskT0C1_consumer
  */
 
 /*
@@ -36,6 +49,8 @@
 #include "stdout.h"
 #include "integerSineZ.h"
 #include "gsl_systemLoad.h"
+#include "itq_interTaskQueue.h"
+#include "aev_applEvents.h"
 
 
 /*
@@ -45,9 +60,25 @@
 /** Pin 13 has an LED connected on most Arduino boards. */
 #define LED 13
  
-/** Stack size of task. */
-#define STACK_SIZE_TASK00   256
+
+/** Common stack size of tasks. */
+#define STACK_SIZE   256
  
+ 
+/** The number of system timer tics required to implement the time span given in Milli
+    seconds. Consider to use an expression like \a TIME_IN_MS(10) as argument to the time
+    related RTuinOS API functions in order to get readable code
+      @remark
+    The double operations are limited to the compile time if the argument of the macro is a
+    literal. No double operation is then found in the machine code. Never use this macro
+    with runtime expressions! */
+#define TIME_IN_MS(tiInMs) ((uintTime_t)((double)(tiInMs)/RTOS_TIC_MS+0.5))
+
+
+/** The indexes of the tasks are named to make index based API functions of RTuinOS safely
+    usable. */
+enum {_idxTaskT0C0, _idxTaskT0C1, _noTasks};
+
 
 /*
  * Local type definitions
@@ -58,16 +89,33 @@
  * Local prototypes
  */
  
-static void task01_class00(uint16_t taskParam);
+static void taskT0C1_consumer(uint16_t initCondition);
+static void tT0C0(uint16_t initCondition);
  
  
 /*
  * Data definitions
  */
  
-static uint8_t _taskStack[STACK_SIZE_TASK00];
-uint8_t cpuLoad_ = 200;
+static uint8_t _taskStackT0C1[STACK_SIZE]
+             , _taskStackT0C0[STACK_SIZE];
+             
+             
+/** The CPU load as computed in the idle task. A shared global variable is used because it is
+    reported in one of the other tasks, which may use the terminal - idle must not do so in
+    this application! */
+static volatile uint8_t cpuLoad_ = 200;
  
+ 
+/** The semaphore of type uint16_t counts the number of samples in the queue, which are
+    already produced but not yet consumed. The start value needs to be null.
+      @remark Although this variable is shared between tasks and although its value is
+   shared by others tasks it must not be declared as volatile. Actually, no task will
+   directly read or write to this variable, tasks do this only indirectly by calling the
+   related RTuinOS API functions - and to the RTuinOS code the variable is not volatile. */
+uintSemaphore_t rtos_semaphoreAry[RTOS_NO_SEMAPHORE_EVENTS] = {0};
+
+
 /*
  * Function implementation
  */
@@ -94,75 +142,185 @@ static void blink(uint8_t noFlashes)
                                      could easily be invoked immediately again and the
                                      bursts need to be separated. */
 #undef TI_FLASH
-}
+} /* End of blink */
 
 
 
 /**
- * The only task in this test case (besides idle).
+ * The function code of the producer task. This function code is regularly called. It
+ * unconditionally computes a data sample and puts it into the queue.
+ */ 
+
+static void taskT0C0_producer()
+{
+    static uint32_t cnt_ = 0
+                  , tiLastCall_ = 0;
+                  
+    /* The producer wants to log its activities, so it needs to wait for the mutex related
+       to Serial. We specify a timeout but if it ever elapsed it would be a failure in this
+       test case. */
+    uint16_t gotEvents = rtos_waitForEvent( EVT_MUTEX_SERIAL | RTOS_EVT_DELAY_TIMER
+                                          , /* all */ false
+                                          , /* timeout */ TIME_IN_MS(10)
+                                          );
+
+    /* The assertion fires if we see a timeout. */
+    ASSERT(gotEvents == EVT_MUTEX_SERIAL);
+
+    /* Produce data. */
+    integerSineZ_step();
+    int16_t nextSampleSine = integerSineZ_Y.y;
+
+    /* Queue the data. This step implicitly increments the related semaphore. A client of
+       the queue gets the notification that a data element is available. In our specific
+       test case, this won't yet make the consumer due as it additionally waits for the
+       mutex, which grants access to the Serial object.*/
+    itq_writeElem(nextSampleSine);
+    
+    /* Do some reporting. We still own the mutex. */
+    uint32_t tiNow = millis();
+    printf("Producer:\n  Time: %lu\n  CPU load: %.1f\n", tiNow-tiLastCall_, cpuLoad_/2.0);
+    printf("  Queued data sample %8lu = %.6f\n", cnt_++, nextSampleSine/32768.0);
+    tiLastCall_ = tiNow;
+    
+    /* We need to release the mutex, so that the consumer can report its activities. */
+    rtos_setEvent(EVT_MUTEX_SERIAL);
+
+} /* End of taskT0C0_producer */
+
+
+
+/**
+ * The producer task. It unconditionally computes a data sample and puts it into the queue.
  *   @param initCondition
- * The task gets an initialization parameter for whatever configuration purpose.
+ * The task gets the vector of events, which made it initially due.
  *   @remark
  * A task function must never return; this would cause a reset.
  */ 
 
-static void task01_class00(uint16_t taskCondition)
+static void tT0C0(uint16_t initCondition)
 
 {
-#define TICS_CYCLE  125
+#define TASK_TIME  120  /* ms */
 
-    uint16_t u;
-    uint32_t ti = millis()
-           , tiCycle;
-    
-    printf("task01_class00: Activated by 0x%04X\n", taskCondition);
-
-    for(u=0; u<3; ++u)
-        blink(2);
-    
-    /* Initialize external sinus generator module. */
+    /* Initialize the external sinus generator module. */
     integerSineZ_initialize();
-    
-    for(;;)
+
+    /* The basic pattern is to run the producer task function regularly. */
+    do
     {
-        printf("task01_class00: rtos_delay...\n");
-        u = rtos_delay(55);
-        printf("task01_class00: Released with %04X\n", u);
+        taskT0C0_producer();       
         
-        printf("task01_class00: Suspending...\n");
-        u = rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ TICS_CYCLE);
-        tiCycle = millis();
-        printf("task01_class00: Released with %04X\n", u);
-        
-        /* The system timer tic has a frequency of 490.1961 Hz.
-             Caution: The compiler fails to recognize the constant floating point
-           expression if there's no explicit, superfluous pair of parenthesis around it.
-           With parenthesis it compiles just one product, without it uses several products
-           and divisions. */
-        printf("Cycle time: %f%%\n", (tiCycle-ti) * (100.0/1000.0 / (TICS_CYCLE/490.1961)));
-        ti = tiCycle;
-        
-        printf("CPU load: %u\n", cpuLoad_/2);
-        
-        integerSineZ_step();
-        float sin = (float)integerSineZ_Y.y/32768.0f;
-        static uint32_t u = 0;
-        printf("%.6lu: %6.4f\n", u++, (double)sin);
+        /* Any task may quere the task overrun counter and this task is known to be
+           regular. So we double-check the counter. */
+//        ASSERT(rtos_getTaskOverrunCounter(_idxTaskT0C0, /* doReset */ false) == 0);
     }
+    while(rtos_waitForEvent( /* eventMask */ RTOS_EVT_ABSOLUTE_TIMER              
+                           , /* all */       false
+                           , /* timeout */   TIME_IN_MS(TASK_TIME)
+                           )
+         );
     
     /* Termination code of sinus generator module is actually never reached (and not
        required as we don't terminate). */
     //integerSineZ_terminate();
 
-#undef TICS_CYCLE
-} /* End of task01_class00 */
+    /* A task function must never return; this would cause a reset. */
+    ASSERT(false);
+    
+#undef TASK_TIME
+} /* End of tT0C0 */
 
 
 
 
 
 /**
- * The initalization of the RTOS tasks and general board initialization.
+ * The consumer task. It waits for produced data and reports it to the terminal.
+ *   @param eventToWaitForVec
+ * The task gets the vector of events, which made it initially due.
+ *   @remark
+ * A task function must never return; this would cause a reset.
+ */ 
+
+static void taskT0C1_consumer(uint16_t eventToWaitForVec)
+{
+    /* Normally one would tend to start the task unconditionally and have a while loop
+       here. This leads to an immediately recognizable code structure: Do it as soon as all
+       conditions are fulfilled, as soon as all events are received. Here're we do it the
+       other way around, nearly equivalent and only because it's a test case. */
+// @todo Start condition with sync objects is not yet implemented.
+eventToWaitForVec = EVT_SEMAPHORE_ELEM_IN_QUEUE | EVT_MUTEX_SERIAL;
+eventToWaitForVec = rtos_waitForEvent( /* eventMask */ eventToWaitForVec
+                                     , /* all */       true
+                                     , /* timeout */   0
+                                     );
+    ASSERT(eventToWaitForVec == EVT_SEMAPHORE_ELEM_IN_QUEUE + EVT_MUTEX_SERIAL);
+                 
+    uint32_t cnt_ = 0;
+    do
+    {
+        uint8_t noElemGot = 0;
+        
+        printf("Consumer: wake up\n");
+                
+        /* Since we awaked because of the received semaphore event we can be sure to get at
+           least one element from the queue. Then we have a loop to read all other elements
+           which were possibly queued meanwhile: There's no guarantee, that this task got
+           due and active because of the first semaphore posted by the producer. */
+        do
+        {
+            int16_t nextSampleSine = itq_readElem();
+            ++ noElemGot;
+            printf("  Received data sample %6lu = %.6f\n", cnt_++, nextSampleSine/32768.0);
+            
+            /* The while condition of this loop necessarily needs to use a timeout: If data
+               is available in the queue, rtos_waitForEvent will return immediately with
+               the semaphore event, without suspending this task. If there's no data left,
+               the task is shortly suspended but becomes due and active again after the
+               timeout.
+                 Please note, that RTuinOS doesn't have a special handling of timeout 0.
+               This timeout value suspends until the next timer tic, which is 0..2ms ahead.
+               0 does not mean not to suspend at all! */
+        }
+        while(rtos_waitForEvent
+                    ( /* eventMask */ RTOS_EVT_DELAY_TIMER | EVT_SEMAPHORE_ELEM_IN_QUEUE
+                    , /* all */       false
+                    , /* timeout */   0
+                    )
+              == EVT_SEMAPHORE_ELEM_IN_QUEUE
+             );
+        
+        /* Print a summary before sleeping again. */
+        printf("  Received %u samples in this task-awake-cycle\n", noElemGot);
+        
+        /* Now we have to return the mutex related to the global, shared Serial object.
+           Getting this mutex is one of the conditions to awake the data producer. */
+        rtos_setEvent(EVT_MUTEX_SERIAL);
+        
+        /* To avoid that this task gets the mutex immediately back in the while condition
+           - before the producer task has the chance to enter the command rtos_waitForEvent
+           - we suspend voluntarily for a short while. The need for this statement is the
+           prove that the design of this application is bad - but its complexity is good as
+           a test case. */
+        rtos_delay(1);
+    }
+    while(rtos_waitForEvent( /* eventMask */ eventToWaitForVec
+                           , /* all */       true
+                           , /* timeout */   0
+                           )
+         );
+
+    /* A task function must never return; this would cause a reset. */
+    ASSERT(false);
+    
+} /* End of taskT0C1_consumer */
+
+
+
+
+/**
+ * The initialization of the RTOS tasks and general board initialization.
  */ 
 
 void setup(void)
@@ -178,15 +336,31 @@ void setup(void)
        operability of code. */
     pinMode(LED, OUTPUT);
     
-    /* Configure task 1 of priority class 0 */
-    rtos_initializeTask( /* idxTask */          0
-                       , /* taskFunction */     task01_class00
+    ASSERT(_noTasks == RTOS_NO_TASKS);
+
+    /* Configure task 0 of priority class 0. The producer has the lower priority. It is
+       started immediately. */
+    rtos_initializeTask( /* idxTask */          _idxTaskT0C0
+                       , /* taskFunction */     tT0C0
                        , /* prioClass */        0
-                       , /* pStackArea */       &_taskStack[0]
-                       , /* stackSize */        sizeof(_taskStack)
+                       , /* pStackArea */       &_taskStackT0C0[0]
+                       , /* stackSize */        sizeof(_taskStackT0C0)
                        , /* startEventMask */   RTOS_EVT_DELAY_TIMER
                        , /* startByAllEvents */ false
-                       , /* startTimeout */     5
+                       , /* startTimeout */     0
+                       );
+
+    /* Configure task 0 of priority class 1. The consumer has the higher priority. It is
+       started by: Data available AND access to object Serial granted. */
+    rtos_initializeTask( /* idxTask */          _idxTaskT0C1
+                       , /* taskFunction */     taskT0C1_consumer
+                       , /* prioClass */        1
+                       , /* pStackArea */       &_taskStackT0C1[0]
+                       , /* stackSize */        sizeof(_taskStackT0C1)
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER //EVT_SEMAPHORE_ELEM_IN_QUEUE | EVT_MUTEX_SERIAL
+                       , /* startByAllEvents */ false
+// @todo RTuinOS crashes if we have startByAllEvents = true
+                       , /* startTimeout */     10
                        );
 } /* End of setup */
 

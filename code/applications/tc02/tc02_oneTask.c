@@ -97,12 +97,12 @@ static void blink(uint8_t noFlashes)
 /**
  * The only task in this test case (besides idle).
  *   @param initCondition
- * The task gets an initialization parameter for whatever configuration purpose.
+ * The task gets the vector of events, which made it initially due.
  *   @remark
  * A task function must never return; this would cause a reset.
  */ 
 
-static void task01_class00(uint16_t taskCondition)
+static void task01_class00(uint16_t initCondition)
 
 {
 #define TICS_CYCLE  125
@@ -112,7 +112,7 @@ static void task01_class00(uint16_t taskCondition)
            , tiCycle;
     
     Serial.print("task01_class00: Activated by 0x");
-    Serial.println(taskCondition, HEX);
+    Serial.println(initCondition, HEX);
 
     for(u=0; u<3; ++u)
         blink(2);
