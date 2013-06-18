@@ -68,7 +68,7 @@
 /** A bit mask, which selects all the mutex events in an event vector. */
 #define MASK_EVT_IS_MUTEX                                                   \
         (((0x0001u<<(RTOS_NO_MUTEX_EVENTS+RTOS_NO_SEMAPHORE_EVENTS))-1u)    \
-         - (uint8_t)MASK_EVT_IS_SEMAPHORE                                   \
+         - (uint16_t)MASK_EVT_IS_SEMAPHORE                                  \
         )
 
 /** A bit mask, which selects all timer events in a vector of events. */
@@ -659,6 +659,7 @@ static bool checkForTaskActivation(
 
             /* Clear the current event mask; it becomes useless and will be reloaded with
                the next suspend operation in the next active state. */
+            // @todo Check if this statement is necessary. Why not leaving the mask as it is?
             pT->eventMask = 0;
 
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
@@ -674,7 +675,7 @@ static bool checkForTaskActivation(
 // @todo remove temporary test code
 {
                 _pSuspendedTaskAry[u] = _pSuspendedTaskAry[u+1];
-#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON  ||  RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
 ASSERT(_pSuspendedTaskAry[u]->prioClass <= pT->prioClass);
 #endif
 }
@@ -977,6 +978,9 @@ static bool setEvent(uint16_t postedEventVec)
 #endif
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
     uint16_t mutexToReleaseVec = postedEventVec & MASK_EVT_IS_MUTEX;
+# ifdef DEBUG
+    uint16_t dbg_allMutexesToReleaseVec = mutexToReleaseVec;
+# endif
 #endif
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON  ||  RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
     /* The implementation makes a distinction between synchronization objects (mutex and
@@ -984,7 +988,7 @@ static bool setEvent(uint16_t postedEventVec)
     postedEventVec &= ~(MASK_EVT_IS_MUTEX | MASK_EVT_IS_SEMAPHORE);
 #endif
 
-    /* Post oridinary events to all suspended tasks which are waiting for it.
+    /* Post ordinary events to all suspended tasks which are waiting for it.
          Pass mutexes and semaphores to a single task each, those task, which is of highest
        priority and waits the longest for it. This loop is the reason, why we need to have
        the list of suspended tasks always sorted, when at least one semaphore or mutex is in
@@ -994,6 +998,11 @@ static bool setEvent(uint16_t postedEventVec)
         task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
 
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
+        /* Mutexes are Boolean and can't be posted twice to a task. This is easily possible
+           but an application error. This assertion fires if the application doesn't
+           properly keep track on who owns which mutex. */
+        ASSERT((pT->postedEventVec & dbg_allMutexesToReleaseVec) == 0);
+        
         /* The vector of all events this task will receive. */
         uint16_t gotEvtVec = (postedEventVec | mutexToReleaseVec) & pT->eventMask;
 
@@ -1019,8 +1028,9 @@ static bool setEvent(uint16_t postedEventVec)
         uint8_t semMask = 0x01;
         while(semaphoreToReleaseVec &&  (semMask & MASK_EVT_IS_SEMAPHORE) != 0)
         {
-            /* Check if this task is waiting of this semaphore. */
-            if((pT->eventMask & semMask) != 0)
+            /* Check if this task is waiting for this semaphore but didn't get it yet (i.e.
+               in an earlier call of this routine). */
+            if((pT->eventMask & semMask & ~pT->postedEventVec) != 0)
             {
                 /* The semaphore release operation is handled by passing the semaphore to
                    the task. */
@@ -1063,11 +1073,11 @@ static bool setEvent(uint16_t postedEventVec)
 #endif
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
     /* The remaining mutexes are returned to the global storage for later acquisition.
-         The assertion validates application code. It fires if the application release
-       a mutex, which was not acquired. This is harmless with respect of stability of
+         The assertion validates application code. It fires if the application releases
+       a mutex, which was not acquired. This is harmless with respect to the stability of
        the RTOS but probably a design error in the application. Maybe, you have to
        consider using a semaphore. */
-    ASSERT((_mutexVec & mutexToReleaseVec) == 0);
+    ASSERT((_mutexVec & dbg_allMutexesToReleaseVec) == 0);
     _mutexVec |= mutexToReleaseVec;
 #endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
 
@@ -1293,6 +1303,18 @@ static inline void storeResumeCondition( task_t * const pT
                                        , uintTime_t timeout
                                        )
 {
+    /* Check event condition: The two timer can't be used at the same time (which is a
+       rather harmless application designe error) and at least one other event needs to be
+       required for a resume in case of the AND condition.
+         The latter bad situation leads to a crash. If all is set then RTuinOS interprets
+       the empty event mask as the always fulfilled resume condition. The task became due
+       without any bit set in the task's postedEventVec - which leads to a wrong state
+       transition in the kernel. (Please refer to the manual for a detail explanation of
+       the task state meaning of postedEventVec.) */
+    ASSERT((eventMask & MASK_EVT_IS_TIMER) != MASK_EVT_IS_TIMER
+           &&  (!all || (eventMask & ~MASK_EVT_IS_TIMER) != 0)
+          );
+
     /* The timing parameter may refer to different timers. Depending on the event mask we
        either load the one or the other timer. Default is the less expensive delay
        counter. */
@@ -1441,7 +1463,7 @@ static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
  * operate only if all interrupts are disabled.
  */
 
-// @todo Double-check if conditional return code pays off -- or the GNU optimizer makes this useless
+// @todo Double-check if conditional return code pays off (only needed for sync objects) -- or if the GNU optimizer makes this useless
 static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 {
     /* Avoid inlining under all circumstances. See attributes also. */
@@ -1542,10 +1564,14 @@ static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
  *   @param all
  *   If false, the task is made due as soon as the first event mentioned in \a eventMask is
  * seen.\n
- *   If true, the task is made due only if all events are posted - except for the timer
- * events, which are still OR combined. If you say "all" but the event mask contains either
- * #RTOS_EVT_DELAY_TIMER or #RTOS_EVT_ABSOLUTE_TIMER, the task will resume when either the
- * timer elapsed or when all other events in the mask were seen.
+ *   If true, the task is made due only when all events are posted to the suspending task -
+ * except for the timer events, which are still OR combined. If you say "all" but the event
+ * mask contains either #RTOS_EVT_DELAY_TIMER or #RTOS_EVT_ABSOLUTE_TIMER, the task will
+ * resume when either the timer elapsed or when all other events in the mask were seen.\n
+ *   Caution: If all is true, there need to be at least one event bit set in \a eventMask
+ * besides a timer bit; RTuinOS crashes otherwise. Saying: "No particular event, just a
+ * timer condition" needs to be implemented by \a all set to false and \a eventMask set to
+ * only a timer event bit.
  *   @param timeout
  * If \a eventMask contains #RTOS_EVT_DELAY_TIMER:\n
  *   The number of system timer tics from now on until the timeout elapses. One should be

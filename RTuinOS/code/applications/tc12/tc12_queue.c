@@ -1,17 +1,31 @@
 /**
  * @file tc02_oneTask.c
- *   Test case 12 of RTuinOS. Two tasks implement a producer-consumer system. The procuder
+ *   Test case 12 of RTuinOS. Two tasks implement a producer-consumer system. The producer
  * computes samples of the sine function and files them in a queue. The second task,
  * which is of higher priority, waits for queued data and prints the values to the terminal
  * output.\n
  *   Such an architecture leads to a simple pattern. The producer puts one sample into
- * the queue. The consumer gets immediately awaked as he has the higher priority. He
+ * the queue. The consumer gets immediately awaken as he has the higher priority. He
  * consumes the sample and goes sleeping; control returns to the consumer.\n
- *   TODO 2nd step: wait for mutex (to printf) and for ordinary event from idle to realease
- * consumer. The AND condition is tested and both tasks become a bit asynchronous. Print
- * number of received elements in one call of consumer. Deadlock, when consumer holds mutex
- * while producer wants it? (Probably not, but danger of task overrun for producer.)
- *   Remark: The idle task must not use the terminal as it can't use the suspend command to
+ *   To make this pattern somewhat more complex and to demonstrate the capability of
+ * combining wait-for-event conditions to a more complex resume condition we have defined a
+ * second phase of processing. After a predetermined number of the simple producer-consumer
+ * cycles, the consumer extends its resume condition: It now waits for the semaphore event,
+ * which continues to notify data-queued events AND for an other, ordinary event. This
+ * event is broadcasted by the idle task after each completion of a CPU load estimation.
+ * This means a cycle of about 1 second. The consumer is triggered by this event and
+ * receives all meanwhile queued elements en block.
+ *   @remark: This application produces a lot of screen output and requires a terminal Baud
+ * rate higher then the standard setting. It'll produce a lot of trash in the Arduino
+ * console window if you do not switch the Baud rate in Arduino's Serial Monitor. See
+ * setup() for more.
+ *   @remark The output of the sine generator is printed with the printf command applying
+ * its floating point formatting characters. This requires that the code is linked against
+ * a special library, which supports the printf floating point features (and which
+ * increases the code size by about 2k). If you see question marks instead of figures you
+ * linked against the standard library. Consider to rebuild the application using switch \a
+ * IO_FLOAT_LIB=1 on the command line of make. Type make help for more.
+ *   @remark: The idle task must not use the terminal as it can't use the suspend command to
  * acquire the related mutex.
  *
  * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
@@ -167,19 +181,22 @@ static void taskT0C0_producer()
     /* The assertion fires if we see a timeout. */
     ASSERT(gotEvents == EVT_MUTEX_SERIAL);
 
+    /* Do some reporting. We own the mutex. */
+    uint32_t tiNow = millis();
+    printf("Producer:\n  Time: %3lu\n  CPU load: %3u%%\n", tiNow-tiLastCall_, (cpuLoad_+1)/2);
+    
     /* Produce data. */
     integerSineZ_step();
     int16_t nextSampleSine = integerSineZ_Y.y;
 
     /* Queue the data. This step implicitly increments the related semaphore. A client of
        the queue gets the notification that a data element is available. In our specific
-       test case, this won't yet make the consumer due as it additionally waits for the
-       mutex, which grants access to the Serial object.*/
+       test case, and in the first phase of the test, this will make the consumer shortly
+       due and active: It will just invoke the command to wait for the mutex, which grants
+       access to the Serial object, and then we are back here. */
     itq_writeElem(nextSampleSine);
     
-    /* Do some reporting. We still own the mutex. */
-    uint32_t tiNow = millis();
-    printf("Producer:\n  Time: %lu\n  CPU load: %.1f\n", tiNow-tiLastCall_, cpuLoad_/2.0);
+    /* Do some more reporting after task switch hence and force. We still own the mutex. */
     printf("  Queued data sample %8lu = %.6f\n", cnt_++, nextSampleSine/32768.0);
     tiLastCall_ = tiNow;
     
@@ -211,9 +228,9 @@ static void tT0C0(uint16_t initCondition)
     {
         taskT0C0_producer();       
         
-        /* Any task may quere the task overrun counter and this task is known to be
+        /* Any task may query the task overrun counter and this task is known to be
            regular. So we double-check the counter. */
-//        ASSERT(rtos_getTaskOverrunCounter(_idxTaskT0C0, /* doReset */ false) == 0);
+        ASSERT(rtos_getTaskOverrunCounter(_idxTaskT0C0, /* doReset */ false) == 0);
     }
     while(rtos_waitForEvent( /* eventMask */ RTOS_EVT_ABSOLUTE_TIMER              
                            , /* all */       false
@@ -249,18 +266,21 @@ static void taskT0C1_consumer(uint16_t eventToWaitForVec)
        here. This leads to an immediately recognizable code structure: Do it as soon as all
        conditions are fulfilled, as soon as all events are received. Here're we do it the
        other way around, nearly equivalent and only because it's a test case. */
-// @todo Start condition with sync objects is not yet implemented.
-eventToWaitForVec = EVT_SEMAPHORE_ELEM_IN_QUEUE | EVT_MUTEX_SERIAL;
+// @todo Start condition with sync objects is not yet implemented in rtos.c.
+eventToWaitForVec = EVT_SEMAPHORE_ELEM_IN_QUEUE;
 eventToWaitForVec = rtos_waitForEvent( /* eventMask */ eventToWaitForVec
-                                     , /* all */       true
+                                     , /* all */       false
                                      , /* timeout */   0
                                      );
-    ASSERT(eventToWaitForVec == EVT_SEMAPHORE_ELEM_IN_QUEUE + EVT_MUTEX_SERIAL);
-                 
+    ASSERT(eventToWaitForVec == EVT_SEMAPHORE_ELEM_IN_QUEUE);
+
     uint32_t cnt_ = 0;
     do
     {
         uint8_t noElemGot = 0;
+        
+        /* Get temporary access to the global, shared communication stream. */
+        rtos_waitForEvent(/* eventMask */ EVT_MUTEX_SERIAL, /* all */ false, /* timeout */ 0);
         
         printf("Consumer: wake up\n");
                 
@@ -294,16 +314,19 @@ eventToWaitForVec = rtos_waitForEvent( /* eventMask */ eventToWaitForVec
         /* Print a summary before sleeping again. */
         printf("  Received %u samples in this task-awake-cycle\n", noElemGot);
         
+        /* Just to make the sample a bit more interessting: We change the task resume
+           condition after a while. From now on we wait for a combination of events, so
+           that the data is no longer received one-by-one but in packages. The difference
+           should become apparent in the console output. */
+        if(cnt_ == 100)        
+        {
+            printf("  Now switching to more complex task resume condition\n");
+            eventToWaitForVec |= EVT_TRIGGER_CONSUMER_TASK;
+        }
+        
         /* Now we have to return the mutex related to the global, shared Serial object.
            Getting this mutex is one of the conditions to awake the data producer. */
         rtos_setEvent(EVT_MUTEX_SERIAL);
-        
-        /* To avoid that this task gets the mutex immediately back in the while condition
-           - before the producer task has the chance to enter the command rtos_waitForEvent
-           - we suspend voluntarily for a short while. The need for this statement is the
-           prove that the design of this application is bad - but its complexity is good as
-           a test case. */
-        rtos_delay(1);
     }
     while(rtos_waitForEvent( /* eventMask */ eventToWaitForVec
                            , /* all */       true
@@ -325,10 +348,10 @@ eventToWaitForVec = rtos_waitForEvent( /* eventMask */ eventToWaitForVec
 
 void setup(void)
 {
-
-    /* Start serial port at 9600 bps and redirect stdout into Serial. */
+    /* Start serial port at high Baud rate (we print a lot) and redirect stdout into
+       Serial. */
     init_stdout();
-    Serial.begin(9600);
+    Serial.begin(115200);
     
     printf("\n" RTOS_RTUINOS_STARTUP_MSG "\n");
 
@@ -357,9 +380,8 @@ void setup(void)
                        , /* prioClass */        1
                        , /* pStackArea */       &_taskStackT0C1[0]
                        , /* stackSize */        sizeof(_taskStackT0C1)
-                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER //EVT_SEMAPHORE_ELEM_IN_QUEUE | EVT_MUTEX_SERIAL
+                       , /* startEventMask */   /*RTOS_EVT_EVENT_02*/RTOS_EVT_DELAY_TIMER //EVT_SEMAPHORE_ELEM_IN_QUEUE | EVT_MUTEX_SERIAL
                        , /* startByAllEvents */ false
-// @todo RTuinOS crashes if we have startByAllEvents = true
                        , /* startTimeout */     10
                        );
 } /* End of setup */
@@ -384,6 +406,11 @@ void loop(void)
     /* Share current CPU load measurement with task code, which owns Serial and which can
        thus display it. */
     cpuLoad_ = gsl_getSystemLoad();
+    
+    /* In each loop - which is about once a second because of the behavior of
+       gsl_getSystemLoad - we trigger the consumer task. It should then report all data
+       samples produced meanwhile at once. */
+    rtos_setEvent(EVT_TRIGGER_CONSUMER_TASK);
     
 } /* End of loop */
 
