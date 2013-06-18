@@ -1,11 +1,11 @@
 /**
  * @file itq_interTaskQueue.c
- *   Implementation of a queue for inter task communication. Such a queue is thread safe, a
+ *   Implementation of a queue for inter task communication. Such a queue is thread safe; a
  * task writing to the one end will never corrupt data because of another task reading or
  * writing at the same time. Read and write are atomic operations and can be invoked at any
  * time by any task.\n
  *   A related semaphore indicates at any time a lower bound of the number of contained
- * elements. A task acquiring the semaphore (or one count of it respectively) can be sure
+ * elements. A task acquiring the semaphore (or one count of it respectively) can be sure to
  * find at least one element in the queue. (As writing to the task and incrementing
  * the semaphore are not atomic, the number of queued data elements can temporarily differ
  * from the number signaled by the semaphore, which doesn't matter because of the strong

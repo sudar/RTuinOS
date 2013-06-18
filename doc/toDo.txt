@@ -37,3 +37,20 @@ documentation of suspendTillTime and waitForEvent should mention this as a
 true problem appears if tiCycle is > 127: False task overrun recognitions
 lead to too soon activation. ANother location where to place a hint is the
 type-of-timer discussion in config.h
+
+R2:
+
+rtos_setEvent could become sendEvent, the old name is retained by macro.
+(sendEvent could fit better to mutex and semaphore.) 
+
+Manual: Serial.print blocks if buffer full. If a task writes more bytes
+than space in the buffer it blocks in CPU wait cycles and the CPU load is
+directly determinated by the Baud rate. If a regular task writes less than
+fits into the buffer it isn't blocked at all as the buffer will probably
+be flushed until its next activation. Now the CPU is independent of the
+Baud rate
+
+Consider to place gsl into the RTOS directory. It's proven to be valid and
+useful meanwhile. Adapt doxyfile accordingly
+
+Take relevant samples into the doxygen manual

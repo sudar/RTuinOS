@@ -37,7 +37,7 @@
 #define EVT_MUTEX_SERIAL                (RTOS_EVT_MUTEX_01)
 
 /** This event is sent by the irregular idle task to trigger the queue reading task. */
-#define EVT_TRIGGER_READING_TASK        (RTOS_EVT_EVENT_02)
+#define EVT_TRIGGER_CONSUMER_TASK       (RTOS_EVT_EVENT_02)
 
 
 /*
