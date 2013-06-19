@@ -12,3 +12,17 @@ explicitly.
 
 Support of Arduino 1.0.5, the current release as of today (29.5.2013)
   All test cases build and run with Arduino 1.0.5.
+
+Support of mutexes and semaphores. The existing concept of events has been
+extended. An event can now be of kind ordinary (broadcasted event, as
+before), mutex or semaphore. Task resume conditions can continue to
+combine any events regardless of the kind.
+
+More assertions have been placed in the kernel for debug compilation,
+which signal possible application errors, like an idle task, which tries
+to suspend.
+
+Minor, insignificant optimizations of the kernel code.
+
+The doxygen documentation now includes some of the test cases, which
+contain sample code of general interest.

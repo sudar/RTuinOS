@@ -334,6 +334,7 @@ $(targetDir)$(project).elf: $(coreDir)core.a $(objListWithPath)
 	$(info Linking project. Ouput is redirected to $(targetDir)$(project).map)
 	$(avr-gcc) $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm   		\
                -Wl,-M > $(targetDir)$(project).map
+	$(avr-size) -C --mcu=$(targetMicroController) $@ >> $(targetDir)$(project).map
 	$(avr-size) -C --mcu=$(targetMicroController) $@
 
 # Derive eep and hex file formats from the ELF file.

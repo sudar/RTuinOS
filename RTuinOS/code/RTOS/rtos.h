@@ -30,12 +30,12 @@
  */
 
 /** Version string of RTuinOS. */
-#define RTOS_RTUINOS_VERSION    "0.9"
+#define RTOS_RTUINOS_VERSION    "1.0"
 
 /** Startup message for RTuinOS applications. */
 #define RTOS_RTUINOS_STARTUP_MSG                                                        \
     "RTuinOS " RTOS_RTUINOS_VERSION " for Arduino 1.0.5\n"                              \
-    "Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)\n"                \
+    "Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)\n"           \
     "This is free software; see the source for copying conditions. There is NO\n"       \
     "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
 
@@ -283,25 +283,25 @@
  *   @return
  * The event mask of resuming events is returned. Since no combination with other events
  * than the elapsed system time is possible, this will always be #RTOS_EVT_ABSOLUTE_TIMER.
- *   @param deltaTimeTillRelease
- * \a deltaTimeTillRelease specifies a time in the future at which the task will become due
+ *   @param deltaTimeTillResume
+ * \a deltaTimeTillResume specifies a time in the future at which the task will become due
  * again. To support the most relevant use case of this function, the implementation of
  * regular real time tasks, the time designation is relative. It refers to the last recent
  * absolute time at which this task had been resumed. This time is defined by the last
  * recent call of either this function or \a rtos_waitForEvent with parameter
  * #RTOS_EVT_ABSOLUTE_TIMER. In the very first call of the function it refers to the point
  * in time the task was started.\n
- *   The value of \a deltaTimeTillRelease must neither be 0 nor exceed half the range of
+ *   The value of \a deltaTimeTillResume must neither be 0 nor exceed half the range of
  * the data type configured for the system time. Otherwise a false task overrun recognition
  * and bad task timing could result. Please, refer to the RTuinOS manual for details.
  *   @remark
  * This function actually is a macro calling \a rtos_waitForEvent using fixed parameters.
  *   @see rtos_waitForEvent
  */
-#define rtos_suspendTaskTillTime(/* uintTime_t */ deltaTimeTillRelease)     \
+#define rtos_suspendTaskTillTime(/* uintTime_t */ deltaTimeTillResume)      \
     rtos_waitForEvent( /* eventMask */ RTOS_EVT_ABSOLUTE_TIMER              \
                      , /* all */       false                                \
-                     , /* timeout */   deltaTimeTillRelease                 \
+                     , /* timeout */   deltaTimeTillResume                  \
                      )
 
 
@@ -382,7 +382,7 @@ extern void rtos_enableIRQUser01(void);
 void rtos_initRTOS(void);
 
 /* Post a set of events to all suspended tasks. Suspend the current task if the events
-   release another task of higher priority. */
+   resume another task of higher priority. */
 void rtos_setEvent(uint16_t eventVec);
 
 /* Suspend task until a combination of events appears or a timeout elapses. */

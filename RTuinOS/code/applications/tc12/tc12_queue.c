@@ -1,5 +1,5 @@
 /**
- * @file tc02_oneTask.c
+ * @file tc12_queue.c
  *   Test case 12 of RTuinOS. Two tasks implement a producer-consumer system. The producer
  * computes samples of the sine function and files them in a queue. The second task,
  * which is of higher priority, waits for queued data and prints the values to the terminal
@@ -118,10 +118,10 @@ static uint8_t _taskStackT0C1[STACK_SIZE]
 /** The CPU load as computed in the idle task. A shared global variable is used because it is
     reported in one of the other tasks, which may use the terminal - idle must not do so in
     this application! */
-static volatile uint8_t cpuLoad_ = 200;
+static volatile uint8_t _cpuLoad = 200;
  
  
-/** The semaphore of type uint16_t counts the number of samples in the queue, which are
+/** The semaphore of type uint8_t counts the number of samples in the queue, which are
     already produced but not yet consumed. The start value needs to be null.
       @remark Although this variable is shared between tasks and although its value is
    shared by others tasks it must not be declared as volatile. Actually, no task will
@@ -183,7 +183,7 @@ static void taskT0C0_producer()
 
     /* Do some reporting. We own the mutex. */
     uint32_t tiNow = millis();
-    printf("Producer:\n  Time: %3lu\n  CPU load: %3u%%\n", tiNow-tiLastCall_, (cpuLoad_+1)/2);
+    printf("Producer:\n  Time: %3lu\n  CPU load: %3u%%\n", tiNow-tiLastCall_, (_cpuLoad+1)/2);
     
     /* Produce data. */
     integerSineZ_step();
@@ -353,7 +353,27 @@ void setup(void)
     init_stdout();
     Serial.begin(115200);
     
+#if 0
     printf("\n" RTOS_RTUINOS_STARTUP_MSG "\n");
+#else
+    {
+        // save some chars
+    //    static PROGMEM prog_uchar signMessage[]  = "\n" RTOS_RTUINOS_STARTUP_MSG "\n";
+        /* See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=34734 why not using PROGMEM. */
+        static __attribute__((section(".progmem.strings"))) char signMessage[]  = "\n" RTOS_RTUINOS_STARTUP_MSG "\n";
+
+        uint8_t k;    // counter variable
+
+        for(k=0; k<sizeof(signMessage)-1; ++k)
+        {
+            char myChar =  pgm_read_byte_near(signMessage + k); 
+            //Serial.write(myChar);
+            putchar(myChar);
+        }
+        //Serial.write('\n');
+        putchar('\n');
+    }
+#endif
 
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
@@ -405,7 +425,7 @@ void loop(void)
     
     /* Share current CPU load measurement with task code, which owns Serial and which can
        thus display it. */
-    cpuLoad_ = gsl_getSystemLoad();
+    _cpuLoad = gsl_getSystemLoad();
     
     /* In each loop - which is about once a second because of the behavior of
        gsl_getSystemLoad - we trigger the consumer task. It should then report all data
