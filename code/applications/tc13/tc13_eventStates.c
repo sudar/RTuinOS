@@ -13,7 +13,7 @@
  *   This application doesn't produce much terminal output. It is successful if it doesn't
  * end with an assertion firing.
  *
- * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -33,11 +33,18 @@
  *   loop
  * Local functions
  *   blink
- *   tT0C2
- *   tT0C1
- *   tT0C0
- *   tT1C0_control
+ *   tT2
+ *   tT1
+ *   tT0
+ *   tTControl
  */
+
+/* This test case make no sense in PRODUCTION compilation as all results are checked by
+   assertion. */
+#ifndef DEBUG
+# error This test case needs to be compiled in DEBUG configuration only
+#endif
+
 
 /*
  * Include files
@@ -75,7 +82,7 @@
 
 /** The indexes of the tasks are named to make index based API functions of RTuinOS safely
     usable. */
-enum {_idxTaskT0C0, _idxTaskT0C1, _idxTaskT0C2, _idxTaskT1C0_control, _noTasks};
+enum {_idxTaskT0, _idxTaskT1, _idxTaskT2, _idxTaskTControl, _noTasks};
 
 
 /*
@@ -93,10 +100,10 @@ enum {_idxTaskT0C0, _idxTaskT0C1, _idxTaskT0C2, _idxTaskT1C0_control, _noTasks};
  */
  
  /** The tasks' stack areas. */
-static uint8_t _taskStackT0C2[STACK_SIZE]
-             , _taskStackT0C1[STACK_SIZE]
-             , _taskStackT0C0[STACK_SIZE]
-             , _taskStackT1C0_control[STACK_SIZE];
+static uint8_t _taskStackT2[STACK_SIZE]
+             , _taskStackT1[STACK_SIZE]
+             , _taskStackT0[STACK_SIZE]
+             , _taskStackTControl[STACK_SIZE];
          
 /** The array of semaphores is declared by the RTuinOS code but defined in the application
     to give it the opportunity to initialize all semaphore's counter approriately. */
@@ -104,7 +111,10 @@ uintSemaphore_t rtos_semaphoreAry[RTOS_NO_SEMAPHORE_EVENTS] = {2, 2};
 
 /** A counter of the test repetitions, just to provide some "still alive" feedback to the
     operator. */
-static volatile uint32_t _noTestCycles = 0;
+static volatile uint32_t _noTestCyclesT2         = 0
+                       , _noTestCyclesT1         = 0
+                       , _noTestCyclesT0         = 0
+                       , _noTestCyclesTControl = 0;
 
 /** The step of the defined test sequence. Used for state validation in the tasks. */
 static volatile uint8_t _step = 0;    
@@ -149,7 +159,7 @@ static void blink(uint8_t noFlashes)
  * A task function must never return; this would cause a reset.
  */ 
 
-static void tT0C0(uint16_t initCondition)
+static void tT0(uint16_t initCondition)
 
 {
     /* The test is forever cyclically repeated. */
@@ -157,26 +167,29 @@ static void tT0C0(uint16_t initCondition)
     {
         uint16_t reqEvtVec, gotEvtVec;
         
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 1);
+
         /* Check initial balance of semaphores at beginning of test sequence. Normally, an
            application must never evaluate the contents of the semaphore array as it is
            highly volatile. In this specific test case it may as the test advances in
            controlled steps only and data won't change in between. */
         ASSERT(rtos_semaphoreAry[0] == 2  &&  rtos_semaphoreAry[1] == 2);
-        
-        /* Wait for next step. Check if we are still in sync with the test sequence. */
-        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0C0, /* all */ false, /* timeout */ 0);
-        ASSERT(_step == 1);
-        
+
         /* Step 1: wait for M1, M0 and S0. */
         reqEvtVec = MTX_1 | MTX_0 | SEM_0;
         gotEvtVec = rtos_waitForEvent(reqEvtVec, /* all */ true, /* timeout */ 0);
         ASSERT(reqEvtVec == gotEvtVec);
         
+        /* Double-check: The acqusition must not have blocked the task. Step is unchanged. */
+        ASSERT(_step == 1);
+        
         /* Check balance of semaphores. */
         ASSERT(rtos_semaphoreAry[1] == 2  &&  rtos_semaphoreAry[0] == 1);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
-        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0C0, /* all */ false, /* timeout */ 0);
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
         ASSERT(_step == 4);
         
         /* Step 4: This task releases the aquired sync objects M0 and S0. */
@@ -184,7 +197,7 @@ static void tT0C0(uint16_t initCondition)
         rtos_setEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
-        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0C0, /* all */ false, /* timeout */ 0);
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
         ASSERT(_step == 5);
         
         /* Step 5: This task sends some ordinary broadcasted events. */
@@ -192,7 +205,7 @@ static void tT0C0(uint16_t initCondition)
         rtos_setEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
-        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0C0, /* all */ false, /* timeout */ 0);
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
         ASSERT(_step == 6);
         
         /* Step 6: This task releases the aquired sync object M1. */
@@ -200,10 +213,94 @@ static void tT0C0(uint16_t initCondition)
         rtos_setEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
-        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0C0, /* all */ false, /* timeout */ 0);
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
         ASSERT(_step == 8);
+        
+        /* Step 8: This task broadcasts event E1. */
+        reqEvtVec = EVT_1;
+        rtos_setEvent(reqEvtVec);
+        
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 9);
+        
+        /* Step 9: This task broadcasts events E1 and E0. */
+        reqEvtVec = EVT_1 | EVT_0;
+        rtos_setEvent(reqEvtVec);
+        
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 11);
+        
+        /* Step 11: wait for S1 and S0. */
+        reqEvtVec = SEM_1 | SEM_0;
+        gotEvtVec = rtos_waitForEvent(reqEvtVec, /* all */ true, /* timeout */ 0);
+        ASSERT(reqEvtVec == gotEvtVec);
+        
+        /* Double-check: The acqusition must not have blocked the task. Step is unchanged. */
+        ASSERT(_step == 11);
+        
+        /* Check balance of semaphores. */
+        ASSERT(rtos_semaphoreAry[1] == 1  &&  rtos_semaphoreAry[0] == 0);
+
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 12);
+        
+        /* Step 12: wait for M1 and S1. Both are immediately available. */
+        reqEvtVec = MTX_1 | SEM_1;
+        gotEvtVec = rtos_waitForEvent(reqEvtVec, /* all */ true, /* timeout */ 0);
+        ASSERT(reqEvtVec == gotEvtVec);
+        
+        /* Double-check: The acqusition must not have blocked the task. Step is unchanged. */
+        ASSERT(_step == 12);
+        
+        /* Check balance of semaphores. */
+        ASSERT(rtos_semaphoreAry[1] == 0  &&  rtos_semaphoreAry[0] == 0);
+
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 13);
+
+        /* Step 13: wait for any of the semaphores S1 or S0. */
+        reqEvtVec = SEM_1 | SEM_0;
+        gotEvtVec = rtos_waitForEvent(reqEvtVec, /* all */ false, /* timeout */ 0);
+        ASSERT((reqEvtVec & gotEvtVec) != 0);
+        
+        /* The task has been blocked for some steps. Double-check. */
+        ASSERT(_step == 14);
+        
+        /* Check balance of semaphores. */
+        ASSERT(rtos_semaphoreAry[1] == 0  &&  rtos_semaphoreAry[0] == 0);
+        
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 16);
+
+        /* Step 16: This task releases the aquired sync objects M1, S1 and S0. */
+        reqEvtVec = MTX_1 | SEM_1 | SEM_0;
+        rtos_setEvent(reqEvtVec);
+        
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 17);
+
+        /* Step 17: This task releases the aquired sync object S1. */
+        reqEvtVec = SEM_1;
+        rtos_setEvent(reqEvtVec);
+        
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 18);
+
+        /* Step 18: This task releases the aquired sync objects S1. */
+        reqEvtVec = SEM_1;
+        rtos_setEvent(reqEvtVec);
+        
+        /* This task has completed the test sequence. */
+        ++ _noTestCyclesT0;
     }
-} /* End of tT0C0 */
+} /* End of tT0 */
 
 
 
@@ -218,7 +315,7 @@ static void tT0C0(uint16_t initCondition)
  * A task function must never return; this would cause a reset.
  */ 
 
-static void tT0C1(uint16_t initCondition)
+static void tT1(uint16_t initCondition)
 
 {
     /* The test is forever cyclically repeated. */
@@ -227,7 +324,7 @@ static void tT0C1(uint16_t initCondition)
         uint16_t reqEvtVec, gotEvtVec;
 
         /* Wait for next step. Check if we are still in sync with the test sequence. */
-        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0C1, /* all */ false, /* timeout */ 0);
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T1, /* all */ false, /* timeout */ 0);
         ASSERT(_step == 2);
         
         /* Step 2: wait for E1, E0, M0 and S0. */
@@ -242,15 +339,27 @@ static void tT0C1(uint16_t initCondition)
         ASSERT(rtos_semaphoreAry[1] == 2  &&  rtos_semaphoreAry[0] == 1);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
-        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0C1, /* all */ false, /* timeout */ 0);
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T1, /* all */ false, /* timeout */ 0);
         ASSERT(_step == 14);
         
         /* Step 14: This task releases the aquired sync object M0 and the not acquired S1
            (meaning: it enlarges the pool managed by this semaphore). */
         reqEvtVec = MTX_0 | SEM_1;
         rtos_setEvent(reqEvtVec);
+        
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T1, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 15);
+        
+        /* Step 15: This task releases the aquired sync object S0 and sends the ordinary
+           event E1 (which is nobody listening for). */
+        reqEvtVec = EVT_1 | SEM_0;
+        rtos_setEvent(reqEvtVec);
+        
+        /* This task has completed the test sequence. */ 
+        ++ _noTestCyclesT1;
     }
-} /* End of tT0C1 */
+} /* End of tT1 */
 
 
 
@@ -265,7 +374,7 @@ static void tT0C1(uint16_t initCondition)
  * A task function must never return; this would cause a reset.
  */ 
 
-static void tT0C2(uint16_t initCondition)
+static void tT2(uint16_t initCondition)
 
 {
     /* The test is forever cyclically repeated. */
@@ -274,7 +383,7 @@ static void tT0C2(uint16_t initCondition)
         uint16_t reqEvtVec, gotEvtVec;
 
         /* Wait for next step. Check if we are still in sync with the test sequence. */
-        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0C2, /* all */ false, /* timeout */ 0);
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T2, /* all */ false, /* timeout */ 0);
         ASSERT(_step == 3);
         
         /* Step 3: wait for M1, M0 and S0. */
@@ -288,8 +397,54 @@ static void tT0C2(uint16_t initCondition)
         /* Check balance of semaphores. */
         ASSERT(rtos_semaphoreAry[1] == 2  &&  rtos_semaphoreAry[0] == 0);
         
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T2, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 7);
+
+        /* Step 7: wait for E0 and S1. */
+        reqEvtVec = EVT_0 | SEM_1;
+        gotEvtVec = rtos_waitForEvent(reqEvtVec, /* all */ true, /* timeout */ 0);
+        ASSERT(reqEvtVec == gotEvtVec);
+        
+        /* The task has been blocked for some steps. Double-check. */
+        ASSERT(_step == 9);
+        
+        /* Check balance of semaphores. */
+        ASSERT(rtos_semaphoreAry[1] == 1  &&  rtos_semaphoreAry[0] == 0);
+        
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T2, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 10);
+
+        /* Step 10: This task releases all the sync objects. */
+        reqEvtVec = MTX_1 | MTX_0 | SEM_1 | SEM_0;
+        rtos_setEvent(reqEvtVec);
+        
+        /* Wait for next step. Check if we are still in sync with the test sequence. */
+        rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T2, /* all */ false, /* timeout */ 0);
+        ASSERT(_step == 19);
+
+        /* Step 19. This is the last step of the test sequence. In step 14, task T1 had
+           "released" a semaphore it hadn't owned in that step (meaning: It has "produced"
+           a data element for the managed pool). Before we can repeat our test sequence we
+           have to equalized the balance again. This task will now consume the semaphore
+           once, without the intention to ever release it again. The balance should then be
+           the same as at the beginning of the sequence. */ 
+        reqEvtVec = SEM_1;
+        gotEvtVec = rtos_waitForEvent(reqEvtVec, /* all */ false, /* timeout */ 0);
+        ASSERT(reqEvtVec == gotEvtVec);
+        
+        /* The call of task rtos_waitForEvent must not have blocked. Double-check that step
+           didn't change. */
+        ASSERT(_step == 19);
+        
+        /* Check (initial) balance of semaphores. */
+        ASSERT(rtos_semaphoreAry[1] == 2  &&  rtos_semaphoreAry[0] == 2);
+        
+        /* This task has completed the test sequence. */
+        ++ _noTestCyclesT2;
     }
-} /* End of tT0C2 */
+} /* End of tT2 */
 
 
 
@@ -303,49 +458,46 @@ static void tT0C2(uint16_t initCondition)
  * A task function must never return; this would cause a reset.
  */ 
 
-static void tT1C0_control(uint16_t initCondition)
+static void tTControl(uint16_t initCondition)
 {
-#define TASK_TIME  10  /* ms */
-
     /* The pattern in which the tasks each do one step is predetermined by the test case
        specification. */
-    static const uint8_t nextTaskAry[] = { 0, 1, 2, 0, 0, 0 /*, 2, 0, 0, 2, 0
-                                         , 0, 0, 1, 1, 0, 0, 0, 2*/
+    static const uint8_t nextTaskAry[] = { 0, 1, 2, 0, 0, 0, 2, 0, 0, 2, 0
+                                         , 0, 0, 1, 1, 0, 0, 0, 2
                                          };
     
-    /* The basic pattern is to run the control task function regularly. */
-//    while(rtos_suspendTaskTillTime(/* deltaTimeTillResume */ TIME_IN_MS(TASK_TIME)))
-do
+    /* The basic pattern is to run the control task function regularly. We do this as fast
+       as possible; it is resumed in every first timer tic, which is about every 2 ms. */
+    while(rtos_suspendTaskTillTime(/* deltaTimeTillResume */ 1))
     {
         /* Trigger one step of the next task. */
         uint16_t evtTriggerTask = EVT_TRIGGER_TASK << nextTaskAry[_step];
         ++ _step;
         rtos_setEvent(evtTriggerTask);
         
-        /* Suspend this task for a while, which enables the triggered task to do some state
-           validation with unchanging data. Alternatively, we could have chosen a lower
-           priority for the control task. */
-        rtos_delay(TIME_IN_MS(3*TASK_TIME/4));
-        
         /* The test is cyclically repeated. */
         if(_step >= sizeof(nextTaskAry)/sizeof(nextTaskAry[0]))
+        {
+            /* End of cycle reached. */
             _step = 0;
             
+            /* Count the successful test cycles and double-check synchronicity of all tasks. */
+            ++ _noTestCyclesTControl;
+            ASSERT(_noTestCyclesTControl == _noTestCyclesT0
+                   &&  _noTestCyclesTControl == _noTestCyclesT1
+                   &&  _noTestCyclesTControl == _noTestCyclesT2
+                  );
+        }
+        
         /* Any task may query the task overrun counter and this task is known to be
            regular. So we double-check the counter. */
-        ASSERT(rtos_getTaskOverrunCounter(_idxTaskT1C0_control, /* doReset */ false) == 0);
-        
-        /* Count the successful test cycles. */
-        // @todo Move this statement to one of the three tasks
-        ++ _noTestCycles;
+        ASSERT(rtos_getTaskOverrunCounter(_idxTaskTControl, /* doReset */ false) == 0);
     }
-while(_step > 0);    
 
     /* A task function must never return; this would cause a reset. */
     ASSERT(false);
-    
-#undef TASK_TIME
-} /* End of tT1C0_control */
+
+} /* End of tTControl */
 
 
 
@@ -369,45 +521,45 @@ void setup(void)
     
     ASSERT(_noTasks == RTOS_NO_TASKS);
 
-    /* Configure task 0 of priority class 0. */
-    rtos_initializeTask( /* idxTask */          _idxTaskT0C0
-                       , /* taskFunction */     tT0C0
-                       , /* prioClass */        0
-                       , /* pStackArea */       &_taskStackT0C0[0]
-                       , /* stackSize */        sizeof(_taskStackT0C0)
+    /* Configure task 0 of priority class 1. */
+    rtos_initializeTask( /* idxTask */          _idxTaskT0
+                       , /* taskFunction */     tT0
+                       , /* prioClass */        1
+                       , /* pStackArea */       &_taskStackT0[0]
+                       , /* stackSize */        sizeof(_taskStackT0)
                        , /* startEventMask */   RTOS_EVT_DELAY_TIMER
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
 
-    /* Configure task 0 of priority class 1. */
-    rtos_initializeTask( /* idxTask */          _idxTaskT0C1
-                       , /* taskFunction */     tT0C1
-                       , /* prioClass */        1
-                       , /* pStackArea */       &_taskStackT0C1[0]
-                       , /* stackSize */        sizeof(_taskStackT0C1)
+    /* Configure task 0 of priority class 2. */
+    rtos_initializeTask( /* idxTask */          _idxTaskT1
+                       , /* taskFunction */     tT1
+                       , /* prioClass */        2
+                       , /* pStackArea */       &_taskStackT1[0]
+                       , /* stackSize */        sizeof(_taskStackT1)
                        , /* startEventMask */   RTOS_EVT_DELAY_TIMER
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
                        
-    /* Configure task 0 of priority class 2. */
-    rtos_initializeTask( /* idxTask */          _idxTaskT0C2
-                       , /* taskFunction */     tT0C2
-                       , /* prioClass */        2
-                       , /* pStackArea */       &_taskStackT0C2[0]
-                       , /* stackSize */        sizeof(_taskStackT0C2)
+    /* Configure task 0 of priority class 3. */
+    rtos_initializeTask( /* idxTask */          _idxTaskT2
+                       , /* taskFunction */     tT2
+                       , /* prioClass */        3
+                       , /* pStackArea */       &_taskStackT2[0]
+                       , /* stackSize */        sizeof(_taskStackT2)
                        , /* startEventMask */   RTOS_EVT_DELAY_TIMER
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
 
     /* Configure the control task of priority class 0. */
-    rtos_initializeTask( /* idxTask */          _idxTaskT1C0_control
-                       , /* taskFunction */     tT1C0_control
-                       , /* prioClass */        2
-                       , /* pStackArea */       &_taskStackT1C0_control[0]
-                       , /* stackSize */        sizeof(_taskStackT1C0_control)
+    rtos_initializeTask( /* idxTask */          _idxTaskTControl
+                       , /* taskFunction */     tTControl
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStackTControl[0]
+                       , /* stackSize */        sizeof(_taskStackTControl)
                        , /* startEventMask */   RTOS_EVT_DELAY_TIMER
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
@@ -434,7 +586,7 @@ void loop(void)
     /* The next statement has a significant impact on the frequency of the calls of loop:
        gsl_getSystemLoad blocks for about a second. */
     printf( "Idle task, test cycles: %6lu, CPU load: %3u%%\n"
-          , _noTestCycles
+          , _noTestCyclesTControl
           , (gsl_getSystemLoad()+1)/2
           );
           
