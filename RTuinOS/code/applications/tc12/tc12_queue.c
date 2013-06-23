@@ -28,7 +28,7 @@
  *   @remark: The idle task must not use the terminal as it can't use the suspend command to
  * acquire the related mutex.
  *
- * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the

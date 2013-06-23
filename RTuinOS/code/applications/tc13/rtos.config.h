@@ -46,7 +46,7 @@
     priority, this number is lower or equal to NO_TASKS. Permitted range is 0..NO_TASKS,
     but 1..NO_TASKS if at least one task is defined.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_PRIO_CLASSES    3
+#define RTOS_NO_PRIO_CLASSES    4
 
 
 /** Since many tasks will belong to distinct priority classes, the maximum number of tasks
@@ -55,7 +55,7 @@
     structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..127,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 2
+#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 1
 
 
 /** The number of events, which behave like semaphores. When posted, they are not

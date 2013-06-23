@@ -5,7 +5,7 @@
  * Definition of application events. The application events are managed in a
  * central file to avoid inconistencies and accidental double usage.
  *
- * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
