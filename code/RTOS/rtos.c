@@ -222,7 +222,7 @@
       The implementation must be compatible with a naked function. In particular, it must
     not define any local data! */
     // TODO A single variable _tmpVarCxAsm should suffice if first the high bytes, then both low bytes are exchanged. Check, if there are other code locations where really both variables are required
-    // TODO Comment, why macros are split in two parts are no longer correct. Now we simply need only the second part for waitFor(Immediately available mutexes)
+    // TODO Comment, why macros are split in two parts is no longer correct. Now we simply need only the second part for waitFor(Immediately available mutexes)
 #define SWITCH_CONTEXT                                                                      \
 {                                                                                           \
     /* Switch the stack pointer to the (saved) stack pointer of the new active task. */     \
@@ -244,11 +244,11 @@
 
 
 /** An important code pattern, which is used in every interrupt routine (including the
-    suspend commands, which can be considered pseudo-software interrupts). Immediately
-    after a context switch, the code fragment decides whether the task we switch to
-    had been inactivated by a timer or application interrupt or by a suspend command.
-    (Only) in the latter case the return value of the suspend command is put onto the
-    stack. From there it'll be loaded into the CPU when ending the interrupt routine.\n
+    suspend commands, which can be considered pseudo-software interrupts). Placed
+    immediately after a context switch, the code fragment decides whether the task we
+    switch to had been inactivated by a timer or application interrupt or by a suspend
+    command. (Only) in the latter case the return value of the suspend command is put onto
+    the stack. From there it'll be loaded into the CPU when ending the interrupt routine.\n
       Side effects: The new task is read from the global variable _pActiveTask.\n
       Prerequisites: The use of the macro needs to be preceeded by a use of macro
     SWITCH_CONTEXT.\n
@@ -908,10 +908,6 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
        task switches appear one after another. Therefore we will reenable the interrupts
        only with the final reti command. The disadvantage is probably minor (some clock
        tics less of responsiveness of the system). */
-    /* @todo It's worth a consideration if too many task switches at a time can really
-       happen: While restoring the new context is running, the only source for those task
-       switches would be a new timer tic and this comes deterministically far in the
-       future. Hint: Consider application interrupts also. */
 
     /* The stack pointer points to the now active task (which will often be still the same
        as at function entry). The CPU context to continue with is popped from this stack. If
@@ -1447,9 +1443,13 @@ static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
  * generation of the SW interupt entry point needs to be inhibited in order to permit the
  * implementation of saving/restoring the task context).
  *   @return
- * The function determines which task is to be activated and records which task is left
- * (i.e. the task calling this routine) in the global variables \a _pActiveTask and \a
- * _pSuspendedTask.
+ * If mutex or semaphores are in use the function returns the Boolean information whether
+ * the calling task has to be suspended. This is not the caes if all demanded sync objects
+ * are currently available. If RTuinOS is compiled without support of mutexes and
+ * sempahores than the calling task is always suspended.\n
+ *   By means of side effects, the function returns which task is to be activated and records
+ * which task is left (i.e. the task calling this routine) in the global variables \a
+ * _pActiveTask and \a _pSuspendedTask.
  *   @param eventMask
  * See software interrupt \a rtos_waitForEvent.
  *   @param all
@@ -1637,8 +1637,9 @@ uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
        function and places it in register pair r24/25. */
     if(waitForEvent(eventMask, all, timeout))
     {
-        /* The wait condition could be fulfilled immediately, we need to suspend the task.
-           Switch the stack pointer to the (saved) stack pointer of the new active task. */
+        /* The wait condition couldn't be fulfilled immediately, we need to suspend the
+           task. Switch the stack pointer to the (saved) stack pointer of the new active
+           task. */
         SWITCH_CONTEXT
      }
 
