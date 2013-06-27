@@ -665,11 +665,6 @@ static bool checkForTaskActivation(
 
             /* This task becomes due. */
 
-            /* Clear the current event mask; it becomes useless and will be reloaded with
-               the next suspend operation in the next active state. */
-            // @todo Check if this statement is necessary. Why not leaving the mask as it is?
-            pT->eventMask = 0;
-
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
             /* If a round robin task voluntarily suspends it gets the right for a complete
                new time slice. Reload the counter. */
@@ -966,9 +961,7 @@ static RTOS_TRUE_FCT bool setEvent(uint16_t postedEventVec)
     uint8_t idxSuspTask;
 
     /* The timer events must not be set manually. */
-    // @todo Replace this by an assertion
     ASSERT((postedEventVec & MASK_EVT_IS_TIMER) == 0);
-    postedEventVec &= ~MASK_EVT_IS_TIMER;
 
     /* We keep track of all semaphores and mutexes, which have to be posted (released)
        exactely once - to the first task, which is waiting for them. This task is done,
