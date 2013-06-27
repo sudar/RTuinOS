@@ -45,6 +45,6 @@
  */
 
 void init_stdout();
-
+int puts_progmem(const char *string);
 
 #endif  /* STDOUT_INCLUDED */

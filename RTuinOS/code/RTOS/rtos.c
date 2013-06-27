@@ -206,23 +206,16 @@
 /** An important code pattern, which is used in every interrupt routine (including the
     suspend commands, which can be considered pseudo-software interrupts). The code
     performs the actual task switch by saving the current stack pointer in a location owned
-    by the left task and loading the stack pointer from a location owned by the new task
+    by the left task and by loading the stack pointer from a location owned by the new task
     (where its stack pointer value had been saved at initialization time or the last time
-    it became inactive.).\n
-      The code fragment then decides whether the new task had been inactivated by a timer
-    or application interrupt or by a suspend command. In the latter case the return value
-    of the suspend command is put onto the stack. From there it'll be loaded into the CPU
-    when ending the interrupt routine.\n
+    it became inactive).\n
       Side effects: The left task and the new task are read from the global variables
     _pSuspendedTask and _pActiveTask.\n
       Prerequisites: The use of the macro needs to be followed by a use of macro
-    PUSH_RET_CODE_OF_SWITCH_CONTEXT. (Both macros have not been yoined to a single one only
-    for sake of comprehensibility of the code using the code patterns.)\n
+    PUSH_RET_CODE_OF_SWITCH_CONTEXT.\n
       The routine depends on a reset global interrupt flag.\n
       The implementation must be compatible with a naked function. In particular, it must
     not define any local data! */
-    // TODO A single variable _tmpVarCxAsm should suffice if first the high bytes, then both low bytes are exchanged. Check, if there are other code locations where really both variables are required
-    // TODO Comment, why macros are split in two parts is no longer correct. Now we simply need only the second part for waitFor(Immediately available mutexes)
 #define SWITCH_CONTEXT                                                                      \
 {                                                                                           \
     /* Switch the stack pointer to the (saved) stack pointer of the new active task. */     \
@@ -262,7 +255,7 @@
        temporarily only ready (but not suspended) because of being superseded by a higher   \
        prioritized task or because of a round-robin cycle.                                  \
          If this is the first activation after state suspended, we need to return the       \
-       cause for release from suspended state as function return code to the task. When     \
+       cause for resume from suspended state as function return code to the task. When      \
        a task is suspended it always pauses inside the suspend command. */                  \
     if(_pActiveTask->postedEventVec > 0)                                                    \
     {                                                                                       \
@@ -397,7 +390,13 @@ RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void);
 static RTOS_TRUE_FCT bool onTimerTic(void);
 static RTOS_TRUE_FCT bool setEvent(uint16_t eventVec);
 RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec);
+
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
 static RTOS_TRUE_FCT bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+#else
+static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+#endif
+
 RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
                                          , bool all
                                          , uintTime_t timeout
@@ -407,6 +406,15 @@ RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
 /*
  * Data definitions
  */
+
+/** The RTuinOS startup message is placed in the flash ROM. Here, memory is not expensive.
+    Consider to use \a puts_progmem to print such a string in the Arduino console window.
+    Please refer to stdout.c, test case tc12, for more.\n
+      See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=34734 why not using PROGMEM for the
+    declaration.
+      @see int puts_progmem(const char *) */
+__attribute__((section(".progmem.strings"))) const char rtos_rtuinosStartupMsg[] = \
+                                                                "\r" RTOS_RTUINOS_STARTUP_MSG;
 
 /** The system time. A cyclic counter of the timer tics. The counter is interrupt driven.
     The unit of the time is defined only by the it triggering source and doesn't matter at
@@ -578,7 +586,7 @@ static uint8_t *prepareTaskStack( uint8_t * const pEmptyTaskStack
  * application code if another interrupt or other interrupt settings should be used.
  */
 
-void rtos_enableIRQTimerTic(void)
+RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void)
 
 {
 #ifdef __AVR_ATmega2560__
@@ -603,9 +611,9 @@ void rtos_enableIRQTimerTic(void)
 
 /**
  * When an event has been posted to one or more of the currently suspended tasks, it might
- * easily be that some of these tasks are released and become due. This routine checks all
- * suspended tasks and reorders them into the due task lists if they are released.\n
- *   If there is at least one released tasks it might be that this task is of higher
+ * easily be that some of these tasks are resumed and become due. This routine checks all
+ * suspended tasks and reorders them into the due task lists if they are resumed.\n
+ *   If there is at least one resumed task it might be that this task is of higher
  * priority than the currently active task - in which case it will become the new active
  * task. This routine determines which task is now the active task.
  *   @return
@@ -672,13 +680,8 @@ static bool checkForTaskActivation(
             _pDueTaskAryAry[prio][_noDueTasksAry[prio]++] = pT;
             -- _noSuspendedTasks;
             for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
-// @todo remove temporary test code
-{
                 _pSuspendedTaskAry[u] = _pSuspendedTaskAry[u+1];
-#if RTOS_USE_MUTEX == RTOS_FEATURE_ON  ||  RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
-ASSERT(_pSuspendedTaskAry[u]->prioClass <= pT->prioClass);
-#endif
-}
+
             /* Since a task became due there might be a change of the active task. */
             isNewActiveTask = true;
         }
@@ -735,7 +738,7 @@ ASSERT(_pSuspendedTaskAry[u]->prioClass <= pT->prioClass);
 /**
  * This function is called from the system interrupt triggered by the main clock. The
  * timers of all due tasks are served and - in case they elapse - timer events are
- * generated. These events may then release some of the tasks. If so, they are placed in
+ * generated. These events may then resume some of the tasks. If so, they are placed in
  * the appropriate list of due tasks. Finally, the longest due task in the highest none
  * empty priority class is activated.
  *   @return
@@ -746,7 +749,7 @@ ASSERT(_pSuspendedTaskAry[u]->prioClass <= pT->prioClass);
  * function, is returned by side effect: The global variable _pActiveTask is updated.
  */
 
-static bool onTimerTic(void)
+static RTOS_TRUE_FCT bool onTimerTic(void)
 {
     uint8_t idxSuspTask;
 
@@ -781,7 +784,7 @@ static bool onTimerTic(void)
            checkForTaskActivation right here instead of later? Here we'd do it just for
            those tasks, which received an event, later we do it for all suspended tasks -
            which might be significant more tests (all suspended tasks in any timer tic as
-           opposed to once per task and elapsed timer). Is it just for code reuse (release
+           opposed to once per task and elapsed timer). Is it just for code reuse (resume
            condition test shared with setEvent)? */
 
     } /* End for(All suspended tasks) */
@@ -816,7 +819,7 @@ static bool onTimerTic(void)
                 _pDueTaskAryAry[prio][idxTask] = _pActiveTask;
 
                 /* Force check for new active task - even if no suspended task should have been
-                   released. */
+                   resumed. */
                 isNewActiveTask = true;
 
             } /* if(Did the task loose against another due one?) */
@@ -828,10 +831,10 @@ static bool onTimerTic(void)
 
     /* Check if the task becomes due because of the possibly occured timer events.
          isNewActiveTask: Enforce the search for a new active task. Normally we do this
-       only if a suspended task was released. If round robin is compiled it depends. Always
+       only if a suspended task was resumed. If round robin is compiled it depends. Always
        look for a new active task if the round robin time has elapsed.
          The function has side effects: If there's a task which was suspended before and
-       which is released because of the timer events and which is of higher priority than
+       which is resumed because of the timer events and which is of higher priority than
        the one being active so far, the ID of the old and newly active task are written
        into global variables _pSuspendedTask and _pActiveTask. */
     return checkForTaskActivation(
@@ -955,15 +958,16 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
  * operate only if all interrupts are disabled.
  */
 
-static bool setEvent(uint16_t postedEventVec)
+static RTOS_TRUE_FCT bool setEvent(uint16_t postedEventVec)
 {
     /* Avoid inlining under all circumstances. See attributes also. */
     asm("");
 
     uint8_t idxSuspTask;
 
-    /* The timer events can't be set manually. */
+    /* The timer events must not be set manually. */
     // @todo Replace this by an assertion
+    ASSERT((postedEventVec & MASK_EVT_IS_TIMER) == 0);
     postedEventVec &= ~MASK_EVT_IS_TIMER;
 
     /* We keep track of all semaphores and mutexes, which have to be posted (released)
@@ -998,7 +1002,7 @@ static bool setEvent(uint16_t postedEventVec)
            but an application error. This assertion fires if the application doesn't
            properly keep track on who owns which mutex. */
         ASSERT((pT->postedEventVec & dbg_allMutexesToReleaseVec) == 0);
-        
+
         /* The vector of all events this task will receive. */
         uint16_t gotEvtVec = (postedEventVec | mutexToReleaseVec) & pT->eventMask;
 
@@ -1050,7 +1054,7 @@ static bool setEvent(uint16_t postedEventVec)
         {
             /* @todo Remove development assertion after thorough testing! */
             ASSERT(idxSem < RTOS_NO_SEMAPHORE_EVENTS);
-            
+
             ++ rtos_semaphoreAry[idxSem];
 
             /* The assertion validates the application code. It fires if the application
@@ -1062,7 +1066,7 @@ static bool setEvent(uint16_t postedEventVec)
 
         /* Test next semaphore in next cycle. */
         semaphoreToReleaseVec >>= 1;
-        
+
         /* The next event/semaphore bit is related to the next array entry. */
         ++ idxSem;
     }
@@ -1191,13 +1195,13 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
  * suspended tasks which are waiting for it. An event is not saved beyond that. If a task
  * suspends and starts waiting for an event which has been posted by another task just
  * before, it'll wait forever and never be resumed.\n
- *   The posted event may release another task, which may be of higher priority as the
+ *   The posted event may resume another task, which may be of higher priority as the
  * event posting task. In this case \a setEvent will cause a task switch. The calling task
  * stays due but stops to be the active task. It does not become suspended (this is why
  * even the idle task may call this function). The activated task will resume by coming out
  * of the suspend command it had been invoked to wait for this event. The return value of
  * this suspend command will then tell about the event set here.\n
- *   If no task of higher priority is released by the posted event the calling task will be
+ *   If no task of higher priority is resumed by the posted event the calling task will be
  * continued immediately after execution of this method. In this case \a setEvent behaves
  * like any ordinary sub-routine.
  *   @param eventVec
@@ -1221,7 +1225,7 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
 # error This code must not be compiled with optimization off. See source code comments for more
 #endif
 
-void rtos_setEvent(uint16_t eventVec)
+RTOS_NAKED_FCT void rtos_setEvent(uint16_t eventVec)
 {
     /* This function is a pseudo-software interrupt. A true interrupt had reset the global
        interrupt enable flag, we inhibit any interrupts now. */
@@ -1244,7 +1248,7 @@ void rtos_setEvent(uint16_t eventVec)
     ( "LabelEntrySetEventForISR: \n\t"
     );
 
-    /* Check for all suspended tasks if the posted events will release them.
+    /* Check for all suspended tasks if the posted events will resume them.
          The actual implementation of the function's logic is placed into a sub-routine in
        order to benefit from the compiler generated stack frame for local variables (in
        this naked function we must not have declared any). */
@@ -1299,15 +1303,16 @@ static inline void storeResumeCondition( task_t * const pT
                                        , uintTime_t timeout
                                        )
 {
-    /* Check event condition: The two timer can't be used at the same time (which is a
-       rather harmless application designe error) and at least one other event needs to be
-       required for a resume in case of the AND condition.
+    /* Check event condition: It must not be empty. The two timers can't be used at the
+       same time (which is a rather harmless application designe error) and at least one
+       other event needs to be required for a resume in case of the AND condition.
          The latter bad situation leads to a crash. If all is set then RTuinOS interprets
        the empty event mask as the always fulfilled resume condition. The task became due
        without any bit set in the task's postedEventVec - which leads to a wrong state
        transition in the kernel. (Please refer to the manual for a detail explanation of
        the task state meaning of postedEventVec.) */
-    ASSERT((eventMask & MASK_EVT_IS_TIMER) != MASK_EVT_IS_TIMER
+    ASSERT(eventMask != 0
+           &&  (eventMask & MASK_EVT_IS_TIMER) != MASK_EVT_IS_TIMER
            &&  (!all || (eventMask & ~MASK_EVT_IS_TIMER) != 0)
           );
 
@@ -1382,7 +1387,7 @@ static inline void storeResumeCondition( task_t * const pT
 static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
 {
     ASSERT(_pActiveTask->postedEventVec == 0);
-    
+
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
     /* Check for immediate availability of all/any mutex. These mutexes are locked now and
        entered in the calling task's postedEventVec. */
@@ -1407,14 +1412,14 @@ static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
         {
             /* @todo Remove development assertion after thorough testing! */
             ASSERT(idxSem < RTOS_NO_SEMAPHORE_EVENTS);
-            
+
             if(rtos_semaphoreAry[idxSem] > 0)
             {
                 -- rtos_semaphoreAry[idxSem];
                 _pActiveTask->postedEventVec |= maskSem;
             }
         }
-        
+
         /* Test next event bit and increment related index of semaphore in array. */
         ++ idxSem;
         maskSem <<= 1;
@@ -1463,8 +1468,12 @@ static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
  * operate only if all interrupts are disabled.
  */
 
-// @todo Double-check if conditional return code pays off (only needed for sync objects) -- or if the GNU optimizer makes this useless
-static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
+static RTOS_TRUE_FCT bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+#else
+static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+#endif
+
 {
     /* Avoid inlining under all circumstances. See attributes also. */
     asm("");
@@ -1534,8 +1543,9 @@ static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
         }
     }
 
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
     return true;
-
+#endif
 } /* End of waitForEvent */
 
 
@@ -1617,7 +1627,7 @@ static bool waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 # error This code must not be compiled with optimization off. See source code comments for more
 #endif
 
-uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
+RTOS_NAKED_FCT uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
 {
     /* This function is a pseudo-software interrupt. A true interrupt had reset the global
        interrupt enable flag, we inhibit any interrupts now. */
@@ -1635,13 +1645,17 @@ uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout)
        this naked function we must not have declared any). The call of the function is
        immediately followed by some assembly code which computes the return value of the
        function and places it in register pair r24/25. */
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
     if(waitForEvent(eventMask, all, timeout))
+#else
+    waitForEvent(eventMask, all, timeout);
+#endif
     {
         /* The wait condition couldn't be fulfilled immediately, we need to suspend the
            task. Switch the stack pointer to the (saved) stack pointer of the new active
            task. */
         SWITCH_CONTEXT
-     }
+    }
 
      /* Regardless whether we had switched the task the suspend command ends with returning
         the information about the task releasing events. Push this function result onto the
@@ -1826,11 +1840,15 @@ uint16_t rtos_getStackReserve(uint8_t idxTask)
  * The size in Byte of the memory area \a *pStackArea, which is reserved as stack for
  * the task. Each task may have an individual stack size.
  *   @param startEventMask
- * The condition under which the task becomes due the very first time is specified in the
- * same way as at runtime when using the suspend command rtos_waitForEvent: A set of events
- * to wait for is specified, the Boolean information if any event will activate the task or
- * if all are required and finally a timeout in case no such events would be posted.\n
- *   This parameter specifies the set of events as a bit vector.
+ * The condition under which the task becomes due the very first time is specified nearly
+ * in the same way as at runtime when using the suspend command \a rtos_waitForEvent: A set
+ * of events to wait for is specified, the Boolean information if any event will activate
+ * the task or if all are required and finally a timeout in case no such events would be
+ * posted.\n
+ *   This parameter specifies the set of events as a bit vector. Only ordinary events are
+ * supports, i.e. braodcasted events. Events of kind mutex or semaphore must not be used
+ * here. If a task needs to own such events right from beginning its implementation needs to
+ * place an explicit suspend command \a rtos_waitForEvent as very first command.
  *   @param startByAllEvents
  * If true, all specified events (except for a timer event) must be posted before the task
  * is activated. Otherwise the first event belonging to the specified set will activate the
@@ -1843,6 +1861,15 @@ uint16_t rtos_getStackReserve(uint8_t idxTask)
  * once! See rtos_waitForEvent for details.
  *   @see void rtos_initRTOS(void)
  *   @see uint16_t rtos_waitForEvent(uint16_t, bool, uintTime_t)
+ *   @remark
+ * The restriction that the initial resume condition must not comprise the request for mutex
+ * or semaphore kind of events has been made just for simplicity. No additional code is
+ * needed for broadcasted events but would be needed to allow mutexes and semaphores, too.\n
+ *   The main use case for the start condition is to delay the take off of different tasks
+ * by individual time spans to avoid having to many regular tasks becoming due at the same
+ * timer tic. If there should be a use case for initial waiting for a mutex or semaphore
+ * this can be easily implemented by an according suspend command at the beginning of the
+ * actual task code.
  */
 
 void rtos_initializeTask( uint8_t idxTask
@@ -1870,22 +1897,15 @@ void rtos_initializeTask( uint8_t idxTask
 
     /* Set the start condition. */
     ASSERT(startEventMask != 0);
-    
-    /* Start condition "wait for sync object" is not yet implemented. */
-#if RTOS_USE_MUTEX == RTOS_FEATURE_ON
-    ASSERT((startEventMask & MASK_EVT_IS_MUTEX) == 0);
-#endif
-#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
-    ASSERT((startEventMask & MASK_EVT_IS_SEMAPHORE) == 0);
+
+    /* Start condition "wait for sync object" is not implemented. */
+#if RTOS_USE_MUTEX == RTOS_FEATURE_ON  ||  RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+    ASSERT((startEventMask & (MASK_EVT_IS_MUTEX | MASK_EVT_IS_SEMAPHORE)) == 0);
 #endif
 
     pT->cntDelay = 0;
     pT->timeDueAt = 0;
-    storeResumeCondition( pT
-                        , startEventMask
-                        , startByAllEvents
-                        , startTimeout
-                        );
+    storeResumeCondition(pT, startEventMask, startByAllEvents, startTimeout);
 
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
     /* The maximum execution time in round robin mode. */
@@ -2043,8 +2063,6 @@ void rtos_initRTOS(void)
     pT->waitForAnyEvent = true;     /* Not used at all. */
     pT->cntOverrun = 0;             /* Not used at all. */
 
-    // @todo Initial resume condition is not checked for mutexes and semaphores 
-    
     /* Any task is suspended at the beginning. No task is active, see before. */
     for(idxClass=0; idxClass<RTOS_NO_PRIO_CLASSES; ++idxClass)
         _noDueTasksAry[idxClass] = 0;

@@ -3,7 +3,7 @@
  *   Test case 02 of RTuinOS. One task is defined, which runs alternatingly with the idle
  * task.
  *
- * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -32,6 +32,7 @@
 
 #include <arduino.h>
 #include "rtos.h"
+#include "gsl_systemLoad.h"
 
 
 /*
@@ -62,6 +63,7 @@ static void task01_class00(uint16_t taskParam);
  */
  
 static uint8_t _taskStack[STACK_SIZE_TASK00];
+static uint8_t _cpuLoad = 200;
 
  
 /*
@@ -138,6 +140,11 @@ static void task01_class00(uint16_t initCondition)
         Serial.print("Cycle time: ");
         Serial.print((tiCycle-ti) * (100.0/1000.0 / (TICS_CYCLE/490.1961)));
         Serial.println("%");
+        
+        Serial.print("CPU load: ");
+        Serial.print(_cpuLoad/2);
+        Serial.println("%");
+        
         ti = tiCycle;
     }
     
@@ -189,8 +196,11 @@ void setup(void)
 
 void loop(void)
 {
-    delay(1000);
     blink(3);
+    
+    /* Share current CPU load measurement with task code, which owns Serial and which can
+       thus display it. */
+    _cpuLoad = gsl_getSystemLoad();
     
 } /* End of loop */
 

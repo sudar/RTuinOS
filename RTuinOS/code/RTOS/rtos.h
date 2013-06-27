@@ -322,6 +322,10 @@ typedef void (*rtos_taskFunction_t)(uint16_t postedEventVec);
  * Global data declarations
  */
 
+/** The RTuinOS startup message is placed in the flash ROM. See #RTOS_RTUINOS_STARTUP_MSG
+    for the definition of string contents. */
+extern __attribute__((section(".progmem.strings"))) const char rtos_rtuinosStartupMsg[];
+
 #if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
 /** All declared semaphores are held in an array of counters.\n
       The type of the counter depends on the maximum number of pooled resources managed by

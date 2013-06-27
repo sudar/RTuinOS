@@ -262,20 +262,17 @@ static void tT0C0(uint16_t initCondition)
 
 static void taskT0C1_consumer(uint16_t eventToWaitForVec)
 {
-    /* Normally one would tend to start the task unconditionally and have a while loop
-       here. This leads to an immediately recognizable code structure: Do it as soon as all
-       conditions are fulfilled, as soon as all events are received. Here're we do it the
-       other way around, nearly equivalent and only because it's a test case. */
-// @todo Start condition with sync objects is not yet implemented in rtos.c.
-eventToWaitForVec = EVT_SEMAPHORE_ELEM_IN_QUEUE;
-eventToWaitForVec = rtos_waitForEvent( /* eventMask */ eventToWaitForVec
-                                     , /* all */       false
-                                     , /* timeout */   0
-                                     );
-    ASSERT(eventToWaitForVec == EVT_SEMAPHORE_ELEM_IN_QUEUE);
-
     uint32_t cnt_ = 0;
-    do
+    
+    /* During phase 1 we get awake as soon as data is signalled by the semaphore associated
+       with the queue. The condition will be extended in phase 2. */
+    eventToWaitForVec = EVT_SEMAPHORE_ELEM_IN_QUEUE;
+    
+    while(rtos_waitForEvent( /* eventMask */ eventToWaitForVec
+                           , /* all */       true
+                           , /* timeout */   0
+                           )
+         )
     {
         uint8_t noElemGot = 0;
         
@@ -328,11 +325,6 @@ eventToWaitForVec = rtos_waitForEvent( /* eventMask */ eventToWaitForVec
            Getting this mutex is one of the conditions to awake the data producer. */
         rtos_setEvent(EVT_MUTEX_SERIAL);
     }
-    while(rtos_waitForEvent( /* eventMask */ eventToWaitForVec
-                           , /* all */       true
-                           , /* timeout */   0
-                           )
-         );
 
     /* A task function must never return; this would cause a reset. */
     ASSERT(false);
@@ -353,27 +345,7 @@ void setup(void)
     init_stdout();
     Serial.begin(115200);
     
-#if 0
-    printf("\n" RTOS_RTUINOS_STARTUP_MSG "\n");
-#else
-    {
-        // save some chars
-    //    static PROGMEM prog_uchar signMessage[]  = "\n" RTOS_RTUINOS_STARTUP_MSG "\n";
-        /* See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=34734 why not using PROGMEM. */
-        static __attribute__((section(".progmem.strings"))) char signMessage[]  = "\n" RTOS_RTUINOS_STARTUP_MSG "\n";
-
-        uint8_t k;    // counter variable
-
-        for(k=0; k<sizeof(signMessage)-1; ++k)
-        {
-            char myChar =  pgm_read_byte_near(signMessage + k); 
-            //Serial.write(myChar);
-            putchar(myChar);
-        }
-        //Serial.write('\n');
-        putchar('\n');
-    }
-#endif
+    puts_progmem(rtos_rtuinosStartupMsg);
 
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
@@ -400,7 +372,7 @@ void setup(void)
                        , /* prioClass */        1
                        , /* pStackArea */       &_taskStackT0C1[0]
                        , /* stackSize */        sizeof(_taskStackT0C1)
-                       , /* startEventMask */   /*RTOS_EVT_EVENT_02*/RTOS_EVT_DELAY_TIMER //EVT_SEMAPHORE_ELEM_IN_QUEUE | EVT_MUTEX_SERIAL
+                       , /* startEventMask */   RTOS_EVT_DELAY_TIMER
                        , /* startByAllEvents */ false
                        , /* startTimeout */     10
                        );
