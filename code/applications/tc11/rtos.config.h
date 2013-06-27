@@ -294,7 +294,7 @@ RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
 /** The implementation of a semaphore is a simple unsigned integer. The value means the
     number of resources managed by the semaphore. In a resource management system it may be
     available pooled resources, which can be still checked out by the clients, or it is the
-    number of produced object in a producer-consumer system. In any application, the
+    number of produced objects in a producer-consumer system. In any application, the
     maximum number of managed objects need to fit into the data type of the semaphore. Use
     the smallest possible data type, which fits to all your semaphores.\n
       Possible data types for semaphores are uint8_t, uint16_t and uint32_t. */

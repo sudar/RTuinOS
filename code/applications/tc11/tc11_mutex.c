@@ -131,7 +131,7 @@ static RTOS_TRUE_FCT void getResource()
 #ifdef DEBUG
     uint16_t postedEvtVec =
 #endif
-    rtos_waitForEvent(EVT_MUTEX_OWNING_RESOURCE, false, 1);
+    rtos_waitForEvent(EVT_MUTEX_OWNING_RESOURCE, false, 0);
     ASSERT(postedEvtVec == EVT_MUTEX_OWNING_RESOURCE);
 
 } /* End of getResource */
