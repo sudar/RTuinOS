@@ -53,9 +53,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  * Module interface
+ *   rtos_enableIRQUser00
  *   setup
  *   loop
  * Local functions
+ *   taskOnADCComplete
  *   blink
  */
 
@@ -65,8 +67,10 @@
 
 #include <arduino.h>
 #include "rtos.h"
-#include "stdout.h"
+#include "rtos_assert.h"
 #include "gsl_systemLoad.h"
+#include "stdout.h"
+#include "aev_applEvents.h"
 
 
 /*
@@ -82,7 +86,7 @@
     input (>=16) to select the internal 1.1 V source as input.
       @remark This macro is used within macro expression #VAL_MUX with double evaluation.
     Just define simple literals without side effects here. */
-#define ADC_INPUT   9
+#define ADC_INPUT   16
 
 
 /** ADMUX/REFS1:0: Reference voltage or full scale respectively. 1 means Ucc=5V, 2 means
@@ -116,8 +120,11 @@
 /*
  * Data definitions
  */
- 
- 
+static volatile uint16_t _adcResult = 0;
+static volatile uint32_t _noAdcResults = 0;
+static uint8_t _taskStack[256];
+
+
 /*
  * Function implementation
  */
@@ -148,30 +155,65 @@ static void blink(uint8_t noFlashes)
 
 
 /**
- * The initalization of the RTOS tasks and general board initialization.
+ * This task is triggered one by one by the interrupts triggered by the ADC, when it
+ * completes a conversion. The task reads the ADC result register and processes the
+ * sequence of values. The processinf result is input to a slower, reporting task.
+ *   @param initialResumeCondition
+ * The vector of events which made the task due the very first time.
  */ 
 
-void setup(void)
-
+static void taskOnADCComplete(uint16_t initialResumeCondition)
 {
-    /* Start serial port at 9600 bps. */
-    Serial.begin(9600);
-    //Serial.println("\n" RTOS_RTUINOS_STARTUP_MSG);
-    init_stdout();
-    puts_progmem(rtos_rtuinosStartupMsg);
-
-    /* Initialize the digital pin as an output. The LED is used for most basic feedback about
-       operability of code. */
-    pinMode(LED, OUTPUT);
+    ASSERT(initialResumeCondition == EVT_ADC_CONVERSION_COMPLETE);
     
-//    /* Setup the ADC configuration. */
-//    printf( "At startup:\n"    
-//            "  ADMUX  = 0x%02x\n"
-//            "  ADCSRB = 0x%02x\n"
-//          , ADMUX 
-//          , ADCSRB
-//          );
+    static uint16_t accumuatedAdcResult = 0;
+    do
+    {
+        
+        /* First read ADCL then ADCH. Two statements are needed as it is not guaranteed in
+           which order an expression a+b is evaluated. */
+        accumuatedAdcResult += ADCL;
+        accumuatedAdcResult += (ADCH<<8);
 
+        /* Accumulate up to 64 values to do avaraging and anti-aliasing for slower
+           reporting task. */
+        static uint8_t noMean_ = 64;
+        if(--noMean_ == 0)
+        {
+            noMean_ = 64;
+            _adcResult = accumuatedAdcResult;
+            accumuatedAdcResult = 0;
+        }
+        
+        /* Count the read cycles. The frequency should be about 1200 Hz. */
+        ++ _noAdcResults;
+    }
+    while(rtos_waitForEvent( EVT_ADC_CONVERSION_COMPLETE | RTOS_EVT_DELAY_TIMER
+                           , /* all */ false
+                           , /* timeout */ 1
+                           )
+         );
+    
+    /* The following assertion fires if the ADC interrupt isn't timely. The wait condition
+       specifies a sharp timeout. True production code would be designed more failure
+       tolerant. This code would cause a reset in case. */
+    ASSERT(false);
+    
+} /* End of taskOnADCComplete */
+
+
+
+
+/**
+ * Configure the ADC and release the interrupt on ADC conversion complete. Most important
+ * is the hardware triggered start of the conversions, see chosen settings for ADATE and
+ * ADTS.
+ */ 
+
+void rtos_enableIRQUser00()
+{
+    /* Setup the ADC configuration. */
+    
     /* ADMUX */
 #define VAL_ADLAR   0    /* ADLAR: Result must not be left aligned. */
 
@@ -206,7 +248,7 @@ void setup(void)
 #define VAL_ADSC 1 /* Start series of conversion; may be done in same register write access. */
 #define VAL_ADATE 1 /* Turn auto triggering on to minimize jitter in conversion timing. */ 
 #define VAL_ADIF 1 /* Reset the "conversion-ready" flag by writing a one. */
-#define VAL_ADIE 0 /* Do not allow interrupts on conversion-ready. */
+#define VAL_ADIE 1 /* Allow interrupts on conversion-ready. */
 #define VAL_ADPS 7 /* ADPS2:0: Prescaler needs to generate lowest possible frequency. */ 
     
     /* The regular conversions are running after this register write operation. */
@@ -223,6 +265,45 @@ void setup(void)
 #undef VAL_ADIF
 #undef VAL_ADIE
 #undef VAL_ADPS
+} /* End of rtos_enableIRQUser00 */
+
+
+
+
+/**
+ * The initalization of the RTOS tasks and general board initialization.
+ */ 
+
+void setup(void)
+
+{
+    /* Start serial port at 9600 bps. */
+    Serial.begin(9600);
+    //Serial.println("\n" RTOS_RTUINOS_STARTUP_MSG);
+    init_stdout();
+    puts_progmem(rtos_rtuinosStartupMsg);
+
+    /* Initialize the digital pin as an output. The LED is used for most basic feedback about
+       operability of code. */
+    pinMode(LED, OUTPUT);
+    
+//    printf( "ADC configuration at startup:\n"    
+//            "  ADMUX  = 0x%02x\n"
+//            "  ADCSRB = 0x%02x\n"
+//          , ADMUX 
+//          , ADCSRB
+//          );
+
+    /* Configure the control task of priority class 0. */
+    rtos_initializeTask( /* idxTask */          0
+                       , /* taskFunction */     taskOnADCComplete
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStack[0]
+                       , /* stackSize */        sizeof(_taskStack)
+                       , /* startEventMask */   EVT_ADC_CONVERSION_COMPLETE
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     0
+                       );
 } /* End of setup */
 
 
@@ -241,16 +322,21 @@ void setup(void)
 void loop(void)
 
 {
-    blink(1);
-    Serial.println("RTuinOS is idle");
+    blink(2);
+    printf("RTuinOS is idle\n");
+
+    cli();
+    uint16_t adcResult    = _adcResult;
+    uint32_t noAdcResults = _noAdcResults; 
+    sei();
     
-    /* Just read ADCL then ADCH and print result. */
-    // @todo Consider conversion-ready flag. */
-    uint16_t adcResult = ADCL + (ADCH<<8);
-    printf("ADC result: %.5f V\n", U_REF/1024.0 * adcResult); 
-    
+    printf( "ADC result %6lu at %7.2f s: %.5f V\n"
+          , noAdcResults
+          , 1e-3*millis()
+          , U_REF/64.0/1024.0 * adcResult
+          ); 
     printf("CPU load: %.1f %%\n", gsl_getSystemLoad()/2.0);
-    
+
 } /* End of loop */
 
 
