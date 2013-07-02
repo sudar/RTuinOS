@@ -21,7 +21,7 @@
  * accurate hardware signal. The software becomes a slave of this hardware trigger.
  *   This RTuinOS sample application uses timer/counter 0 in the unchanged Arduino standard
  * configuration to trigger the conversions of the ADC. The overflow interrupt is used for
- * this purpose yielding a conversion rate of about 1221 Hz. A task of high priority is
+ * this purpose yielding a conversion rate of about 977 Hz. A task of high priority is
  * awaked on each conversion-complete event and reads the conversion result. The read
  * values are down-sampled and passed to a much slower secondary task, which prints them to
  * the Arduino console window.
@@ -35,7 +35,10 @@
  * considered for any output operation anyway. It doesn't matter to this "consider" which
  * scaling we actually have, it's just another constant to use.
  *   Regardless of the poor damping of this filter we use it to reduce the task rate by 32.
- * (TBC)
+ * @remark
+ *   The compilation of this sample requires linkage agianst the stdio library with
+ * floating point support for printf & co. Place IO_FLOAT_LIB=1 in the command line of
+ * make.
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -166,9 +169,16 @@ static void taskOnADCComplete(uint16_t initialResumeCondition)
 {
     ASSERT(initialResumeCondition == EVT_ADC_CONVERSION_COMPLETE);
     
+    /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF (see
+       wiring.c). */
+    extern volatile unsigned long timer0_overflow_count;
+    static uint32_t deltaCnt = timer0_overflow_count;
+
     static uint16_t accumuatedAdcResult = 0;
     do
     {
+        /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF. */
+        ASSERT(_noAdcResults + deltaCnt == timer0_overflow_count);
         
         /* First read ADCL then ADCH. Two statements are needed as it is not guaranteed in
            which order an expression a+b is evaluated. */
@@ -234,7 +244,7 @@ void rtos_enableIRQUser00()
 
     /* ADCSRB */
 #define VAL_ACME    0   /* Don't allow analog comparator to use ADC multiplex inputs. */
-#define VAL_ADTS    4   /* Auto trigger source is Timer/Counter 0, Overflow, 1221 Hz. */
+#define VAL_ADTS    4   /* Auto trigger source is Timer/Counter 0, Overflow, 977 Hz. */
 
     ADCSRB = (((VAL_MUX & 0x20) != 0) << 3)
              + (VAL_ADTS << 0);
@@ -330,13 +340,13 @@ void loop(void)
     uint32_t noAdcResults = _noAdcResults; 
     sei();
     
-    printf( "ADC result %6lu at %7.2f s: %.5f V\n"
+    printf( "ADC result %7lu at %7.2f s: %.4f V\n"
           , noAdcResults
           , 1e-3*millis()
           , U_REF/64.0/1024.0 * adcResult
           ); 
     printf("CPU load: %.1f %%\n", gsl_getSystemLoad()/2.0);
-
+    
 } /* End of loop */
 
 
