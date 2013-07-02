@@ -39,14 +39,14 @@
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
     will always be existent and alive. Permitted range is 0..127.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_TASKS    0
+#define RTOS_NO_TASKS    1
 
 
 /** Number of distinct priorities of tasks. Since several tasks may share the same
     priority, this number is lower or equal to NO_TASKS. Permitted range is 0..NO_TASKS,
     but 1..NO_TASKS if at least one task is defined.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_PRIO_CLASSES 0
+#define RTOS_NO_PRIO_CLASSES 1
 
 
 /** Since many tasks will belong to distinct priority classes, the maximum number of tasks
@@ -55,7 +55,7 @@
     structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..127,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 0
+#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 1
 
 
 /** The number of events, which behave like semaphores. When posted, they are not
@@ -119,12 +119,12 @@
       Now the interrupt is enabled and if it occurs it'll post the event
     #RTOS_EVT_ISR_USER_00. You will probably have a task of high priority which is waiting
     for this event in order to handle the interrupt when it is resumed by the event. */
-#define RTOS_USE_APPL_INTERRUPT_00 RTOS_FEATURE_OFF
+#define RTOS_USE_APPL_INTERRUPT_00 RTOS_FEATURE_ON
 
 /** The name of the interrupt vector which is assigned to application interrupt 0. The
     supported vector names can be derived from table 14-1 on page 105 in the CPU manual,
     doc2549.pdf (see http://www.atmel.com). */
-#define RTOS_ISR_USER_00    xxx_vect
+#define RTOS_ISR_USER_00    ADC_vect
 
 
 /** Enable the application defined interrupt 1. See #RTOS_USE_APPL_INTERRUPT_00 for
@@ -184,6 +184,7 @@
 {                                                                           \
     cli();                                                                  \
     TIMSK2 &= ~_BV(TOIE2);                                                  \
+    ADCSRA &= ~_BV(ADIE);                                                   \
     sei();                                                                  \
                                                                             \
 } /* End of macro rtos_enterCriticalSection */
@@ -202,7 +203,10 @@
  */
 # define rtos_leaveCriticalSection()                                        \
 {                                                                           \
+    cli();                                                                  \
     TIMSK2 |= _BV(TOIE2);                                                   \
+    ADCSRA |= _BV(ADIE);                                                    \
+    sei();                                                                  \
                                                                             \
 } /* End of macro rtos_leaveCriticalSection */
 #else
