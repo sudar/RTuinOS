@@ -1052,7 +1052,7 @@ static RTOS_TRUE_FCT bool setEvent(uint16_t postedEventVec)
 
             /* The assertion validates the application code. It fires if the application
                releases/produces more semaphore counter values as fit into the data type of
-               the semphore. This is harmless with respect of stability of the RTOS but
+               the semphore. This is harmless with respect to the stability of the RTOS but
                probably a design error in the application. */
             ASSERT(rtos_semaphoreAry[idxSem] != 0);
         }
