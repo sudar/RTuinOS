@@ -437,11 +437,11 @@ static task_t * const _pIdleTask = &_taskAry[IDLE_TASK_ID];
 
 /** The one and only active task. This may be the only internally seen idle task which does
     nothing. Implemented as pointer to the task object. */
-static task_t *_pActiveTask = _pIdleTask;
+static task_t *_pActiveTask = &_taskAry[IDLE_TASK_ID];
 
 /** The task which is to be suspended because of a newly activated one. Only temporarily
     used in the instance of a task switch. */
-static task_t *_pSuspendedTask = _pIdleTask;
+static task_t *_pSuspendedTask = NULL; // @todo check, used to be _pIdleTask
 
 /** Array holding all due (but not active) tasks. Ordered according to their priority
     class. */
@@ -519,18 +519,18 @@ static uint8_t *prepareTaskStack( uint8_t * const pEmptyTaskStack
 #ifdef __AVR_ATmega2560__
     * sp-- = 0x00;
 #else
-# error Modifcation of code for other AVR CPU required
+# error Modification of code for other AVR CPU required
 #endif
 
     /* Push 3 Byte program counter of task start address onto the still empty stack of the
        new task. The order is LSB, MidSB, MSB from bottom to top of stack (where the
        stack's bottom is the highest memory address). */
-    * sp-- = (uint32_t)taskEntryPoint & 0x000000ff;
-    * sp-- = ((uint32_t)taskEntryPoint & 0x0000ff00) >> 8;
+    * sp-- = (uint8_t)((uint32_t)taskEntryPoint & 0x000000ff);
+    * sp-- = (uint8_t)(((uint32_t)taskEntryPoint & 0x0000ff00) >> 8);
 #ifdef __AVR_ATmega2560__
-    * sp-- = ((uint32_t)taskEntryPoint & 0x00ff0000) >> 16;
+    * sp-- = (uint8_t)(((uint32_t)taskEntryPoint & 0x00ff0000) >> 16);
 #else
-# error Modifcation of code for other AVR CPU required
+# error Modification of code for other AVR CPU required
 #endif
     /* Now we have to push the initial value of r0, which is the __tmp_reg__ of the
        compiler. The value actually doesn't matter, we set it to 0. */
