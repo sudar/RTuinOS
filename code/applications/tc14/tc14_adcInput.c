@@ -160,7 +160,7 @@ static void blink(uint8_t noFlashes)
 /**
  * This task is triggered one by one by the interrupts triggered by the ADC, when it
  * completes a conversion. The task reads the ADC result register and processes the
- * sequence of values. The processinf result is input to a slower, reporting task.
+ * sequence of values. The processing result is input to a slower, reporting task.
  *   @param initialResumeCondition
  * The vector of events which made the task due the very first time.
  */ 
@@ -172,7 +172,7 @@ static void taskOnADCComplete(uint16_t initialResumeCondition)
     /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF (see
        wiring.c). */
     extern volatile unsigned long timer0_overflow_count;
-    static uint32_t deltaCnt = timer0_overflow_count;
+    uint32_t deltaCnt = timer0_overflow_count;
 
     static uint16_t accumuatedAdcResult = 0;
     do
