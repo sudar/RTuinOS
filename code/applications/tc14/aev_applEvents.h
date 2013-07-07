@@ -1,8 +1,9 @@
-#ifndef STDOUT_INCLUDED
-#define STDOUT_INCLUDED
+#ifndef AEV_APPLEVENTS_INCLUDED
+#define AEV_APPLEVENTS_INCLUDED
 /**
- * @file stdout.h
- * Definition of global interface of module stdout.c
+ * @file aev_applEvents.h
+ * Definition of application events. The application events are managed in a
+ * central file to avoid inconistencies and accidental double usage.
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -29,6 +30,9 @@
  * Defines
  */
 
+/** A simple event is used to signal a new ADC conversion result. */
+#define EVT_ADC_CONVERSION_COMPLETE         (RTOS_EVT_ISR_USER_00)
+
 
 /*
  * Global type definitions
@@ -44,7 +48,6 @@
  * Global prototypes
  */
 
-void init_stdout();
-int puts_progmem(const char *string);
 
-#endif  /* STDOUT_INCLUDED */
+
+#endif  /* AEV_APPLEVENTS_INCLUDED */

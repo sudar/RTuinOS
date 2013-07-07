@@ -1,10 +1,10 @@
-#ifndef GSL_SYSTEMLOAD_INCLUDED
-#define GSL_SYSTEMLOAD_INCLUDED
+#ifndef STDOUT_INCLUDED
+#define STDOUT_INCLUDED
 /**
- * @file gsl_systemLoad.h
- * Definition of global interface of module gsl_systemLoad.c
+ * @file stdout.h
+ * Definition of global interface of module stdout.c
  *
- * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -44,9 +44,7 @@
  * Global prototypes
  */
 
-/** Estimate the current system load. Must be used from the idle task only and takes above
-    one second to execute. */
-uint8_t gsl_getSystemLoad(void);
+void init_stdout();
+int puts_progmem(const char *string);
 
-
-#endif  /* GSL_SYSTEMLOAD_INCLUDED */
+#endif  /* STDOUT_INCLUDED */

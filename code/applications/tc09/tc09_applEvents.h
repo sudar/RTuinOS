@@ -30,7 +30,6 @@
  * Defines
  */
 
-#endif  /* TC09_APPLEVENTS_INCLUDED */
 /** This event is used as start condition for task T0_C0. */
 #define EVT_START_TASK_T0_C0 (RTOS_EVT_EVENT_00)
 

@@ -381,7 +381,7 @@ clean:
 # Delete the core compilation (Arduino standard files) ignoring (-) the return code from
 # Windows. This target is not part of clean as rebuilding the Arduino library is usually
 # not necessary during development of an application - you won't alter any Arduino files.
-# An exception would of course be the cahnge of a compilation flag, but changing the
+# An exception would of course be the change of a compilation flag, but changing the
 # makefile will anyway enforce a rebuild also of core.a.
 .SILENT: cleanCore
 .PHONY: cleanCore
@@ -391,7 +391,7 @@ cleanCore:
 
 # Quite typical, the GNU tools reside on a system at several locations as they come along
 # with many applications. Hard to locate problems due to arbitrary order of references in
-# the Windows search PATH can easily reuslt. To avoid these problems we reference all tools
+# the Windows search PATH can easily result. To avoid these problems we reference all tools
 # by absolute path. The path is known as we have the Arduino installation directory.
 make := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/make.exe
 mkdir := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/mkdir.exe
