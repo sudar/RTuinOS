@@ -68,7 +68,7 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
 #include "rtos_assert.h"
 #include "gsl_systemLoad.h"
