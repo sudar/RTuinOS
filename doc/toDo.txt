@@ -76,3 +76,7 @@ always available just like that, but on the other hand should a system like
 RTuinOS not deal with things like these. True RTuinOS application won't
 use stdio; this is just for demonstration, sample code and debugging. The
 trade off is undecided.
+
+Makefile: Gets a callback into the application folder by -include? In
+order to enable an application to have own customizations? Like name or
+IO_FLOAT_LIB? 
