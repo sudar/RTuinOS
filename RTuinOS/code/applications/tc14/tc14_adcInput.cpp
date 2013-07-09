@@ -69,6 +69,8 @@
  */
 
 #include <Arduino.h>
+#include <LiquidCrystal.h>
+
 #include "rtos.h"
 #include "rtos_assert.h"
 #include "gsl_systemLoad.h"
@@ -89,7 +91,7 @@
     input (>=16) to select the internal 1.1 V source as input.
       @remark This macro is used within macro expression #VAL_MUX with double evaluation.
     Just define simple literals without side effects here. */
-#define ADC_INPUT   16
+#define ADC_INPUT   0
 
 
 /** ADMUX/REFS1:0: Reference voltage or full scale respectively. 1 means Ucc=5V, 2 means
@@ -109,12 +111,29 @@
 # error Illegal value for ADMUX/REFS (External reference is not supported)
 #endif
  
+/** The buttons are enumerated. */
+#define btnRIGHT 0
+#define btnUP 1
+#define btnDOWN 2
+#define btnLEFT 3
+#define btnSELECT 4
+#define btnNONE 5
+
 
 /*
  * Local type definitions
  */
  
+/** The enumeration of all buttons on the LCD shield that can be queried. */
+typedef enum { lcdButtonNone
+             , lcdButtonSelect
+             , lcdButtonLeft
+             , lcdButtonDown
+             , lcdButtonUp
+             , lcdButtonRight
+             } enumLcdButton;
  
+
 /*
  * Local prototypes
  */
@@ -127,10 +146,57 @@ static volatile uint16_t _adcResult = 0;
 static volatile uint32_t _noAdcResults = 0;
 static uint8_t _taskStack[256];
 
+/* Select the pins used on the LCD panel. */
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
 
 /*
  * Function implementation
  */
+
+/**
+ * Transform the ADC value into the index of the pressed button. All buttons of the LCD
+ * shield shortcut a voltage divider at different resistor values so that the output
+ * voltage of the divider depends on the currently pressed button. See e.g.
+ * http://sainsmart.com/zen/documents/20-011-901/schematic.pdf.
+ *   @param adcVal
+ * The measured analog value of ananlog pin 0, which the buttons of the LCD shield are
+ * connetced to. The voltage at this pin is determined by the currently pressed button.\n
+ *   The passed value is either a left aligned raw ADC value or the 64 times accumulated
+ * raw ADC.
+ */
+int decodeLCDButton(uint16_t adcVal)
+{
+#define RATIO_0 /* RIGHT  */ 0.0
+#define RATIO_1 /* UP     */ (330.0/(330.0+2000.0))
+#define RATIO_2 /* DOWN   */ ((330.0+620.0)/(330.0+620.0+2000.0))
+#define RATIO_3 /* LEFT   */ ((330.0+620.0+1000.0)/(330.0+620.0+1000.0+2000.0))
+#define RATIO_4 /* SELECT */ ((330.0+620.0+1000.0+3300.0)/(330.0+620.0+1000.0+3300.0+2000.0))
+#define RATIO_5 /* NONE   */ 1.0
+#define THRESHOLD(n,n1) (uint16_t)(((RATIO_##n1 + RATIO_##n) / 2.0) * 0x10000ul)
+    
+    if(adcVal > THRESHOLD(4,5))
+        return lcdButtonNone;
+    else if(adcVal > THRESHOLD(3,4))
+        return lcdButtonSelect;
+    else if(adcVal > THRESHOLD(2,3))
+        return lcdButtonLeft;
+    else if(adcVal > THRESHOLD(1,2))
+        return lcdButtonDown;
+    else if(adcVal > THRESHOLD(0,1))
+        return lcdButtonUp;
+    else
+        return lcdButtonRight;
+
+#undef RATIO_0
+#undef RATIO_1
+#undef RATIO_2
+#undef RATIO_3
+#undef RATIO_4
+#undef RATIO_5
+#undef THRESHOLD
+}
+
 
 
 /**
@@ -169,12 +235,14 @@ static void taskOnADCComplete(uint16_t initialResumeCondition)
 {
     ASSERT(initialResumeCondition == EVT_ADC_CONVERSION_COMPLETE);
     
+#ifdef DEBUG
     /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF (see
        wiring.c). */
     extern volatile unsigned long timer0_overflow_count;
     uint32_t deltaCnt = timer0_overflow_count;
+#endif
 
-    static uint16_t accumuatedAdcResult = 0;
+    uint16_t accumuatedAdcResult = 0;
     do
     {
         /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF. */
@@ -287,23 +355,41 @@ void rtos_enableIRQUser00()
 void setup(void)
 
 {
+#ifdef DEBUG
     /* Start serial port at 9600 bps. */
     Serial.begin(9600);
-    //Serial.println("\n" RTOS_RTUINOS_STARTUP_MSG);
+
+    /* Redirect stdout into Serial. */
     init_stdout();
+    
+    /* Print greeting. */
     puts_progmem(rtos_rtuinosStartupMsg);
+#endif
 
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
     pinMode(LED, OUTPUT);
     
+#ifdef DEBUG
 //    printf( "ADC configuration at startup:\n"    
 //            "  ADMUX  = 0x%02x\n"
 //            "  ADCSRB = 0x%02x\n"
 //          , ADMUX 
 //          , ADCSRB
 //          );
+#endif
 
+    /* Initialize LCD shield. */
+    lcd.begin(16, 2); // start the library
+    lcd.setCursor( /* col */ 0, /* row */ 0);
+    char lcdLine[16];
+#ifdef DEBUG
+    int noChars =
+#endif
+    sprintf(lcdLine, "ADC Input: %02u", ADC_INPUT);
+    ASSERT(noChars <= (int)sizeof(lcdLine));
+    lcd.print(lcdLine);
+    
     /* Configure the control task of priority class 0. */
     rtos_initializeTask( /* idxTask */          0
                        , /* taskFunction */     taskOnADCComplete
@@ -332,21 +418,39 @@ void setup(void)
 void loop(void)
 
 {
-    blink(2);
+    //blink(2);
+#ifdef DEBUG
     printf("RTuinOS is idle\n");
+#endif
 
     cli();
     uint16_t adcResult    = _adcResult;
     uint32_t noAdcResults = _noAdcResults; 
     sei();
     
+    double uAdcIn = U_REF/64.0/1024.0 * adcResult
+         , cpuLoad = gsl_getSystemLoad()/2.0;
+         
+#ifdef DEBUG
     printf( "ADC result %7lu at %7.2f s: %.4f V\n"
           , noAdcResults
           , 1e-3*millis()
-          , U_REF/64.0/1024.0 * adcResult
+          , uAdcIn
           ); 
-    printf("CPU load: %.1f %%\n", gsl_getSystemLoad()/2.0);
-    
+    printf("Button: %u\n", decodeLCDButton(adcResult));
+    printf("CPU load: %.1f %%\n", cpuLoad);
+#endif    
+
+    char lcdLine[16];
+#ifdef DEBUG
+    int noChars =
+#endif
+    sprintf(lcdLine, "%.3f V  %5.1f%%", uAdcIn, cpuLoad);
+    ASSERT(noChars <= (int)sizeof(lcdLine));
+
+    lcd.setCursor( /* col */ 0, /* row */ 1);
+    lcd.print(lcdLine);
+
 } /* End of loop */
 
 

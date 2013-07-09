@@ -101,6 +101,11 @@ include $(sharedMakefilePath)operatingSystem.mk
 # Find out, where all external tools are located.
 include $(sharedMakefilePath)locateTools.mk
 
+# A "callback" into the application permits to do some application dependent settings. Use
+# cases: Specify additional source directories or state if an application requires the
+# stdio floating point library. Hyphen: The include is optional.
+-include code/applications/$(APP)/$(APP).mk
+
 # By default we link against the Ardunio standard library with reduced floating point
 # support for printf & co. This library saves about 2k of code size. Set it to 1 in order
 # to link against the library that fully supports formatted output for floating point data
@@ -188,7 +193,7 @@ $(targetDir)obj $(coreDir)obj:
 
 # Determine the list of files to be compiled.
 #   Specify a blank separated list of directories holding source files.
-srcDirList := code/RTOS/ code/applications/$(APP)/
+srcDirList ?= code/RTOS/ code/applications/$(APP)/
 # Create a blank separated list file patterns matching possible source files.
 srcPatternList := $(foreach path, $(srcDirList), $(addprefix $(path), *.c *.cpp))
 # Get all files matching the source file patterns in the directory list. Caution: The
