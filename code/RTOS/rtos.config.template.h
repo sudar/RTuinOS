@@ -108,7 +108,7 @@
 
 /** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
     floating point constant. The unit is s. */
-#define RTOS_TIC (2.0399999e-3)
+#define RTOS_TIC (2.04-3)
 
 
 /** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in

@@ -2,6 +2,11 @@
 # Makefile for GNU Make 3.81
 #
 # Included makefile fragment, which specifies some application dependent settings.
+#   The main purpose of this makefile is to demonstrate how the "callback" from RTuinOS'
+# general purpose makefile into the application can be used to support a more complex
+# directory structure to organize the source files. (Most samples just use a flat
+# directory.) Furthermore, this sample requires to link against the floating point library
+# for printf & co.
 #
 # Help on the syntax of this makefile is got at
 # http://www.gnu.org/software/make/manual/make.pdf.
@@ -24,3 +29,10 @@
 # This sample requires the floating point support for the standard I/O library (printf in
 # the first place).
 IO_FLOAT_LIB = 1
+$(info tc14.mk: tc14 makes use of the stdio library with floating point support for printf & co)
+
+# The standard list of source code directories is extended by some folders, which have been
+# introduced specifically for this sample. Please note the makefile convention to let path
+# names end on a slash
+srcDirList += code/applications/tc14/rtosConfig/ code/applications/tc14/applCode/
+$(info tc14.mk: Customized list of source folders for tc14: $(srcDirList))

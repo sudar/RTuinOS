@@ -95,6 +95,17 @@
 # maintenance.
 
 
+#   Specify a blank separated list of directories holding source files.
+srcDirList := code/RTOS/ code/applications/$(APP)/
+
+# Exclusion list: Basically all C/C++ source files found in the source directories are
+# compiled and linked. Here, you can specify some particular files, which must not be
+# included in the build.
+#   TODO Edit the blank separated list of excluded file names (without path).
+#   The appropriate location to (re-)set this variable probably is the application owned
+# makefile fragment code/applications/$(APP)/$(APP).mk.
+cFileListExcl :=
+
 # Read support code for different operating systems, Windows and Linux in the first place.
 include $(sharedMakefilePath)operatingSystem.mk
 
@@ -102,15 +113,10 @@ include $(sharedMakefilePath)operatingSystem.mk
 include $(sharedMakefilePath)locateTools.mk
 
 # A "callback" into the application permits to do some application dependent settings. Use
-# cases: Specify additional source directories or state if an application requires the
-# stdio floating point library. Hyphen: The include is optional.
+# cases: Modify srcDirList and/or cFileListExcl to redefine the set of source files that
+# make up the application or state if an application requires the stdio floating point
+# library. Hyphen: The include is optional.
 -include code/applications/$(APP)/$(APP).mk
-
-# By default we link against the Ardunio standard library with reduced floating point
-# support for printf & co. This library saves about 2k of code size. Set it to 1 in order
-# to link against the library that fully supports formatted output for floating point data
-# types.
-IO_FLOAT_LIB ?= 0
 
 # RTuinOS can't be linked without an application. Select which one. Here, all applications
 # are considered test cases.
@@ -123,7 +129,7 @@ endif
 # in this file.
 .PHONY: h help targets usage
 h help targets usage:
-	$(info Usage: make [-s] APP=<myRTuinOSApplication> [CONFIG=<configuration>] [COM_PORT=<portName>] [IO_FLOAT_LIB=0] {<target>})
+	$(info Usage: make [-s] APP=<myRTuinOSApplication> [CONFIG=<configuration>] [COM_PORT=<portName>] [IO_FLOAT_LIB=1] {<target>})
 	$(info <myRTuinOSApplication> is the name of the source code folder of your application,)
 	$(info located at code/applications.)
 	$(info <configuration> is one out of DEBUG (default) or PRODUCTION.)
@@ -191,10 +197,9 @@ makeDir: | $(targetDir)obj $(coreDir)obj
 $(targetDir)obj $(coreDir)obj:
 	-$(mkdir) -p $@
 
-# Determine the list of files to be compiled.
-#   Specify a blank separated list of directories holding source files.
-srcDirList ?= code/RTOS/ code/applications/$(APP)/
-# Create a blank separated list file patterns matching possible source files.
+# Determine the list of files to be compiled. Starting point is the list of source file
+# directories, srcDirList.
+#   Create a blank separated list file patterns matching possible source files.
 srcPatternList := $(foreach path, $(srcDirList), $(addprefix $(path), *.c *.cpp))
 # Get all files matching the source file patterns in the directory list. Caution: The
 # wildcard function will not accept Windows style paths.

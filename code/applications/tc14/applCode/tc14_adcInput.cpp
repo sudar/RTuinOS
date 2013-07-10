@@ -76,6 +76,7 @@
 #include "gsl_systemLoad.h"
 #include "stdout.h"
 #include "aev_applEvents.h"
+#include "clk_clock.h"
 
 
 /*
@@ -144,10 +145,16 @@ typedef enum { lcdButtonNone
  */
 static volatile uint16_t _adcResult = 0;
 static volatile uint32_t _noAdcResults = 0;
-static uint8_t _taskStack[256];
+static uint8_t _taskStackTOnADCComplete[256];
+static uint8_t _taskStackTRTC[256];
+static uint8_t _taskStackTIdleFollower[256];
 
 /* Select the pins used on the LCD panel. */
-LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+LiquidCrystal tc14_lcd(8, 9, 4, 5, 6, 7);
+
+/* Results of the idle task. */
+double _uAdcIn = 0.0
+     , _cpuLoad = 100.0;
 
 
 /*
@@ -347,13 +354,88 @@ void rtos_enableIRQUser00()
 
 
 
+/**
+ * A regular task of about 200 ms task time, which implements a real time clock.
+ *   @param initialResumeCondition
+ * The vector of events which made the task due the very first time.
+ */ 
+
+static void taskTRTC(uint16_t initialResumeCondition)
+{
+    ASSERT(initialResumeCondition == RTOS_EVT_ABSOLUTE_TIMER);
+    
+    /* Regularly call the RTC implementation at its expected rate: The RTC module exports the
+       expected task time by a define. */
+    do
+    {
+        clk_taskRTC();
+    }
+    while(rtos_suspendTaskTillTime
+                    (/* deltaTimeTillResume */ CLK_TASK_TIME_RTUINOS_STANDARD_TICS)
+         );
+    ASSERT(false);
+    
+} /* End of taskTRTC */
+
+
+
+
+/**
+ * A task, which is triggered by the idle loop each time it has new results to display. The
+ * idle task itself must not acquire any mutexes and consequently, it can't ever own the
+ * display. This task however can.
+ *   @param initialResumeCondition
+ * The vector of events which made the task due the very first time.
+ */ 
+
+static void taskTIdleFollower(uint16_t initialResumeCondition)
+{
+    ASSERT(initialResumeCondition == EVT_TRIGGER_IDLE_FOLLOWER_TASK);
+    do
+    {
+        /* This is a slow task, so we have the time to wait for availability of the display
+           without any danger of loosing a task invocation. */
+        uint16_t gotEvtVec = rtos_waitForEvent( EVT_MUTEX_LCD | RTOS_EVT_DELAY_TIMER
+                                              , /* all */ false
+                                              , 1 /* unit is 2 ms */
+                                              );
+
+        /* Normally, no task will block the display longer than 2ms and the debug compilation
+           double-checks this. Production code can nonetheless be implemented safe; in case it
+           would simply skip the re-display of the time. */
+        ASSERT(gotEvtVec == EVT_MUTEX_LCD);
+        if((gotEvtVec & EVT_MUTEX_LCD) != 0)
+        {
+            /* Now we own the display until we return the mutex. */
+            char lcdLine[16];
+#ifdef DEBUG
+            int noChars =
+#endif
+            sprintf(lcdLine, "%.3f V   %5.1f%%", _uAdcIn, _cpuLoad);
+            ASSERT(noChars <= (int)sizeof(lcdLine));
+
+            tc14_lcd.setCursor( /* col */ 0, /* row */ 1);
+            tc14_lcd.print(lcdLine);
+
+            /* Release the mutex immediately after displaying the changed information. */
+            rtos_setEvent(EVT_MUTEX_LCD);
+
+        } /* End if(Did we get the ownership of the display?) */
+    }
+    while(rtos_waitForEvent(EVT_TRIGGER_IDLE_FOLLOWER_TASK, /* all */ false, 0));
+    ASSERT(false);
+
+} /* End of taskTIdleFollower */
+
+
+
+
 
 /**
  * The initalization of the RTOS tasks and general board initialization.
  */ 
 
-void setup(void)
-
+void setup()
 {
 #ifdef DEBUG
     /* Start serial port at 9600 bps. */
@@ -380,26 +462,51 @@ void setup(void)
 #endif
 
     /* Initialize LCD shield. */
-    lcd.begin(16, 2); // start the library
-    lcd.setCursor( /* col */ 0, /* row */ 0);
+    tc14_lcd.begin(16, 2); // start the library
+    tc14_lcd.setCursor( /* col */ 0, /* row */ 0);
     char lcdLine[16];
 #ifdef DEBUG
     int noChars =
 #endif
-    sprintf(lcdLine, "ADC Input: %02u", ADC_INPUT);
+    sprintf(lcdLine, "ADC: %02u", ADC_INPUT);
     ASSERT(noChars <= (int)sizeof(lcdLine));
-    lcd.print(lcdLine);
+    tc14_lcd.print(lcdLine);
     
-    /* Configure the control task of priority class 0. */
-    rtos_initializeTask( /* idxTask */          0
+    /* Configure the interrupt task of highest priority class. */
+    uint8_t idxTask = 0;
+    rtos_initializeTask( /* idxTask */          idxTask++
                        , /* taskFunction */     taskOnADCComplete
-                       , /* prioClass */        0
-                       , /* pStackArea */       &_taskStack[0]
-                       , /* stackSize */        sizeof(_taskStack)
+                       , /* prioClass */        RTOS_NO_PRIO_CLASSES-1
+                       , /* pStackArea */       &_taskStackTOnADCComplete[0]
+                       , /* stackSize */        sizeof(_taskStackTOnADCComplete)
                        , /* startEventMask */   EVT_ADC_CONVERSION_COMPLETE
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
+                       
+    /* Configure the real time clock task of lowest priority class. */
+    rtos_initializeTask( /* idxTask */          idxTask++
+                       , /* taskFunction */     taskTRTC
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStackTRTC[0]
+                       , /* stackSize */        sizeof(_taskStackTRTC)
+                       , /* startEventMask */   RTOS_EVT_ABSOLUTE_TIMER
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     CLK_TASK_TIME_RTUINOS_STANDARD_TICS
+                       );
+
+    /* Configure the idle follower task of lowest priority class. */
+    rtos_initializeTask( /* idxTask */          idxTask++
+                       , /* taskFunction */     taskTIdleFollower
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStackTIdleFollower[0]
+                       , /* stackSize */        sizeof(_taskStackTIdleFollower)
+                       , /* startEventMask */   EVT_TRIGGER_IDLE_FOLLOWER_TASK
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     0
+                       );
+
+    ASSERT(idxTask == RTOS_NO_TASKS);
 } /* End of setup */
 
 
@@ -415,8 +522,7 @@ void setup(void)
  * original Arduino loop function.
  */ 
 
-void loop(void)
-
+void loop()
 {
     //blink(2);
 #ifdef DEBUG
@@ -425,31 +531,27 @@ void loop(void)
 
     cli();
     uint16_t adcResult    = _adcResult;
+#ifdef DEBUG
     uint32_t noAdcResults = _noAdcResults; 
+#endif
     sei();
     
-    double uAdcIn = U_REF/64.0/1024.0 * adcResult
-         , cpuLoad = gsl_getSystemLoad()/2.0;
-         
+    _uAdcIn = U_REF/64.0/1024.0 * adcResult;
+    _cpuLoad = gsl_getSystemLoad()/2.0;
+
 #ifdef DEBUG
+    printf("At %02u:%02u:%02u:\n", clk_noHour, clk_noMin, clk_noSec);
     printf( "ADC result %7lu at %7.2f s: %.4f V\n"
           , noAdcResults
           , 1e-3*millis()
-          , uAdcIn
+          , _uAdcIn
           ); 
     printf("Button: %u\n", decodeLCDButton(adcResult));
-    printf("CPU load: %.1f %%\n", cpuLoad);
-#endif    
-
-    char lcdLine[16];
-#ifdef DEBUG
-    int noChars =
+    printf("CPU load: %.1f %%\n\n", _cpuLoad);
 #endif
-    sprintf(lcdLine, "%.3f V  %5.1f%%", uAdcIn, cpuLoad);
-    ASSERT(noChars <= (int)sizeof(lcdLine));
-
-    lcd.setCursor( /* col */ 0, /* row */ 1);
-    lcd.print(lcdLine);
+    
+    /* Trigger the follower task, which is capable to safely display the results. */
+    rtos_setEvent(EVT_TRIGGER_IDLE_FOLLOWER_TASK);
 
 } /* End of loop */
 
