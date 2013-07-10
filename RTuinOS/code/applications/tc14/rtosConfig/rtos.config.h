@@ -39,14 +39,14 @@
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
     will always be existent and alive. Permitted range is 0..127.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_TASKS    1
+#define RTOS_NO_TASKS    3
 
 
 /** Number of distinct priorities of tasks. Since several tasks may share the same
     priority, this number is lower or equal to NO_TASKS. Permitted range is 0..NO_TASKS,
     but 1..NO_TASKS if at least one task is defined.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_PRIO_CLASSES 1
+#define RTOS_NO_PRIO_CLASSES 2
 
 
 /** Since many tasks will belong to distinct priority classes, the maximum number of tasks
@@ -55,7 +55,7 @@
     structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..127,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 1
+#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 2
 
 
 /** The number of events, which behave like semaphores. When posted, they are not
@@ -88,7 +88,7 @@
     mutex-event is saved until the first task requests it.
       Having mutexes in the application increases the overhead of RTuinOS. It should be
     null as long as mutexes are not essential to the application. */
-#define RTOS_NO_MUTEX_EVENTS    0
+#define RTOS_NO_MUTEX_EVENTS    1
 
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This

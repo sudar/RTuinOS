@@ -30,9 +30,15 @@
  * Defines
  */
 
+/** A mutex is applied to share the display between different tasks. */
+#define EVT_MUTEX_LCD                       (RTOS_EVT_MUTEX_00)
+
+/** An ordinary event is used to trigger the idle-follower task, which is capable to
+    acquire the display for displaying the results of the idle task. */
+#define EVT_TRIGGER_IDLE_FOLLOWER_TASK      (RTOS_EVT_EVENT_01)
+
 /** A simple event is used to signal a new ADC conversion result. */
 #define EVT_ADC_CONVERSION_COMPLETE         (RTOS_EVT_ISR_USER_00)
-
 
 /*
  * Global type definitions
