@@ -37,8 +37,15 @@
     acquire the display for displaying the results of the idle task. */
 #define EVT_TRIGGER_IDLE_FOLLOWER_TASK      (RTOS_EVT_EVENT_01)
 
+/** An ordinary event is used to trigger the button evaluation task. */
+#define EVT_TRIGGER_TASK_BUTTON             (RTOS_EVT_EVENT_02)
+
+/** An ordinary event is used to trigger the ADC result display task. */
+#define EVT_TRIGGER_TASK_DISPLAY_VOLTAGE    (RTOS_EVT_EVENT_03)
+
 /** A simple event is used to signal a new ADC conversion result. */
 #define EVT_ADC_CONVERSION_COMPLETE         (RTOS_EVT_ISR_USER_00)
+
 
 /*
  * Global type definitions

@@ -30,6 +30,7 @@
 #include "rtos_assert.h"
 #include "aev_applEvents.h"
 #include "tc14_adcInput.h"
+#include "dpy_display.h"
 #include "clk_clock.h"
 
 
@@ -39,14 +40,19 @@
  
 /** The standard RTuinOS clock tic on the Arduino Mega 2560 board is 1/(16MHz/64/510) =
     51/25000s. We add 51 in each tic and have the next second when we reach 25000. This
-    permits a precise implementation of the real time clock even with 16 Bit arithmetics.
-    See #CLOCK_TIC_DENOMINATOR also. */
+    permits a precise implementation of the real time clock even with 16 Bit integer
+    arithmetics. See #CLOCK_TIC_DENOMINATOR also. */
 #define CLOCK_TIC_NUMERATOR     51
 
 /** Denominator of ratio, which implements the clock's task rate. See #CLOCK_TIC_NUMERATOR
     for details. */
-#define CLOCK_TIC_DENOMINATOR   25000
+#define CLOCK_TIC_DENOMINATOR   (25000-(CLOCK_TIC_DENOMINATOR_TRIM_TERM))
  
+/** Trim term for clock: By long term observation a correction has been figured out, which
+    makes the clock significantly more accurate. The term is defined as addend to the
+    denominator #CLOCK_TIC_DENOMINATOR. It is device dependent. Starting point on a new
+    hardware device should be 0. Positive values advance the clock. */
+#define CLOCK_TIC_DENOMINATOR_TRIM_TERM 59
 
 /*
  * Local type definitions
@@ -86,16 +92,10 @@ uint8_t clk_noHour = 22;
  */
 void clk_taskRTC()
 {
-    bool doDisplay;
-    
     _noTaskTics += CLK_TASK_TIME_RTUINOS_STANDARD_TICS*CLOCK_TIC_NUMERATOR;
     if(_noTaskTics >= CLOCK_TIC_DENOMINATOR)
     {
         _noTaskTics -= CLOCK_TIC_DENOMINATOR;
-        
-        /* We display hh:mm:ss, so a change of the seconds leads to a write into the
-           display. */
-        doDisplay = true;
         
         if(++clk_noSec > 59)
         {
@@ -107,36 +107,9 @@ void clk_taskRTC()
                     clk_noHour = 0;
             }
         }       
-    }
-    
-    /* This is a slow task, so we have the time to wait for availability of the display
-       without any danger of loosing a task invocation. */
-    uint16_t gotEvtVec = rtos_waitForEvent( EVT_MUTEX_LCD | RTOS_EVT_DELAY_TIMER
-                                          , /* all */ false
-                                          , 1 /* unit is 2 ms */
-                                          );
-                                          
-    /* Normally, no task will block the display longer than 2ms and the debug compilation
-       double-checks this. Production code can nonetheless be implemented safe; in case it
-       would simply skip the re-display of the time. */
-    ASSERT(gotEvtVec == EVT_MUTEX_LCD);
-    if((gotEvtVec & EVT_MUTEX_LCD) != 0)
-    {
-        /* Now we own the display until we return the mutex. */
-        char lcdString[8];
-#ifdef DEBUG
-        int noChars =
-#endif
-        sprintf(lcdString, "%02u:%02u:%02u", clk_noHour, clk_noMin, clk_noSec);
-        ASSERT(noChars <= (int)sizeof(lcdString));
-
-        /* "16-sizeof" means to display right aligned. */
-        tc14_lcd.setCursor( /* col */ 16-sizeof(lcdString), /* row */ 0);
-        tc14_lcd.print(lcdString);
-
-        /* Release the mutex immediately after displaying the changed information. */
-        rtos_setEvent(EVT_MUTEX_LCD);
         
-    } /* End if(Did we get the ownership of the display?) */
-
+        /* We display hh:mm:ss, so a change of the seconds leads to a write into the
+           display. */
+        dpy_display.printTime(clk_noHour, clk_noMin, clk_noSec);
+    }
 } /* End of clk_taskRTC */

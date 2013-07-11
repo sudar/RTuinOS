@@ -69,13 +69,13 @@
  */
 
 #include <Arduino.h>
-#include <LiquidCrystal.h>
 
 #include "rtos.h"
 #include "rtos_assert.h"
 #include "gsl_systemLoad.h"
 #include "stdout.h"
 #include "aev_applEvents.h"
+#include "dpy_display.h"
 #include "clk_clock.h"
 
 
@@ -86,14 +86,15 @@
 /** Pin 13 has an LED connected on most Arduino boards. */
 #define LED 13
  
-/** The input of the analog to digital converter. Either an Arduino analog input or the
-    internal reference voltage of 1.1 V for testing. (If you measure this using an internal
-    reference you just believe to have a good accuracy.) Select a none existing analog
-    input (>=16) to select the internal 1.1 V source as input.
-      @remark This macro is used within macro expression #VAL_MUX with double evaluation.
-    Just define simple literals without side effects here. */
-#define ADC_INPUT   0
-
+/** The index to the task objects as needed for requesting the overrun counter or the stack
+    usage. */
+enum { idxTaskOnADCComplete
+     , idxTaskRTC
+     , idxTaskIdleFollower
+     , idxTaskButton
+     , idxTaskDisplayVoltage
+     , noTasks
+     };
 
 /** ADMUX/REFS1:0: Reference voltage or full scale respectively. 1 means Ucc=5V, 2 means
     1.1 V and 3 means 2.56 V. The internal references (1.1 V and 2.56 V are related to each
@@ -143,19 +144,27 @@ typedef enum { lcdButtonNone
 /*
  * Data definitions
  */
+ 
 static volatile uint16_t _adcResult = 0;
 static volatile uint32_t _noAdcResults = 0;
 static uint8_t _taskStackTOnADCComplete[256];
 static uint8_t _taskStackTRTC[256];
 static uint8_t _taskStackTIdleFollower[256];
-
-/* Select the pins used on the LCD panel. */
-LiquidCrystal tc14_lcd(8, 9, 4, 5, 6, 7);
+static uint8_t _taskStackTButton[256];
+static uint8_t _taskStackTDisplayVoltage[256];
 
 /* Results of the idle task. */
-double _uAdcIn = 0.0
-     , _cpuLoad = 100.0;
+double _uAdcIn = 0.0;
+uint8_t _cpuLoad = 200;
 
+/** The input of the analog to digital converter. Either an Arduino analog input or the
+    internal reference voltage of 1.1 V for testing. (If you measure this using an internal
+    reference you just believe to have a good accuracy.) Select a none existing analog
+    input (>=16) to select the internal 1.1 V source as input.
+      @remark This macro is used within macro expression #VAL_MUX with double evaluation.
+    Just define simple literals without side effects here. */
+#define ADC_INPUT 0
+static uint8_t _adcInput = ADC_INPUT;
 
 /*
  * Function implementation
@@ -393,39 +402,63 @@ static void taskTIdleFollower(uint16_t initialResumeCondition)
     ASSERT(initialResumeCondition == EVT_TRIGGER_IDLE_FOLLOWER_TASK);
     do
     {
-        /* This is a slow task, so we have the time to wait for availability of the display
-           without any danger of loosing a task invocation. */
-        uint16_t gotEvtVec = rtos_waitForEvent( EVT_MUTEX_LCD | RTOS_EVT_DELAY_TIMER
-                                              , /* all */ false
-                                              , 1 /* unit is 2 ms */
-                                              );
+        dpy_display.printVoltage(_uAdcIn);
+        dpy_display.printCpuLoad(_cpuLoad);
 
-        /* Normally, no task will block the display longer than 2ms and the debug compilation
-           double-checks this. Production code can nonetheless be implemented safe; in case it
-           would simply skip the re-display of the time. */
-        ASSERT(gotEvtVec == EVT_MUTEX_LCD);
-        if((gotEvtVec & EVT_MUTEX_LCD) != 0)
-        {
-            /* Now we own the display until we return the mutex. */
-            char lcdLine[16];
-#ifdef DEBUG
-            int noChars =
-#endif
-            sprintf(lcdLine, "%.3f V   %5.1f%%", _uAdcIn, _cpuLoad);
-            ASSERT(noChars <= (int)sizeof(lcdLine));
-
-            tc14_lcd.setCursor( /* col */ 0, /* row */ 1);
-            tc14_lcd.print(lcdLine);
-
-            /* Release the mutex immediately after displaying the changed information. */
-            rtos_setEvent(EVT_MUTEX_LCD);
-
-        } /* End if(Did we get the ownership of the display?) */
     }
     while(rtos_waitForEvent(EVT_TRIGGER_IDLE_FOLLOWER_TASK, /* all */ false, 0));
     ASSERT(false);
 
 } /* End of taskTIdleFollower */
+
+
+
+
+
+/**
+ * A task, which is triggered by the processing of the ADC conversion results: Whenever it
+ * has a new voltage measurement of the analog button input this task is triggered to do
+ * the further evaluation, i.e. identification of the pressed button, debouncing, state
+ * machine and dispatching to the clients.
+ *   @param initialResumeCondition
+ * The vector of events which made the task due the very first time.
+ */ 
+
+static void taskTButton(uint16_t initialResumeCondition)
+{
+    /* Display selection of initial ADC input. */
+//    dpy_display.printAdcInput(_adcInput);
+   
+    ASSERT(initialResumeCondition == EVT_TRIGGER_TASK_BUTTON);
+    do
+    {
+    }
+    while(rtos_waitForEvent(EVT_TRIGGER_TASK_BUTTON, /* all */ false, 0));
+    ASSERT(false);
+
+} /* End of taskTButton */
+
+
+
+
+
+/**
+ * A task, which is triggered by the processing of the ADC conversion results: Whenever it
+ * has a new input voltage measurement this task is triggered to display the result.
+ *   @param initialResumeCondition
+ * The vector of events which made the task due the very first time.
+ */ 
+
+static void taskTDisplayVoltage(uint16_t initialResumeCondition)
+{
+    ASSERT(initialResumeCondition == EVT_TRIGGER_TASK_DISPLAY_VOLTAGE);
+    do
+    {
+    }
+    while(rtos_waitForEvent(EVT_TRIGGER_TASK_DISPLAY_VOLTAGE, /* all */ false, 0));
+    ASSERT(false);
+
+} /* End of taskTDisplayVoltage */
 
 
 
@@ -444,10 +477,13 @@ void setup()
     /* Redirect stdout into Serial. */
     init_stdout();
     
-    /* Print greeting. */
+    /* Print greeting to the console window. */
     puts_progmem(rtos_rtuinosStartupMsg);
 #endif
 
+    /* Print greeting on the LCD. */
+    dpy_display.printGreeting();
+    
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
     pinMode(LED, OUTPUT);
@@ -461,20 +497,13 @@ void setup()
 //          );
 #endif
 
-    /* Initialize LCD shield. */
-    tc14_lcd.begin(16, 2); // start the library
-    tc14_lcd.setCursor( /* col */ 0, /* row */ 0);
-    char lcdLine[16];
-#ifdef DEBUG
-    int noChars =
-#endif
-    sprintf(lcdLine, "ADC: %02u", ADC_INPUT);
-    ASSERT(noChars <= (int)sizeof(lcdLine));
-    tc14_lcd.print(lcdLine);
-    
+    /* Write the invariant parts of the display once. This needs to be done here, before
+       multitasking begins. */
+    dpy_display.printBackground();
+
     /* Configure the interrupt task of highest priority class. */
-    uint8_t idxTask = 0;
-    rtos_initializeTask( /* idxTask */          idxTask++
+    ASSERT(noTasks == RTOS_NO_TASKS);
+    rtos_initializeTask( /* idxTask */          idxTaskOnADCComplete
                        , /* taskFunction */     taskOnADCComplete
                        , /* prioClass */        RTOS_NO_PRIO_CLASSES-1
                        , /* pStackArea */       &_taskStackTOnADCComplete[0]
@@ -485,7 +514,7 @@ void setup()
                        );
                        
     /* Configure the real time clock task of lowest priority class. */
-    rtos_initializeTask( /* idxTask */          idxTask++
+    rtos_initializeTask( /* idxTask */          idxTaskRTC
                        , /* taskFunction */     taskTRTC
                        , /* prioClass */        0
                        , /* pStackArea */       &_taskStackTRTC[0]
@@ -496,7 +525,7 @@ void setup()
                        );
 
     /* Configure the idle follower task of lowest priority class. */
-    rtos_initializeTask( /* idxTask */          idxTask++
+    rtos_initializeTask( /* idxTask */          idxTaskIdleFollower
                        , /* taskFunction */     taskTIdleFollower
                        , /* prioClass */        0
                        , /* pStackArea */       &_taskStackTIdleFollower[0]
@@ -505,8 +534,29 @@ void setup()
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
-
-    ASSERT(idxTask == RTOS_NO_TASKS);
+                       
+    /* Configure the button evaluation task. Its priority is below the interrupt but - as
+       it implements user interaction - above the priority of the display tasks. */
+    rtos_initializeTask( /* idxTask */          idxTaskButton
+                       , /* taskFunction */     taskTButton
+                       , /* prioClass */        1
+                       , /* pStackArea */       &_taskStackTButton[0]
+                       , /* stackSize */        sizeof(_taskStackTButton)
+                       , /* startEventMask */   EVT_TRIGGER_TASK_BUTTON
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     0
+                       );
+                      
+    /* Configure the result display task. */
+    rtos_initializeTask( /* idxTask */          idxTaskDisplayVoltage
+                       , /* taskFunction */     taskTDisplayVoltage
+                       , /* prioClass */        0
+                       , /* pStackArea */       &_taskStackTDisplayVoltage[0]
+                       , /* stackSize */        sizeof(_taskStackTDisplayVoltage)
+                       , /* startEventMask */   EVT_TRIGGER_TASK_DISPLAY_VOLTAGE
+                       , /* startByAllEvents */ false
+                       , /* startTimeout */     0
+                       );
 } /* End of setup */
 
 
@@ -537,7 +587,7 @@ void loop()
     sei();
     
     _uAdcIn = U_REF/64.0/1024.0 * adcResult;
-    _cpuLoad = gsl_getSystemLoad()/2.0;
+    _cpuLoad = gsl_getSystemLoad();
 
 #ifdef DEBUG
     printf("At %02u:%02u:%02u:\n", clk_noHour, clk_noMin, clk_noSec);
@@ -547,7 +597,10 @@ void loop()
           , _uAdcIn
           ); 
     printf("Button: %u\n", decodeLCDButton(adcResult));
-    printf("CPU load: %.1f %%\n\n", _cpuLoad);
+    printf("CPU load: %.1f %%\n", (double)_cpuLoad/2.0);
+    printf( "Task overruns RTC: %u\n\n"
+          , rtos_getTaskOverrunCounter(/* idxTask */ idxTaskRTC, /* doReset */ false)
+          );
 #endif
     
     /* Trigger the follower task, which is capable to safely display the results. */
