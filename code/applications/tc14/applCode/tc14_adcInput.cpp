@@ -77,15 +77,22 @@
 #include "aev_applEvents.h"
 #include "dpy_display.h"
 #include "clk_clock.h"
+#include "adc_analogInput.h"
 
 
 /*
  * Defines
  */
- 
+
+/** Initial value of the ADC input. Either an Arduino analog input (values 0..15) or the
+    internal reference voltage of 1.1 V for testing (specific value 0x1e).
+      @remark This macro is used within macro expression #VAL_MUX with double evaluation.
+    Just define simple literals without side effects here. */
+#define INITIAL_ADC_INPUT 0
+
 /** Pin 13 has an LED connected on most Arduino boards. */
 #define LED 13
- 
+
 /** The index to the task objects as needed for requesting the overrun counter or the stack
     usage. */
 enum { idxTaskOnADCComplete
@@ -100,7 +107,7 @@ enum { idxTaskOnADCComplete
     1.1 V and 3 means 2.56 V. The internal references (1.1 V and 2.56 V are related to each
     other and undergo the same errors. The accuracy of these reference voltages is poor
     (about 5% deviation), the stabilized operational voltage seems to be more accurate. */
-#define VAL_REFS    1    
+#define VAL_REFS    1
 
 /** The reference voltage as floating point value for scaling purpose. */
 #if VAL_REFS == 1
@@ -112,7 +119,7 @@ enum { idxTaskOnADCComplete
 #else
 # error Illegal value for ADMUX/REFS (External reference is not supported)
 #endif
- 
+
 /** The buttons are enumerated. */
 #define btnRIGHT 0
 #define btnUP 1
@@ -125,7 +132,7 @@ enum { idxTaskOnADCComplete
 /*
  * Local type definitions
  */
- 
+
 /** The enumeration of all buttons on the LCD shield that can be queried. */
 typedef enum { lcdButtonNone
              , lcdButtonSelect
@@ -134,17 +141,17 @@ typedef enum { lcdButtonNone
              , lcdButtonUp
              , lcdButtonRight
              } enumLcdButton;
- 
+
 
 /*
  * Local prototypes
  */
- 
- 
+
+
 /*
  * Data definitions
  */
- 
+
 static volatile uint16_t _adcResult = 0;
 static volatile uint32_t _noAdcResults = 0;
 static uint8_t _taskStackTOnADCComplete[256];
@@ -157,14 +164,10 @@ static uint8_t _taskStackTDisplayVoltage[256];
 double _uAdcIn = 0.0;
 uint8_t _cpuLoad = 200;
 
-/** The input of the analog to digital converter. Either an Arduino analog input or the
-    internal reference voltage of 1.1 V for testing. (If you measure this using an internal
-    reference you just believe to have a good accuracy.) Select a none existing analog
-    input (>=16) to select the internal 1.1 V source as input.
-      @remark This macro is used within macro expression #VAL_MUX with double evaluation.
-    Just define simple literals without side effects here. */
-#define ADC_INPUT 0
-static uint8_t _adcInput = ADC_INPUT;
+/** The input of the analog to digital converter. Either an Arduino analog input (0..15) or the
+    internal reference voltage of 1.1 V for testing (0x1e). (If you measure this using an
+    internal reference you just believe to have a very good accuracy.) */
+static uint8_t _adcInput = INITIAL_ADC_INPUT;
 
 /*
  * Function implementation
@@ -190,7 +193,7 @@ int decodeLCDButton(uint16_t adcVal)
 #define RATIO_4 /* SELECT */ ((330.0+620.0+1000.0+3300.0)/(330.0+620.0+1000.0+3300.0+2000.0))
 #define RATIO_5 /* NONE   */ 1.0
 #define THRESHOLD(n,n1) (uint16_t)(((RATIO_##n1 + RATIO_##n) / 2.0) * 0x10000ul)
-    
+
     if(adcVal > THRESHOLD(4,5))
         return lcdButtonNone;
     else if(adcVal > THRESHOLD(3,4))
@@ -230,7 +233,7 @@ static void blink(uint8_t noFlashes)
         delay(TI_FLASH);          /* The flash time. */
         digitalWrite(LED, LOW);   /* Turn the LED off by making the voltage LOW. */
         delay(TI_FLASH);          /* Time between flashes. */
-    }                              
+    }
     delay(1000-TI_FLASH);         /* Wait for a second after the last flash - this command
                                      could easily be invoked immediately again and the
                                      bursts need to be separated. */
@@ -245,12 +248,12 @@ static void blink(uint8_t noFlashes)
  * sequence of values. The processing result is input to a slower, reporting task.
  *   @param initialResumeCondition
  * The vector of events which made the task due the very first time.
- */ 
+ */
 
 static void taskOnADCComplete(uint16_t initialResumeCondition)
 {
     ASSERT(initialResumeCondition == EVT_ADC_CONVERSION_COMPLETE);
-    
+
 #ifdef DEBUG
     /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF (see
        wiring.c). */
@@ -258,41 +261,33 @@ static void taskOnADCComplete(uint16_t initialResumeCondition)
     uint32_t deltaCnt = timer0_overflow_count;
 #endif
 
-    uint16_t accumuatedAdcResult = 0;
     do
     {
-        /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF. */
-        ASSERT(_noAdcResults + deltaCnt == timer0_overflow_count);
-        
+        /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF.
+             Remark: Although this task has a higher priority than the ADC task, that
+           writes adc_noAdcResults without a critical section we can safely access it here
+           as both tasks are synchronized by triggering events. The ADC task synchronously
+           follows this interrupt task. It could become a failure only in case of high
+           system load. */
+        ASSERT(adc_noAdcResults + deltaCnt == timer0_overflow_count);
+
         /* First read ADCL then ADCH. Two statements are needed as it is not guaranteed in
            which order an expression a+b is evaluated. */
-        accumuatedAdcResult += ADCL;
-        accumuatedAdcResult += (ADCH<<8);
-
-        /* Accumulate up to 64 values to do avaraging and anti-aliasing for slower
-           reporting task. */
-        static uint8_t noMean_ = 64;
-        if(--noMean_ == 0)
-        {
-            noMean_ = 64;
-            _adcResult = accumuatedAdcResult;
-            accumuatedAdcResult = 0;
-        }
-        
-        /* Count the read cycles. The frequency should be about 1200 Hz. */
-        ++ _noAdcResults;
+        uint16_t thisSample = ADCL;
+        thisSample |= (ADCH<<8);
+        adc_onConversionComplete(thisSample);
     }
     while(rtos_waitForEvent( EVT_ADC_CONVERSION_COMPLETE | RTOS_EVT_DELAY_TIMER
                            , /* all */ false
                            , /* timeout */ 1
                            )
          );
-    
+
     /* The following assertion fires if the ADC interrupt isn't timely. The wait condition
        specifies a sharp timeout. True production code would be designed more failure
        tolerant. This code would cause a reset in case. */
     ASSERT(false);
-    
+
 } /* End of taskOnADCComplete */
 
 
@@ -302,24 +297,24 @@ static void taskOnADCComplete(uint16_t initialResumeCondition)
  * Configure the ADC and release the interrupt on ADC conversion complete. Most important
  * is the hardware triggered start of the conversions, see chosen settings for ADATE and
  * ADTS.
- */ 
+ */
 
 void rtos_enableIRQUser00()
 {
     /* Setup the ADC configuration. */
-    
+
     /* ADMUX */
 #define VAL_ADLAR   0    /* ADLAR: Result must not be left aligned. */
 
 /** The setting for register MUX is derived from the channel number or it selects the
     internal reference voltage of 1.1 V. */
-#if ADC_INPUT >= 0  &&  ADC_INPUT < 16
-# define VAL_MUX ((((ADC_INPUT) & 0x8) << 2) + ((ADC_INPUT) & 0x7))
+#if INITIAL_ADC_INPUT >= 0  &&  INITIAL_ADC_INPUT < 16
+# define VAL_MUX ((((INITIAL_ADC_INPUT) & 0x8) << 2) + ((INITIAL_ADC_INPUT) & 0x7))
 #else
 # define VAL_MUX 0x1e
 #endif
 
-    ADMUX = (VAL_REFS << 6)    
+    ADMUX = (VAL_REFS << 6)
             + (VAL_ADLAR << 5)
             + ((VAL_MUX & 0x1f) << 0);
 
@@ -332,19 +327,19 @@ void rtos_enableIRQUser00()
 
     ADCSRB = (((VAL_MUX & 0x20) != 0) << 3)
              + (VAL_ADTS << 0);
-             
+
 #undef VAL_MUX
 #undef VAL_ACME
 #undef VAL_ADTS
-    
+
     /* ADCSRA */
 #define VAL_ADEN 1 /* Turn ADC on. */
 #define VAL_ADSC 1 /* Start series of conversion; may be done in same register write access. */
-#define VAL_ADATE 1 /* Turn auto triggering on to minimize jitter in conversion timing. */ 
+#define VAL_ADATE 1 /* Turn auto triggering on to minimize jitter in conversion timing. */
 #define VAL_ADIF 1 /* Reset the "conversion-ready" flag by writing a one. */
 #define VAL_ADIE 1 /* Allow interrupts on conversion-ready. */
-#define VAL_ADPS 7 /* ADPS2:0: Prescaler needs to generate lowest possible frequency. */ 
-    
+#define VAL_ADPS 7 /* ADPS2:0: Prescaler needs to generate lowest possible frequency. */
+
     /* The regular conversions are running after this register write operation. */
     ADCSRA = (VAL_ADEN << 7)
              + (VAL_ADSC << 6)
@@ -352,10 +347,10 @@ void rtos_enableIRQUser00()
              + (VAL_ADIF << 4)
              + (VAL_ADIE << 3)
              + (VAL_ADPS << 0);
-            
+
 #undef VAL_ADEN
 #undef VAL_ADSC
-#undef VAL_ADATE 
+#undef VAL_ADATE
 #undef VAL_ADIF
 #undef VAL_ADIE
 #undef VAL_ADPS
@@ -367,12 +362,12 @@ void rtos_enableIRQUser00()
  * A regular task of about 200 ms task time, which implements a real time clock.
  *   @param initialResumeCondition
  * The vector of events which made the task due the very first time.
- */ 
+ */
 
 static void taskTRTC(uint16_t initialResumeCondition)
 {
     ASSERT(initialResumeCondition == RTOS_EVT_ABSOLUTE_TIMER);
-    
+
     /* Regularly call the RTC implementation at its expected rate: The RTC module exports the
        expected task time by a define. */
     do
@@ -383,7 +378,7 @@ static void taskTRTC(uint16_t initialResumeCondition)
                     (/* deltaTimeTillResume */ CLK_TASK_TIME_RTUINOS_STANDARD_TICS)
          );
     ASSERT(false);
-    
+
 } /* End of taskTRTC */
 
 
@@ -395,7 +390,7 @@ static void taskTRTC(uint16_t initialResumeCondition)
  * display. This task however can.
  *   @param initialResumeCondition
  * The vector of events which made the task due the very first time.
- */ 
+ */
 
 static void taskTIdleFollower(uint16_t initialResumeCondition)
 {
@@ -422,13 +417,13 @@ static void taskTIdleFollower(uint16_t initialResumeCondition)
  * machine and dispatching to the clients.
  *   @param initialResumeCondition
  * The vector of events which made the task due the very first time.
- */ 
+ */
 
 static void taskTButton(uint16_t initialResumeCondition)
 {
     /* Display selection of initial ADC input. */
 //    dpy_display.printAdcInput(_adcInput);
-   
+
     ASSERT(initialResumeCondition == EVT_TRIGGER_TASK_BUTTON);
     do
     {
@@ -447,7 +442,7 @@ static void taskTButton(uint16_t initialResumeCondition)
  * has a new input voltage measurement this task is triggered to display the result.
  *   @param initialResumeCondition
  * The vector of events which made the task due the very first time.
- */ 
+ */
 
 static void taskTDisplayVoltage(uint16_t initialResumeCondition)
 {
@@ -466,7 +461,7 @@ static void taskTDisplayVoltage(uint16_t initialResumeCondition)
 
 /**
  * The initalization of the RTOS tasks and general board initialization.
- */ 
+ */
 
 void setup()
 {
@@ -476,23 +471,23 @@ void setup()
 
     /* Redirect stdout into Serial. */
     init_stdout();
-    
+
     /* Print greeting to the console window. */
     puts_progmem(rtos_rtuinosStartupMsg);
 #endif
 
     /* Print greeting on the LCD. */
     dpy_display.printGreeting();
-    
+
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
     pinMode(LED, OUTPUT);
-    
+
 #ifdef DEBUG
-//    printf( "ADC configuration at startup:\n"    
+//    printf( "ADC configuration at startup:\n"
 //            "  ADMUX  = 0x%02x\n"
 //            "  ADCSRB = 0x%02x\n"
-//          , ADMUX 
+//          , ADMUX
 //          , ADCSRB
 //          );
 #endif
@@ -512,7 +507,7 @@ void setup()
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
-                       
+
     /* Configure the real time clock task of lowest priority class. */
     rtos_initializeTask( /* idxTask */          idxTaskRTC
                        , /* taskFunction */     taskTRTC
@@ -534,7 +529,7 @@ void setup()
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
-                       
+
     /* Configure the button evaluation task. Its priority is below the interrupt but - as
        it implements user interaction - above the priority of the display tasks. */
     rtos_initializeTask( /* idxTask */          idxTaskButton
@@ -546,7 +541,7 @@ void setup()
                        , /* startByAllEvents */ false
                        , /* startTimeout */     0
                        );
-                      
+
     /* Configure the result display task. */
     rtos_initializeTask( /* idxTask */          idxTaskDisplayVoltage
                        , /* taskFunction */     taskTDisplayVoltage
@@ -570,7 +565,7 @@ void setup()
  * Different to all other tasks, the idle task routine may and should return. (The task as
  * such doesn't terminate). This has been designed in accordance with the meaning of the
  * original Arduino loop function.
- */ 
+ */
 
 void loop()
 {
@@ -580,12 +575,12 @@ void loop()
 #endif
 
     cli();
-    uint16_t adcResult    = _adcResult;
+    uint16_t adcResult    = adc_inputVoltage;
 #ifdef DEBUG
-    uint32_t noAdcResults = _noAdcResults; 
+    uint32_t noAdcResults = adc_noAdcResults;
 #endif
     sei();
-    
+
     _uAdcIn = U_REF/64.0/1024.0 * adcResult;
     _cpuLoad = gsl_getSystemLoad();
 
@@ -595,14 +590,14 @@ void loop()
           , noAdcResults
           , 1e-3*millis()
           , _uAdcIn
-          ); 
+          );
     printf("Button: %u\n", decodeLCDButton(adcResult));
     printf("CPU load: %.1f %%\n", (double)_cpuLoad/2.0);
     printf( "Task overruns RTC: %u\n\n"
           , rtos_getTaskOverrunCounter(/* idxTask */ idxTaskRTC, /* doReset */ false)
           );
 #endif
-    
+
     /* Trigger the follower task, which is capable to safely display the results. */
     rtos_setEvent(EVT_TRIGGER_IDLE_FOLLOWER_TASK);
 
