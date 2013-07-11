@@ -173,7 +173,7 @@ void dpy_display_t::printBackground()
 void dpy_display_t::printAdcInput(int8_t idxInput)
 {
     char lcdString[2+1];
-    if(idxInput >= 0)
+    if(idxInput >= 0  &&  idxInput <= 15)
     {
 #ifdef DEBUG
         int noChars =
