@@ -49,14 +49,26 @@
  * Global data declarations
  */
  
-/** Counter of seconds. */ 
-extern uint8_t clk_noSec;
+/** Counter of seconds. The value is modified by the owning module without access
+    synchronization. */
+extern volatile uint8_t clk_noSec;
 
-/** Counter of minutes. */ 
-extern uint8_t clk_noMin;
+/** Counter of minutes. The value is modified by the owning module without access
+    synchronization. */
+extern volatile uint8_t clk_noMin;
 
-/** Counter of hours. */ 
-extern uint8_t clk_noHour;
+/** Counter of hours. The value is modified by the owning module without access
+    synchronization. */ 
+extern volatile uint8_t clk_noHour;
+
+/** Input to the module: Recognized button-down events, which are used to adjust the clock
+    ahead. The value is modified by the owning module inside a critical section.*/
+extern volatile uint8_t clk_noButtonEvtsUp;
+
+/** Input to the module: Recognized button-down events, which are used to adjust the clock
+    towards lower time designations. The value is modified by the owning module inside a
+    critical section.*/
+extern volatile uint8_t clk_noButtonEvtsDown;
 
 
 /*
