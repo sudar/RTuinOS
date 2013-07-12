@@ -144,7 +144,12 @@ void dpy_display_t::printBackground()
 #ifdef DEBUG
     int noChars =
 #endif
-    sprintf(lcdLine, "ADC:            ");
+    /* @todo "BG" as part of the background is an ugly work around the problem, that we
+       don't have a chance to write the actual initial input selection: The call of the
+       display function requires to know, what the currently selected input is and this
+       information is encapsulated and hidden in module adc. We could add a get function to
+       that modules interface ... */
+    sprintf(lcdLine, "ADC: BG         ");
     ASSERT(noChars < (int)sizeof(lcdLine));
     setCursor(/* col */ 0, /* row */ 0);
     print(lcdLine);
@@ -182,7 +187,7 @@ void dpy_display_t::printAdcInput(int8_t idxInput)
         ASSERT(noChars < (int)sizeof(lcdString));
     }
     else
-        lcdString[0] = '-', lcdString[1] = '1', lcdString[2] = '\0';
+        lcdString[0] = 'B', lcdString[1] = 'G', lcdString[2] = '\0';
 
     /* Get access to the display, or wait until anybody else has finished respectively. A
        timeout has been defined which should never elapse, but who knows. In case it
