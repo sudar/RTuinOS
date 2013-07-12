@@ -24,6 +24,8 @@
  * Include files
  */
 
+#include "Arduino.h"
+
 
 /*
  * Defines
