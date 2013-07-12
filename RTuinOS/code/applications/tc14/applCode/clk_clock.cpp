@@ -25,11 +25,11 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
+
 #include "rtos.h"
 #include "rtos_assert.h"
 #include "aev_applEvents.h"
-#include "tc14_adcInput.h"
 #include "dpy_display.h"
 #include "clk_clock.h"
 
@@ -84,7 +84,7 @@ volatile uint8_t clk_noMin = 0;
 /** Counter of hours. The value is written without access synchronization code. The time
     information clk_noHour, clk_noMin, clk_noSec can be safely and consistently read only by
     a task of same or lower priority and using a critical section.*/ 
-volatile uint8_t clk_noHour = 20;
+volatile uint8_t clk_noHour = 23;
 
 /** Input to the module: Recognized button-down events, which are used to adjust the clock
     ahead. The value is read/modified using a critical section. */
@@ -159,9 +159,9 @@ void clk_taskRTC()
         if(++clk_noSec > 59)
         {
             clk_noSec = 0;
-            while(++clk_noMin > 59)
+            if(++clk_noMin > 59)
             {
-                clk_noMin -= 60;
+                clk_noMin = 0;
                 if(++clk_noHour > 23)
                     clk_noHour = 0;
             }

@@ -7,6 +7,9 @@
 # directory structure to organize the source files. (Most samples just use a flat
 # directory.) Furthermore, this sample requires to link against the floating point library
 # for printf & co.
+#   Remark: The name of this makefile fragment needs to be identical to the name of the
+# application folder, which is located in RTuinOS/code/applications. The name extension is
+# mk and the makefile needs to be located in the root of the application folder.
 #
 # Help on the syntax of this makefile is got at
 # http://www.gnu.org/software/make/manual/make.pdf.

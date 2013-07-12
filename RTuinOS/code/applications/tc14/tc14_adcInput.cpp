@@ -5,40 +5,87 @@
  * input channel, which is running in regular, hardware triggered Auto Trigger Mode.
  *   It could seem to be straight forward, to use the timing capabilities of an RTOS to
  * trigger the conversions of an ADC, a regular task would be used to do so. However,
- * signal processing of fluctuating input signals by regular sampling the input suffers
- * from incorrect timing. Although in mean the timing of a regular task is very precise, the
- * actual points in time, when a task is invoked are not precisely equidistant. The
- * invokations may be delayed by an arbitrary, fluctuating tiny time span. This holds true
- * even for a task of high priority -- even if here the so called jitter will be less. If
- * the signal processing assumes regular sampling of the input but actually does do this
- * with small time shifts, it will see an error, which is approximately equal to the first
- * derivative of the input signel times the time shift. The latter is a random quantity so
- * the error also is a random quantity proportional to the derivative of the input signal.
- * In the frequency domain this mean that the expected error increases linearly with the
- * input frequency. Consequently, task triggered ADC conversions must be used only for
- * slowly changing input signals, it might e.g. be adequate for reading a temperature
- * input. All other applications need to trigger the conversions by a sofwtare independent,
- * accurate hardware signal. The software becomes a slave of this hardware trigger.
+ * signal processing of fluctuating input signals by means of regularly sampling the input
+ * suffers from incorrect timing. Although the timing of a regular task is very precise in
+ * mean, the actual points in time, when a task is invoked are not precisely equidistant.
+ * The invocations may be delayed by an arbitrary, fluctuating tiny time span. This holds
+ * true even for a task of high priority -- although the so called jitter will be little
+ * here. If the signal processing assumes regular sampling of the input but actually does
+ * do this with small time shifts, it will see an error, which is approximately equal to
+ * the first derivative of the input signal times the time shift. The latter is a random
+ * quantity so the error also is a random quantity proportional to the derivative of the
+ * input signal. In the frequency domain this mean that the expected error increases
+ * linearly with the input frequency. Consequently, task triggered ADC conversions must be
+ * used only for slowly changing input signals, it might e.g. be adequate for reading a
+ * temperature input. All other applications need to trigger the conversions by a software
+ * independent, accurate hardware signal. The software becomes a slave of this hardware
+ * trigger.
  *   This RTuinOS sample application uses timer/counter 0 in the unchanged Arduino standard
  * configuration to trigger the conversions of the ADC. The overflow interrupt is used for
  * this purpose yielding a conversion rate of about 977 Hz. A task of high priority is
- * awaked on each conversion-complete event and reads the conversion result. The read
- * values are down-sampled and passed to a much slower secondary task, which prints them to
- * the Arduino console window.
+ * awaken on each conversion-complete event and reads the conversion result. The read
+ * values are down-sampled and passed to a much slower secondary task, which prints them on
+ * the Arduino LCD shield (using the LiquidCrystal library).
  *   Proper down-sampling is a CPU time consuming operation, which is hard to implement on
  * a tiny eight Bit controller. Here we use the easiest possible to implement filter with
  * rectangular impulse response. It adds the last recent N input values and divides the
- * reuslt by N. We exploit the fact, that we have 10 Bit ADC values but use a 16 Bit
- * arithemtics anyway: We can safely sum up up to 64 values without any danger of overflow.
+ * result by N. We exploit the fact, that we have 10 Bit ADC values but use a 16 Bit
+ * arithmetics anyway: We can safely sum up up to 64 values without any danger of overflow.
  * The division by N=64 is not necessary at all; this constant value just changes the
  * scaling of the result (i.e. the scaling binary value to Volt), which has to be
  * considered for any output operation anyway. It doesn't matter to this "consider" which
  * scaling we actually have, it's just another constant to use.
- *   Regardless of the poor damping of this filter we use it to reduce the task rate by 32.
+ *   What do you need? What do you get?
+ * To run this sample you need a Arduino Mega board with the LCD shield connected. Porting
+ * this sample to one of the tiny AVRs will be difficult as it requires about 3kByte of RAM
+ * and 22 kByte of ROM (in DEBUG configuration). Furthermore, all the 16 ADC inputs are
+ * addressed, so functional code modifications would also become necessary. The sample can
+ * be run without the LCD shield as it prints a lot of information to the Arduino console
+ * window also (in DEBUG configuration). The function is as follows: The LCD shield buttons
+ * left/right switch to the next ADC input. The internal band gap voltage reference can
+ * also be selected as input. The voltage measured at the selected input is continuously
+ * displayed on the LCD. Another area of the display displays the current time. (The clock
+ * can be adjusted with the buttons up/down.) The last display area shows the current CPU
+ * load. All of these areas are continuously updated asynchronously to one another by
+ * different tasks.
+ *   This test case demonstrates the following things:
+ * *) The use of a non multi-threading library in a multi-threading environment. The display
+ * is purposely accessed by different tasks, which are asynchronous to one another. To do
+ * so, the display has been associated with a mutex and each display writing task will
+ * acquire the mutex first. All of this has been encapsulated in the class dpy_display_t and
+ * all a task needs to do is calling a simple function printXXX. (Please find more detailed
+ * consideration about the use of library LiquidCrystal in the RTuinOS manual.)
+ * *) The the input voltage displaying task (taskDisplayVoltage) is regular but not by an
+ * RTOS timer operation as usual but because it is associated with the ADC conversion
+ * complete interrupt (which is purposely triggered by a regular hardware event). So this
+ * part of the application is synchronous to an external event, whereas a concurrent task
+ * (taskRTC) is an asynchronous regular task by means of RTuinOS timer operations. Both of
+ * these tasks complete for the display without harmful side effects. (The regular timer
+ * task implements a real time clock, see clk_clock.cpp.)
+ * *) A user interface task scans the buttons, which are mounted on the LCD shield. It
+ * decodes the buttons and dispatches the information to the different tasks, which are
+ * controlled by the buttons. This part of the code demonstrates how to implement
+ * inter-task interfaces, mainly built on broadcasted events and critical sections in
+ * conjunction with volatile data objects. The interfaces are implemented in both styles,
+ * by global, shared data or as functional interface. Priority considerations avoid having
+ * superfluous access synchronization code.
+ * *) A totally asynchronous, irregular task also competes for the display. The idle task
+ * estimates the CPU load and an associated display task of low priority prints the result
+ * on the LCD. 
+ * *) The source files of this application have purposely been distributed among three
+ * folders. Not because this would be the most reasonable folder structure but just to
+ * demonstrate how an (optional) application owned makefile fragment can be used to
+ * customize RTuinOS' general purpose makefile without the need to change this master
+ * makefile. Please inspect tc14.mk to find out.
  * @remark
- *   The compilation of this sample requires linkage agianst the stdio library with
- * floating point support for printf & co. Place IO_FLOAT_LIB=1 in the command line of
- * make.
+ *   This test case is no demonstration of an optimal application design. Instead of
+ * creating a clear, simple, stable, understandable, maintainable architecture, we tried to
+ * put a number of RTOS elements in it to demonstrate and test the capabilities of RTuinOS.
+ * Production code would probably look different (and less exciting).
+ * @remark
+ *   The compilation of this sample requires linkage against the stdio library with
+ * floating point support for printf & co. The selection of this library is done in the
+ * makefile "callback" into tc14.mk (see above).
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -482,21 +529,22 @@ void loop()
     printf("\nRTuinOS is idle\n");
 #endif
 
+    /* Share result of CPU load computation with the displaying idle follower task. No
+       acces synchronization is needed here for two reasons: Writing a uint8 is atomic and
+       we have a strict coupling in time between the idle task and the data reading task:
+       They become active one after another. */
+    _cpuLoad = gsl_getSystemLoad();
+
+#ifdef DEBUG
     cli();
     uint16_t adcResult       = adc_inputVoltage;
     uint16_t adcResultButton = adc_buttonVoltage;
-#ifdef DEBUG
     uint32_t noAdcResults = adc_noAdcResults;
-#endif
     uint8_t hour = clk_noHour
           , min  = clk_noMin
           , sec  = clk_noSec;
     sei();
 
-    /* Share result of CPU load computation with the displaying idle follower task. */
-    _cpuLoad = gsl_getSystemLoad();
-
-#ifdef DEBUG
     printf("At %02u:%02u:%02u:\n", hour, min, sec);
     printf( "ADC result %7lu at %7.2f s: %.4f V (input), %.4f V (buttons)\n"
           , noAdcResults
