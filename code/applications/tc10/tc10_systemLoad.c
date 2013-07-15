@@ -9,8 +9,8 @@
  * estimation.\n
  *   To reuse the load estimation in your application copy the files gsl_systemLoad.c/h to
  * your application and see the idle task implementation here to find out how to apply
- * the code.
- *   Observations:
+ * the code.\n
+ *   Observations:\n
  *   The system load is displayed alternatingly as 51%-52% or 63%-64%. The known loads by
  * the tasks are: 6%, 23% and 20%. Every few seconds one of the tasks produced an
  * additional load of 12% for a few seconds. Additional system load is introduced by the
@@ -189,8 +189,10 @@ static void taskT0C0(uint16_t taskCondition)
 
         rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ TIME_IN_MS(TI_CYCLE_MS));
         tiCycle = millis();
+#ifndef NDEBUG
         float tiCycleRel = (tiCycle-ti) * (1.0/1000.0 / (TIME_IN_MS(TI_CYCLE_MS)/490.1961));
         ASSERT(tiCycleRel >= 0.9  &&  tiCycleRel <= 1.1);
+#endif
         ti = tiCycle;
     }
 #undef TI_CYCLE_MS
@@ -219,9 +221,10 @@ static void taskT0C1(uint16_t taskCondition)
     while(rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ TIME_IN_MS(TI_CYCLE_MS)))
     {
         tiCycle = millis();
+#ifdef DEBUG
         float tiCycleRel = (tiCycle-ti) * (1.0/1000.0 / (TIME_IN_MS(TI_CYCLE_MS)/490.1961));
         ASSERT(tiCycleRel >= 0.9  &&  tiCycleRel <= 1.1);
-
+#endif
         rtos_delay(TIME_IN_MS(3));  /* Delay without load. */
         delayMicroseconds(/* tiDelayInuS */ 7 * 1000u); /* 7 of 30 ms, i.e. 23% load. */
         rtos_delay(TIME_IN_MS(7));  /* Delay without load. */
@@ -255,8 +258,9 @@ static void taskT0C2(uint16_t taskCondition)
     while(rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ TIME_IN_MS(TI_CYCLE_MS)))
     {
         tiCycle = millis();
+#ifdef DEBUG
         float tiCycleRel = (tiCycle-ti) * (1.0/1000.0 / (TIME_IN_MS(TI_CYCLE_MS)/490.1961));
-        
+#endif
         /* The boundaries for the test need to be wider here; we have a resolution of
            millis() of 1 ms in relation to the cycle time of 10 ms, the basic accuracy of
            the computation itself is thus only 10%. */

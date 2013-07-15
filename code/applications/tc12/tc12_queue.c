@@ -173,10 +173,13 @@ static void taskT0C0_producer()
     /* The producer wants to log its activities, so it needs to wait for the mutex related
        to Serial. We specify a timeout but if it ever elapsed it would be a failure in this
        test case. */
-    uint16_t gotEvents = rtos_waitForEvent( EVT_MUTEX_SERIAL | RTOS_EVT_DELAY_TIMER
-                                          , /* all */ false
-                                          , /* timeout */ TIME_IN_MS(10)
-                                          );
+#ifdef DEBUG
+    uint16_t gotEvents = 
+#endif
+    rtos_waitForEvent( EVT_MUTEX_SERIAL | RTOS_EVT_DELAY_TIMER
+                     , /* all */ false
+                     , /* timeout */ TIME_IN_MS(10)
+                     );
 
     /* The assertion fires if we see a timeout. */
     ASSERT(gotEvents == EVT_MUTEX_SERIAL);

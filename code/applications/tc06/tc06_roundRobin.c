@@ -387,7 +387,8 @@ void loop(void)
     Serial.print("noLoopsTask01_C0: "); Serial.println(noLoopsTask01_C0);
     Serial.print("noLoopsTask00_C1: "); Serial.println(noLoopsTask00_C1);
     
-    /* Look for the stack usage. */
+    /* Look for the stack usage and task overruns. (The task concept implemented here
+       brings such overruns.) */
     for(idxStack=0; idxStack<RTOS_NO_TASKS; ++idxStack)
     {
         Serial.print("Stack reserve of task");

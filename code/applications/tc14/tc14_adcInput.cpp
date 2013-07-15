@@ -1,10 +1,9 @@
 /**
- * @file tc14_adcInput.c
- *
- * Test case 14 of RTuinOS. A user interrupt is applied to pick the results of an analog
- * input channel, which is running in regular, hardware triggered Auto Trigger Mode.
+ * @file tc14_adcInput.cpp
+ *   Test case 14 of RTuinOS. A user interrupt is applied to pick the results of an analog
+ * input channel, which is running in regular, hardware triggered Auto Trigger Mode.\n
  *   It could seem to be straight forward, to use the timing capabilities of an RTOS to
- * trigger the conversions of an ADC, a regular task would be used to do so. However,
+ * trigger the conversions of an ADC; a regular task would be used to do so. However,
  * signal processing of fluctuating input signals by means of regularly sampling the input
  * suffers from incorrect timing. Although the timing of a regular task is very precise in
  * mean, the actual points in time, when a task is invoked are not precisely equidistant.
@@ -19,13 +18,13 @@
  * used only for slowly changing input signals, it might e.g. be adequate for reading a
  * temperature input. All other applications need to trigger the conversions by a software
  * independent, accurate hardware signal. The software becomes a slave of this hardware
- * trigger.
+ * trigger.\n
  *   This RTuinOS sample application uses timer/counter 0 in the unchanged Arduino standard
  * configuration to trigger the conversions of the ADC. The overflow interrupt is used for
  * this purpose yielding a conversion rate of about 977 Hz. A task of high priority is
  * awaken on each conversion-complete event and reads the conversion result. The read
  * values are down-sampled and passed to a much slower secondary task, which prints them on
- * the Arduino LCD shield (using the LiquidCrystal library).
+ * the Arduino LCD shield (using the LiquidCrystal library).\n
  *   Proper down-sampling is a CPU time consuming operation, which is hard to implement on
  * a tiny eight Bit controller. Here we use the easiest possible to implement filter with
  * rectangular impulse response. It adds the last recent N input values and divides the
@@ -34,44 +33,44 @@
  * The division by N=64 is not necessary at all; this constant value just changes the
  * scaling of the result (i.e. the scaling binary value to Volt), which has to be
  * considered for any output operation anyway. It doesn't matter to this "consider" which
- * scaling we actually have, it's just another constant to use.
- *   What do you need? What do you get?
+ * scaling we actually have, it's just another constant to use.\n
+ *   What do you need? What do you get?\n
  * To run this sample you need a Arduino Mega board with the LCD shield connected. Porting
  * this sample to one of the tiny AVRs will be difficult as it requires about 3kByte of RAM
  * and 22 kByte of ROM (in DEBUG configuration). Furthermore, all the 16 ADC inputs are
  * addressed, so functional code modifications would also become necessary. The sample can
  * be run without the LCD shield as it prints a lot of information to the Arduino console
- * window also (in DEBUG configuration). The function is as follows: The LCD shield buttons
- * left/right switch to the next ADC input. The internal band gap voltage reference can
- * also be selected as input. The voltage measured at the selected input is continuously
- * displayed on the LCD. Another area of the display displays the current time. (The clock
- * can be adjusted with the buttons up/down.) The last display area shows the current CPU
- * load. All of these areas are continuously updated asynchronously to one another by
- * different tasks.
- *   This test case demonstrates the following things:
+ * window also (in DEBUG configuration only). The function is as follows: The LCD shield
+ * buttons left/right switch to the next ADC input. The internal band gap voltage reference
+ * can also be selected as input. The voltage measured at the selected input is
+ * continuously displayed on the LCD. Another area of the display displays the current
+ * time. (The clock can be adjusted with the buttons up/down.) The last display area shows
+ * the current CPU load. All of these areas are continuously updated asynchronously to one
+ * another by different tasks.\n
+ *   This test case demonstrates the following things:\n
  * *) The use of a non multi-threading library in a multi-threading environment. The display
  * is purposely accessed by different tasks, which are asynchronous to one another. To do
  * so, the display has been associated with a mutex and each display writing task will
  * acquire the mutex first. All of this has been encapsulated in the class dpy_display_t and
  * all a task needs to do is calling a simple function printXXX. (Please find more detailed
- * consideration about the use of library LiquidCrystal in the RTuinOS manual.)
+ * consideration about the use of library LiquidCrystal in the RTuinOS manual.)\n
  * *) The the input voltage displaying task (taskDisplayVoltage) is regular but not by an
  * RTOS timer operation as usual but because it is associated with the ADC conversion
  * complete interrupt (which is purposely triggered by a regular hardware event). So this
  * part of the application is synchronous to an external event, whereas a concurrent task
  * (taskRTC) is an asynchronous regular task by means of RTuinOS timer operations. Both of
  * these tasks complete for the display without harmful side effects. (The regular timer
- * task implements a real time clock, see clk_clock.cpp.)
+ * task implements a real time clock, see clk_clock.cpp.)\n
  * *) A user interface task scans the buttons, which are mounted on the LCD shield. It
  * decodes the buttons and dispatches the information to the different tasks, which are
  * controlled by the buttons. This part of the code demonstrates how to implement
  * inter-task interfaces, mainly built on broadcasted events and critical sections in
  * conjunction with volatile data objects. The interfaces are implemented in both styles,
  * by global, shared data or as functional interface. Priority considerations avoid having
- * superfluous access synchronization code.
+ * superfluous access synchronization code.\n
  * *) A totally asynchronous, irregular task also competes for the display. The idle task
  * estimates the CPU load and an associated display task of low priority prints the result
- * on the LCD. 
+ * on the LCD.\n
  * *) The source files of this application have purposely been distributed among three
  * folders. Not because this would be the most reasonable folder structure but just to
  * demonstrate how an (optional) application owned makefile fragment can be used to

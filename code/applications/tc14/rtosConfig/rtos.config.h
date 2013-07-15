@@ -1,7 +1,7 @@
 #ifndef RTOS_CONFIG_INCLUDED
 #define RTOS_CONFIG_INCLUDED
 /**
- * @file rtos.config.h
+ * @file tc14/rtosConfig/rtos.config.h
  * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  *
@@ -99,14 +99,14 @@
     according peripheral). If so, this needs to be done by reimplementing void
     rtos_enableIRQTimerTic(void), which is an overridable default implementation.\n
       If an application redefines the interrupt source, the new source will probably
-    produce another system clock frquency. If so, the macro #RTOS_TIC needs to be redefined
+    produce another system clock frequency. If so, the macro #RTOS_TIC needs to be redefined
     also. */
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
 
 
 /** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
     floating point constant. The unit is s. */
-#define RTOS_TIC (2.0399999e-3)
+#define RTOS_TIC (2.04e-3)
 
 
 /** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in

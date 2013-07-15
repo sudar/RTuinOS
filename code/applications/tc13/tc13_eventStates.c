@@ -4,7 +4,7 @@
  * triggering events sent by an always due, periodic task. In each step a task either
  * requests or sends/releases an event. Assertions double-check after each step if the
  * system state is as expected. The state is defined by the balances of mutexes and
- * semphores. (Please note, the balance of mutexes is always double-checked by assertion
+ * semaphores. (Please note, the balance of mutexes is always double-checked by assertion
  * inside rtos.c.)\n
  *   It's hard to keep track about which task is in which state and what is the current
  * expected system state. This test case can be understood only because of the accompanying
