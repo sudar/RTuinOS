@@ -1,7 +1,7 @@
 #ifndef AEV_APPLEVENTS_INCLUDED
 #define AEV_APPLEVENTS_INCLUDED
 /**
- * @file aev_applEvents.h
+ * @file tc14/applCode/aev_applEvents.h
  * Definition of application events. The application events are managed in a
  * central file to avoid inconistencies and accidental double usage.
  *

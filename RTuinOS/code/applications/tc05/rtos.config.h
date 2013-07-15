@@ -5,7 +5,7 @@
  * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  *
- * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -37,7 +37,7 @@
 
 
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
-    will always be existent and alive. Permitted range is 0..255.\n
+    will always be existent and alive. Permitted range is 0..127.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
 #define RTOS_NO_TASKS    3
 
@@ -52,10 +52,43 @@
 /** Since many tasks will belong to distinct priority classes, the maximum number of tasks
     belonging to the same class will be significantly lower than the number of tasks. This
     setting is used to reduce the required memory size for the statically allocated data
-    structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..255,
+    structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..127,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
 #define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 2
+
+
+/** The number of events, which behave like semaphores. When posted, they are not
+    broadcasted like ordinary events but posted to only one task, which is the one of
+    highest priority, which is currently waiting for this event. If no such task exists,
+    the semaphore-event is counted in the related semaphore for future requests of the
+    semaphore by any task.\n
+      Having semaphores in the application increases the overhead of RTuinOS significantly.
+    The number should be null as long as semaphores are not essential to the application.
+    In particular, one should not use semaphores where mutexes are possible. Mutexes are a
+    sub-set of semaphores; it are semaphores with start value one and they can be
+    implemented much more efficient by bit operations.
+      @remark To reduce the cost of the implementation of semaphores RTuinOS restricts the
+    number of semaphores to eight out of the 16 events.\n
+      @remark Two additional things have to be configured, when using at least one
+    semaphore in your application:\n
+      All semaphores are implemented as unsigned integers of a given type. The type
+    determines the counting range of the semaphores and is application dependent. Please,
+    see below for the application owned typedef \a uintSemaphore_t.\n
+      The use case of a semaphore pre-determines its initial value. To make it most easy
+    and efficient for the application the array of semaphores is declared extern to
+    RTuinOS. Please refer to rtos.h for the declaration of \a rtos_semaphoreAry and define
+    \b and \b initialize this array in your application code. */
+#define RTOS_NO_SEMAPHORE_EVENTS    0
+
+
+/** The number of events, which behave like mutexes. When posted, they are not broadcasted
+    like ordinary events but posted to only one task, which is the one of highest
+    priority, which is currently waiting for this event. If no such task exists, the
+    mutex-event is saved until the first task requests it.
+      Having mutexes in the application increases the overhead of RTuinOS. It should be
+    null as long as mutexes are not essential to the application. */
+#define RTOS_NO_MUTEX_EVENTS    0
 
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This
@@ -64,9 +97,9 @@
       If an application redefines the interrupt source, it'll probably have to implement
     the code to configure this interrupt (e.g. set the interrupt enable bit in the
     according peripheral). If so, this needs to be done by reimplementing void
-    rtos_enableIRQTimerTic(void), which is an overridable default implementation.
+    rtos_enableIRQTimerTic(void), which is an overridable default implementation.\n
       If an application redefines the interrupt source, the new source will probably
-    produce another system clock frquency. If so, the macro #RTOS_TIC needs to be redefined
+    produce another system clock frequency. If so, the macro #RTOS_TIC needs to be redefined
     also. */
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER4_OVF_vect
 
@@ -255,6 +288,19 @@ RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
     moreover, it is dangerous to do, as a true, properly recognized task overrun would lead
     to an almost dead task. */
 #define RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE  RTOS_FEATURE_OFF
+
+
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
+/** The implementation of a semaphore is a simple unsigned integer. The value means the
+    number of resources managed by the semaphore. In a resource management system it may be
+    the number of available pooled resources, which can be still checked out by the
+    clients, or it is the number of produced objects in a producer-consumer system. In any
+    application, the maximum number of managed objects need to fit into the data type of
+    the semaphore. Use the smallest possible data type, which fits to all your
+    semaphores.\n
+      Possible data types for semaphores are uint8_t, uint16_t and uint32_t. */
+typedef uint8_t uintSemaphore_t;
+#endif
 
 
 /*

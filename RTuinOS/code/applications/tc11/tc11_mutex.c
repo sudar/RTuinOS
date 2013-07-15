@@ -3,16 +3,16 @@
  * Test case 11 of RTuinOS. Test case 09 had demonstrated how to implement a safe resource
  * managment without the availability of true operating system provided synchronization
  * objects. In the second release of RTuinOS these objects became available. This test case
- * re-implements test case 09 using a true mutex instead of a pseudo-mutex.
+ * re-implements test case 09 using a true mutex instead of a pseudo-mutex.\n
  *   The mutex is applied to control the alternating use of a shared resource (Serial) by
- * several tasks. With this release of RTuinOS true to-the-point waiting for a resource
- * becomes possible in RTuinOS.
- *   Observations:
+ * several tasks. With release 1.0 true to-the-point waiting for a resource becomes
+ * possible in RTuinOS.\n
+ *   Observations:\n
  *   The test succeeds if the Arduino console shows correct text output. The tasks, which
  * gets the resource uses the shared resource (the global object Serial) to write one line
  * of text to the console. This is purposely done in several portions of output, which are
  * interrupted by task switches. A certain percentage of the task switches will also oocur
- * in the middle of a print command. The lines must nonetheless be always complete.
+ * in the middle of a print command. The lines must nonetheless be always complete.\n
  *   It must be apparent, that the task of higher priority gets the resource if it is
  * concurrent with another one.
  *

@@ -8,7 +8,7 @@
  * application interrupts. Occasionally, a series of flashes is produced, which represents
  * the number of interrupts so far. (To not overburden the flashes counting human, the
  * length of the series is limited to ten.) This feedback giving task gets active only on
- * demand; it's triggered by an application event from another task.
+ * demand; it's triggered by an application event from another task.\n
  *   Observations:\n
  *   The frequency of the timer interrupts (timers 4 and 5 have been used) can be varied in
  * a broad range. In this test case the application interrupt 00 is configured to occur

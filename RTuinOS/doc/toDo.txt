@@ -80,3 +80,16 @@ trade off is undecided.
 Makefile: Gets a callback into the application folder by -include? In
 order to enable an application to have own customizations? Like name or
 IO_FLOAT_LIB? 
+  Done, works fine
+
+tc06: The config setting RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE should be
+RTOS_FEATURE_OFF and the meaning/why should be documented. Obviously, the
+test case doesn't do what it is expected to. If we change the feature, the
+anticipated timing cahnges and an assertion fires. Make this a clearer,
+better documented test case.
+
+tc12: The reported timing looks like a temporary task overrun for the
+producer (while it waits for the Serial mutex from the consumer, which
+reports the entire list of queued elements). Task time is alright in mean.
+Is the not-recognition of the overrun a failure or an new effect of the
+already know weaknesses of the counter?

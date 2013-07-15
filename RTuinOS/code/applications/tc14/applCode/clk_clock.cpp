@@ -1,5 +1,5 @@
 /**
- * @file clk_clock.c
+ * @file clk_clock.cpp
  *   Implementation of a real time clock for a sample task.
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
@@ -84,7 +84,7 @@ volatile uint8_t clk_noMin = 0;
 /** Counter of hours. The value is written without access synchronization code. The time
     information clk_noHour, clk_noMin, clk_noSec can be safely and consistently read only by
     a task of same or lower priority and using a critical section.*/ 
-volatile uint8_t clk_noHour = 23;
+volatile uint8_t clk_noHour = 20;
 
 /** Input to the module: Recognized button-down events, which are used to adjust the clock
     ahead. The value is read/modified using a critical section. */
@@ -120,34 +120,46 @@ void clk_taskRTC()
     
     /* Adjust time. */
     bool doDisplay = deltaTime != 0;
-    while(deltaTime > 0)
+    if(doDisplay)
     {
-        -- deltaTime;
-        if((clk_noMin+=5) > 59)
+        /* Reset the second and fraction of a second counters. */
+        clk_noSec   = 0;
+        _noTaskTics = 0;
+        
+        while(deltaTime > 0)
         {
-            clk_noMin -= 60;
-            if(++clk_noHour > 23)
-                clk_noHour = 0;
+            -- deltaTime;
+            if((clk_noMin+=5) > 59)
+            {
+                clk_noMin -= 60;
+                if(++clk_noHour > 23)
+                    clk_noHour = 0;
+            }
+        }
+        while(deltaTime < 0)
+        {
+            /* By defining the downwards operation not strictly inverse to upwards, we can
+               reach all times not just the muliples of five. A bit strange and not what one
+               expects and no true alternative to a state machine which begins to auto-repeat
+               the key-event after a while, but this is just a simple demonstration of
+               RTuinOS, not a high-end application. */ 
+            ++ deltaTime;
+            if((clk_noMin-=4) > 59)
+            {
+                clk_noMin += 60;
+                if(--clk_noHour > 23)
+                    clk_noHour = 23;
+            }
         }
     }
-    while(deltaTime < 0)
+    else
     {
-        /* By defining the downwards operation not strictly inverse to upwards, we can
-           reach all times not just the muliples of five. A bit strange and not what one
-           expects and no true alternative to a state machine which begins to auto-repeat
-           the key-event after a while, but this is just a simple demonstration of
-           RTuinOS, not a high-end application. */ 
-        ++ deltaTime;
-        if((clk_noMin-=4) > 59)
-        {
-            clk_noMin += 60;
-            if(--clk_noHour > 23)
-                clk_noHour = 23;
-        }
-    }
+        /* Advance the clock by one tic. */
+        _noTaskTics += CLK_TASK_TIME_RTUINOS_STANDARD_TICS*CLOCK_TIC_NUMERATOR;
+
+    } /* if(A button has been touched to adjust the clock?) */    
     
-    /* Advance the clock by one tic. */
-    _noTaskTics += CLK_TASK_TIME_RTUINOS_STANDARD_TICS*CLOCK_TIC_NUMERATOR;
+    /* Carry ripple. */
     if(_noTaskTics >= CLOCK_TIC_DENOMINATOR)
     {
         _noTaskTics -= CLOCK_TIC_DENOMINATOR;
