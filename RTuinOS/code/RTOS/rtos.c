@@ -441,7 +441,7 @@ static task_t *_pActiveTask = &_taskAry[IDLE_TASK_ID];
 
 /** The task which is to be suspended because of a newly activated one. Only temporarily
     used in the instance of a task switch. */
-static task_t *_pSuspendedTask = NULL; // @todo check, used to be _pIdleTask
+static task_t *_pSuspendedTask = NULL;
 
 /** Array holding all due (but not active) tasks. Ordered according to their priority
     class. */
