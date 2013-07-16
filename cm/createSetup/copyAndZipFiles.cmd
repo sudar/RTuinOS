@@ -38,19 +38,10 @@ xcopy /S doc\manual\*.png %output%\doc\manual
 mkdir %output%\code
 xcopy /S code\* %output%\code
 
-:: To soften the problems of the makefile with the creation of the output directories, we
-:: distribute RTuinOS with the (empty) directories in place.
-mkdir %output%\bin
-mkdir %output%\bin\core
-mkdir %output%\bin\core\obj
-mkdir %output%\bin\DEBUG
-mkdir %output%\bin\DEBUG\obj
-mkdir %output%\bin\PRODUCTION
-mkdir %output%\bin\PRODUCTION\obj
-
 :: The makefile, license. The version file needs to be supplied by the caller of this script.
 copy lgpl.txt %output%
 copy GNUmakefile %output%
+xcopy /S makefile\* %output%\makefile
 copy cm\createSetup\version.txt %output%
 
 :: Protect files

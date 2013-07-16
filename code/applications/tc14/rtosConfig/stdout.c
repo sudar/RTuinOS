@@ -1,5 +1,5 @@
 /**
- * @file tc14/stdout.c
+ * @file tc14/rtosConfig/stdout.c
  *   stdout, the character stream used by the printf & co routines from the C standard
  * library, is redirected into the stream Serial. Using printf, Arduino applications can
  * communicate much easier with the console window as possible with the members of Serial

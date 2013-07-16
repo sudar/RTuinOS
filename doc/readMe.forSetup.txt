@@ -70,5 +70,8 @@ More assertions have been placed in the kernel for debug compilation,
 which anticipate and notify many typical application errors, like an idle
 task, which tries to suspend.
 
+A new test case (see tc14) proves the compatibility of the Arduino
+LiquidCrystal library with RTuinOS.
+
 The doxygen documentation now includes some of the test cases, which
 contain sample code of general interest.
