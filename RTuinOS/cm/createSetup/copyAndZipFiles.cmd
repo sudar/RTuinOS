@@ -41,6 +41,7 @@ xcopy /S code\* %output%\code
 :: The makefile, license. The version file needs to be supplied by the caller of this script.
 copy lgpl.txt %output%
 copy GNUmakefile %output%
+mkdir %output%\makefile
 xcopy /S makefile\*.mk %output%\makefile
 copy cm\createSetup\version.txt %output%
 
