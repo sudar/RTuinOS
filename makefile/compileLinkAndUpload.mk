@@ -234,7 +234,7 @@ VPATH := $(srcDirList) 																\
 #   TODO You may need to add more include paths here.
 cFlags =  $(cDefines) -c -Wall -fno-exceptions -ffunction-sections                  \
           -fdata-sections -mmcu=$(targetMicroController) -DF_CPU=16000000L -MMD     \
-          -DUSB_VID=null -DUSB_PID=null -DARDUINO=101                               \
+          -DUSB_VID=null -DUSB_PID=null -DARDUINO=105                               \
           -Wa,-a=$(patsubst %.o,%.lst,$@)                                           \
           -Winline                                                                  \
           $(foreach path, $(srcDirList), -I$(path))                                 \
