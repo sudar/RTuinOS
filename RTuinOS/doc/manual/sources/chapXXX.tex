@@ -7,7 +7,7 @@ sequential. \ident{loop} may of course call any sub-routines, which may
 call others, but this does not change the strictly sequential character of
 the execution of the statements. Therefore it is difficult to execute
 specific actions at specific points in time. For example toggle the state
-of a LED every seconds. This might still be easy to do if your sketch does
+of an LED every seconds. This might still be easy to do if your sketch does
 nothing else -- see Arduino's standard example \ident{blink} --, but if
 you're in the middle of a sketch, which e.g. transfers some data via the
 USB port, it becomes ugly: You will have to merge some specific, the LED
@@ -20,13 +20,13 @@ defined at the same time and will be executed, too. Now the USB code is no
 longer spoiled with double-checking the state of the LED but nonetheless
 the LED will blink as desired.
 
-This actually is what \rtos{} offers. It's however no a complete sketch
+This actually is what \rtos{} offers. It's however not a complete sketch
 but just a function -- which can of course be stored in a separate C
 source file --, which is executed in parallel. Write two such functions,
 make them so called tasks and you get what you want.
 
-How would this work? The Arduino board continues to have a single main
-CPU, which is available for code execution. The trick is to use it
+How would this work? The Arduino board continues to have a single CPU,
+which is available for code execution. The trick is to use it
 alternatingly to proceed with the one task and then with the other one. If
 this switching between the tasks happens fast enough, than it's just the
 same as if both would run at the same time -- only with limited execution
@@ -140,7 +140,7 @@ just a task scheduler. In fact, in this environment, the scheduler is just
 the most important part of the operating system, therefore referred to as
 kernel, but surrounded by tons of utilities, mostly to support various I/O
 operations. In the embedded world a real time operating system typically
-doesn't offer anything else than a scheduler and so does \rtos{}.}
+doesn't offer much more than a scheduler and so does \rtos{}.}
 Understanding the details of the decision rules implemented in \rtos{} is
 essential for writing applications that behave as desired. (An RTOS can
 easily show effects which are neither expected nor desired.) The rules of
@@ -181,10 +181,21 @@ parameter of kind \emph{when}.
 At system initialization time all tasks are put in state suspended.
 Consequently, the initial resume condition is part of the task
 initialization. Typically, this condition is weak, like "resume
-immediately". However, a delayed resume or a resume by an application
-event is also possible. Starting some tasks with differing delays may even
-be advantageous in order to avoid having too many regular tasks becoming
-due all at the same time.
+immediately". However, a delayed resume is possible. Starting some regular
+tasks with differing delays may be advantageous in order to avoid having
+too many tasks becoming due all at the same time. Furthermore, a task may
+specify the initial resume by a broadcasted application event. And if a
+task implements the handler of an application interrupt it will probably
+be initially resumed by this interrupt.
+
+Please note, that events of kind mutex or semaphore must not be used as
+part of a task's initial resume condition. In many cases such a condition
+simply doesn't define a suspended state; if the mutex or semaphore (or
+better to say a counter value of it) is currently available the requesting
+task would not be suspended -- which is a must at the time of
+initializing the task objects as the \rtos{} kernel is not yet running at
+this point in time.
+
 
 
 \section{Time based Events}
@@ -199,7 +210,7 @@ initial resume condition for a task. It'll start immediately.
 In the implementation a time event results from a system timer tic. The
 core of the scheduler is a clock based interrupt. In \rtos{} this clock
 has a default clock rate of about 2~ms, but this can be altered by the
-application code.\footnote{\rtos uses timer 2 as source for clocking its
+application code.\footnote{\rtos{} uses timer 2 as source for clocking its
 system time. In Arduino this timer -- intended for PWM output -- cycles
 with about 2~ms. \rtos doesn't change Arduino's timer configuration in its
 standard configuration.} In the interrupt service routine (ISR), a
@@ -258,12 +269,14 @@ event-receiving task has the higher priority, \ident{rtos\_setEvent} leads to
 temporary inactivation of the calling task and will return only when it is
 activated again.
 
-More in general, \ident{rtos\_setEvent} is implemented as a software interrupt
-(SWI) and behaves similar to the system timer ISR. It notifies the event
-to all currently suspended tasks, which are waiting for it. The rest is
-done exactly as the system timer ISR does. \ident{rtos\_setEvent} checks the
+More in general, \ident{rtos\_setEvent} is implemented as a software
+interrupt (SWI) and behaves similar to the system timer ISR. It notifies
+an ordinary, broadcasted event to all currently suspended tasks, which are
+waiting for it and passes events of kind mutex or semaphore to the very
+task of highest priority, which demanded to acquire it. The rest is done
+exactly as the system timer ISR does. \ident{rtos\_setEvent} checks the
 resume condition of all suspended tasks. Those tasks the condition of
-which is fulfilled are moved to the end of their due list. Then, the new
+which is fulfilled are moved to the end of their due list. Then the new
 active task is selected. This might be the same or another task. The SWI
 ends with continuing the new, active task.
 
@@ -308,11 +321,11 @@ managed resource. In \rtos{} it can't be queried by an API call who
 currently is the owner of a mutex; actually \rtos{} isn't even aware of
 it. The task code needs to keep track about, e.g. by implementing a
 related Boolean variable.\footnote{Such a Boolean variable could be hidden
-a C++ class embedding all calls of \ident{rtos\_waitForEvent} and
+in a C++ class embedding all calls of \ident{rtos\_waitForEvent} and
 \ident{rtos\_setEvent} into member functions like \ident{acquireMutex} and
 \ident{releaseMutex}. Each task would have its own, local object of this
-class. However, this concept is simple only if waiting for combinations
-of events is excluded -- which won't be a painful restriction for most
+class. However, this concept is simple only if waiting for combinations of
+events is excluded -- which won't be a painful restriction for most
 applications.}
 
 
@@ -341,9 +354,9 @@ Under all conditions a posted semaphore event is recorded somewhere, it's
 either notified to a waiting task or it's counted in the kernel, and the
 application needs to keep track of this. Normally, the acquired number of
 instances of a semaphore (or its counter values respectively) corresponds
-with the number of instances from a managed pool of resources the task
-was granted access to. The number of instances a task has accumulated
-across a series of \ident{rtos\_waitForEvent} and \ident{rtos\_setEvent}
+with the number of instances from a managed pool of resources the task was
+granted access to. The number of instances a task has accumulated across a
+series of calls of \ident{rtos\_waitForEvent} and \ident{rtos\_setEvent}
 can't be queried by an API call; actually \rtos{} isn't even aware of it.
 The application code needs to keep track of, e.g. by implementing a
 related counter variable.\footnote{An appropriate way of doing could be a
@@ -459,15 +472,25 @@ active -- in the same timer tic.} If all tasks in this list are configured
 to have time slices (and if there were no other resume conditions), the
 list is cycled and all tasks get the CPU for a predefined amount of time.
 
-Arrow 3 shows the effect of a suspend command. If the active tasks issues
+Arrow 3 shows the effect of a suspend command. If the active task issues
 such a command, it is moved from the head of its due list to the end of
-the list of suspended tasks.\footnote{It's just for simplicity of the
-implementation that we place it at the end. The list of suspended tasks is
-not ordered; actually it is not a list but a pool of task objects.} Again,
-arrow 2 shows how the next task in the due list will become the new head
-and active task. However, if there was no second task in this list, the
-head of a due list of lower priority would become the new active task. In
-our figure, this could then be the head of priority list 1.
+the list of suspended tasks. Again, arrow 2 shows how the next task in the
+due list will become the new head and active task. However, if there was
+no second task in this list, the head of a due list of lower priority
+would become the new active task. In our figure, this could then be the
+head of priority list 1.
+
+The explanation of arrow 3 needs some refinement. If \rtos{} is compiled
+without support for events of kind mutex and semaphore we indeed
+place the suspended task at the end of the list -- but just for sake of
+simplicity of the implementation. The list of suspended tasks is not
+ordered; actually it is not a list but a pool of task objects. The
+situation differs if we have either mutex or semaphore events. Now we
+really have an ordered list of suspended tasks. The list is ordered by
+task priority and the suspended task is not put at the end but behind the
+last task of same or higher priority. This list order will strongly
+facilitate the distribution of posted events of kind mutex or semaphore to
+the right receiver in a later call of \ident{rtos\_setEvent}.
 
 Arrows 4 and 5 show how a suspended task becomes due again. In any call of
 either the system timer ISR or \ident{rtos\_setEvent} all suspended tasks are
@@ -572,11 +595,11 @@ the left task it is not a prerequisite that the activated task terminates
 own, dedicated stack. Before switching from one task to another we need to
 save the stack of the left task. At runtime, i.e. out of scope of memory
 allocation and stack initialization considerations, the stack actually is
-completely represented by the pointer to its top -- and this "stack
-pointer" (the last CPU register to mention) is what we need to save also.
-Here, we use an absolute storage location. The task object has a member to
-hold the stack pointer of this task. The value of this object member is
-meaningful always and only while the task is inactive.
+completely represented by the pointer to its current top -- and this
+"stack pointer" (the last CPU register to mention) is what we need to save
+also. Here, we use an absolute storage location. The task object has a
+member to hold the stack pointer of this task. The value of this object
+member is meaningful always and only while the task is inactive.
 
 Before we proceed to the perhaps most difficult to understand detail, we
 will shortly summarize what we saw so far:
@@ -683,11 +706,11 @@ Some details still need explanation. First the stack balance; please refer
 to figure \ref{figFlowChartTaskSwitch}. Since we save the CPU context on
 the task stack we must always push and pop the same number of bytes at
 each task switch. When restoring the context on return to an originally
-suspended task we will not pop r24/r25 from the stack (but load it with
-the function result) and therefore we must not push these registers when
-saving the context. The context save operation on entry into a suspend
-command will save all registers but r24/r25 - anticipating that these
-registers will not be restored later.
+suspended task we will not restore r24/r25 from the stack (but load it
+with the function result) and therefore we must not push these registers
+when saving the context. The context save operation on entry into a
+suspend command will save all registers but r24/r25 - anticipating that
+these registers will not be restored later.
 
 \incFigFile{FlowChartTaskSwitch}{Implementation of task switches. On the
 left-hand side for interrupt service routines. On the right-hand side for
@@ -699,9 +722,8 @@ pushes the register pair}{0.8}
 The task switch causing API function \ident{rtos\_setEvent} is a void
 function. It doesn't return a result and all registers are thus saved on
 entry into \ident{rtos\_setEvent} and restored on return to the calling
-task. (Which might be immediately on exit from \ident{rtos\_setEvent} or
-later because of suspending another, intermediately executed task of
-higher priority.)
+task. (Which might be immediately or later because of releasing another,
+intermediately executed task of higher priority.)
 
 A second, less important detail is about how the register pair r24/r25 is
 loaded with the function result. If the task switching code recognizes
@@ -1342,7 +1364,7 @@ including the idle task.
 
 \section{Short Recipe}
 
-Create an empty folder in folder \ident{code\textbackslash{}applications}.
+Create an empty folder in folder \ident{code/applications}.
 The name of the folder is the name of your application. Copy the
 configuration template file \refRTOSConfigTemplateH{} into this folder and
 rename it to \ident{rtos.config.h}.
@@ -1488,14 +1510,14 @@ the front of -- to avoid shadowing by an incompatible derivate of make --
 your Windows search path.\footnote{After installation, type make --version
 to find out.} Inside your Arduino 1.0.5 installation, you'll find the make
 tool as
-arduino-1.0.5\textbackslash\-hard\-ware\textbackslash\-tools\textbackslash\-avr\textbackslash\-utils\textbackslash\-bin\textbackslash\-make.exe.
+arduino-1.0.5/\-hard\-ware/\-tools/\-avr/\-utils/\-bin/\-make.exe.
 
 The makefile compiles the Arduino standard source files to the standard
 library \ident{core.a}. To do so, it needs to know, where the Arduino sources
 -- which are not part of this project -- are located. It expects an
 environment variable \ident{ARDUINO\_HOME} to point to the Arduino
 installation directory, e.g.
-c:\textbackslash{}ProgramFiles\textbackslash\-arduino-1.0.5. You will
+c:/ProgramFiles/\-arduino-1.0.5. You will
 probably have to add such a variable to your system variables as it is not
 defined by the Arduino standard installation process.
 
@@ -1541,12 +1563,11 @@ depend on the compilation configuration.
 As said, the compilation is mainly controlled by a list of source code
 directories. This list is implemented as value of macro
 \ident{srcDirList}. The default is to have two directories: The \rtos{}
-source code directory \ident{code\textbackslash\-RTOS} and a second,
-variable directory. This directory is located in
-\ident{code\textbackslash\-applications} but its name is provided by macro
-\ident{APP}. This enables you to select an application for compilation
-simply by stating \verb+APP=myRTuinOSApplication+ on the command line of
-make.
+source code directory \ident{code/\-RTOS} and a second, variable
+directory. This directory is located in \ident{code/\-applications} but
+its name is provided by macro \ident{APP}. This enables you to select an
+application for compilation simply by stating
+\verb+APP=myRTuinOSApplication+ on the command line of make.
 
 If your application demands more than a simple, flat directory to manage
 all its source files, you can continue to use the makefile with minor
