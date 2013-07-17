@@ -73,5 +73,9 @@ task, which tries to suspend.
 A new test case (see tc14) proves the compatibility of the Arduino
 LiquidCrystal library with RTuinOS.
 
+The CPU load estimation is unchanged but has been moved from a test case
+folder to the common folder RTOS and is now available to any application
+just like that.
+
 The doxygen documentation now includes some of the test cases, which
 contain sample code of general interest.
