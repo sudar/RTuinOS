@@ -752,12 +752,13 @@ command or not.}{0.95}
 A task object owns a member \ident{postedEventVec}, which is null
 initially and when the task is active. It is still null on entry in state
 suspended. While a task is in state suspended it listens to all
-broadcasted events. Whenever another task posts an event it is
-double-checked if this event is relevant to the suspended task. If so, it
-is added to member \ident{postedEventVec} of the suspended task. This
-variable holds the set of events, which have been received by the task
-since it became suspended. As soon as the set of received events suffices
-to make the suspended task due again this variable is no longer changed.
+broadcasted events and it might wait for specific mutexes or semaphores.
+Whenever another task posts an event it is double-checked if this event is
+relevant to the suspended task. If so, it is added to member
+\ident{postedEventVec} of the suspended task. This variable holds the set
+of events, which have been received by the task since it became suspended.
+As soon as the set of received events suffices to make the suspended task
+due again this variable is no longer changed.
 
 A task can become due also on another path through the state chart. At any
 time the active task can be inactivated because of any other task of
@@ -801,19 +802,19 @@ return values, side effects, etc.
 Building an \rtos{} application starts with the configuration of the
 system. All elements of \rtos{}, which require application dependent
 configuration have been placed in the file \ident{rtos.config.template.h}.
-This file is not part of the build, it's just a template for the file which
-will actually by used. Copy the template to your application source code
-and rename it to \ident{rtos.config.h}. This is the name it has to have as
-this is the name used in the \ident{\#include} statements in the code.
-Open the renamed file in a text editor and read the comments. You'll find
-a number of \ident{\#define}'s which you need to adjust according to the
-demands of your application. The number of tasks (besides the idle task)
-you're going to use and the number of priority classes they belong to are
-the most evident settings. You may enable the round robin strategy (by
-default it's turned off), you may configure your application interrupts
-and you may chose the resolution of the system timer. Please find a more
-in detail discussion of some of these topics below and in the comments in
-the source code.
+This file is not part of the build, it's just a template for the file
+which will actually by used. Copy the template to your application source
+code and rename it to \ident{rtos.config.h}. This is the name it has to
+have as this is the name used in the \ident{\#include} statements in the
+code. Open the renamed file in a text editor and read the comments. You'll
+find a number of \ident{\#define}'s which you need to adjust according to
+the demands of your application. The number of tasks (besides the idle
+task) you're going to use, the number of priority classes they belong to
+and the size of these classes are the most evident settings. You may
+enable the round robin strategy (by default it's turned off), you may
+configure your application interrupts and you may chose the resolution of
+the system timer. Please find a more in detail discussion of some of these
+topics below and in the comments in the source code.
 
 \section{Initialization of \rtos: \ident{setup}}
 
@@ -868,8 +869,8 @@ time slice is set to 0 there is no such behavior for this task; with other
 words its time slice is of unlimited duration.
 
 Another important part of the task specification is the initial resume
-condition. It is specified exactly like at runtime when using the suspend
-command \ident{rtos\_waitForEvent}; please refer to section
+condition. It is specified like at runtime when using the suspend command
+\ident{rtos\_waitForEvent}; please refer to section
 \ref{secAPIWaitForEvent} for details. Your task will only start up if the
 condition specified now becomes true.
 
@@ -992,8 +993,13 @@ In \rtos{} a task can suspend and wait
 \end{itemize}
 
 The signature of the suspend command has a set of events as bit vector
-(with up to 16 bits or events respectively) a Boolean operator (all events
+(with up to 16 bits or events respectively), a Boolean operator (all events
 required or any event releases the task) and a time parameter.
+
+The events can be of any type, ordinary broadcasted, mutex or semaphore.
+Successfully waiting for an event of kind mutex or semaphore means to
+acquire the synchronization object, or getting ownership of the
+associated, managed resource respectively.
 
 The time parameter doesn't care if no timer event is part of the set of
 events. If the absolute timer event is in the set the time parameter has
@@ -1043,15 +1049,15 @@ not affected by the choice waiting for all or for any event.
 
 \subsection{Events of Kind Mutex}
 
-An event can be a mutex, a synchronization object for mutual exclusion
+An event to wait for can be a mutex, a synchronization object for mutual exclusion
 of tasks from a resource. The kind of an event is specified at compile
-time, it's part of the configuration of \rtos.
+time, it's part of the configuration of \rtos, see \refRTOSConfigH.
 
 From the perspective of a task waiting for a mutex is just like waiting
-for ordinary events. The task is suspended until the mutex is available.
-This will be the case when the other task, which currently owns the mutex
-will release it using \ident{rtos\_setEvent}. Or immediately, if no other
-task currently owns the mutex. 
+for ordinary broadcasted events. The task is suspended until the mutex is
+available. This will be the case when the other task, which currently owns
+the mutex will release it using \ident{rtos\_setEvent}. Or immediately, if
+no other task currently owns the mutex.
 
 If a task suspends waiting for a mutex it can happen that
 \ident{rtos\_waitForEvent} doesn't suspend the task but immediately
@@ -1063,23 +1069,25 @@ more.
 \label{secWaitForSemaphores}
 
 
-An event can be a semaphore, a synchronization object for managing access
-to a pool of resources shared between different tasks. The kind of an
-event is specified at compile time, it's part of the configuration of
-\rtos.
+An event to wait for can be a semaphore, a synchronization object for
+managing access to a pool of resources shared between different tasks. The
+kind of an event is specified at compile time, it's part of the
+configuration of \rtos, see \refRTOSConfigH.
 
 Waiting for a semaphore and getting it means to decrement the semaphores
 internal count. The task is granted access to one instance of the
 resources which are managed by the semaphore.
 
 Please note, that handling semaphores as Boolean valued events (being
-there or not being there) hinders to provide a more generalized
-API to semaphores. In \rtos{} is by principle impossible to acquire several
+there or not being there) hinders to provide a more generalized API to
+semaphores. In \rtos{} it is by principle impossible to acquire several
 instances from the resource pool at once. An application which needs to
 have several instances is obliged to repeat the invocation of
 \ident{rtos\_waitForEvent} that number of times. Although this eventually
 leads to the required number of instances it's not equivalent with respect
-to the distribution pattern of the shared resources.
+to the distribution pattern of the shared resources. The same
+consideration applies to returning/releasing a semaphore using
+\ident{rtos\_setEvent}.
 
 From the perspective of a task waiting for a semaphore is just like
 waiting for ordinary events. The task is suspended until one instance (or
@@ -1208,8 +1216,8 @@ like \verb$++u$, where \ident{u} is a of type \ident{uint8\_t}, is unsafe
 and requires protection.
 
 The pair of API functions \ident{rtos\_enterCriticalSection} and
-\ident{rtos\_leaveCriticalSection} makes any portion of code which is
-enclosed atomic -- and thus safe with respect to shared access from
+\ident{rtos\_leaveCriticalSection} makes any portion of code which they
+enclose atomic -- and thus safe with respect to shared access from
 different tasks.
 
 \ident{rtos\_enterCriticalSection} simply inhibits all those interrupts,
@@ -1235,9 +1243,9 @@ nearly has the same meaning and can also be used to make data access
 operations atomic. The difference is that they inhibit all interrupts. The
 responsiveness of the system could be somewhat degraded without need, e.g.
 the Arduino time functions like \ident{delay} or \ident{millis} could
-suffer. On the other hand, these two functions are a bit cheaper. We
-suggest to use them if the protected code sequence is rather short, e.g.
-just one or a few simple assignments and to use
+suffer. On the other hand, these two functions are a bit cheaper in terms
+of CPU load. We suggest to use them if the protected code sequence is
+rather short, e.g. just one or a few simple assignments and to use
 \ident{rtos\_enter/leaveCriticalSection} otherwise.
 
 In \rtos{} a task of higher priority will never become inactive in favor
@@ -1275,6 +1283,67 @@ To summarize,
   \item use \ident{cli}/\ident{sei} as pair of protective functions if the
     access code is trivial.
 \end{itemize}
+
+
+\subsection{Mutex versus Critical Section}
+
+Accessing shared data from different tasks can safely be done with
+different code patterns. The critical section can be used or a mutex can
+be applied. There are significant differences and implications.
+
+Using a mutex is a kind of contract between different tasks. They agree to
+access the shared data only when they own the mutex and they promise to
+own it no longer than absolutely necessary. There's however no technical
+means which would ensure this; any task can actually access the shared
+data at any time and corrupt it. Moreover, there's no direct, visible link
+in the source code between the mutex and the shared data. The code samples
+coming along with \rtos{} demonstrate two techniques to overcome this:
+they either re-define the generic name of the mutex so that the relation
+to the shared objects become apparent or they hide the operations to
+acquire and release the mutex in the same class that implements the shared
+object.
+
+A critical section is a technical mechanism, which hinders the scheduler to
+switch to any other task (including interrupts and their handler tasks)
+while the enclosed code is executed. Handling an interrupt or activating
+another task is moved in time until immediately after the execution of the
+code inside the critical section.  
+
+Blocking the scheduler is the reason, why critical sections may be used
+only for short code sequences, typically some update operations of a data
+structure. An example would be queue, which an element is appended to or
+popped off. The code to append and to pop (a few lines each) would be
+placed into a critical section. It would already be bad style to place
+some debug or feedback code like \ident{Serial.println("Element
+appended")} in the critical section. The execution of this operation takes
+much too long.
+
+A very common code pattern when using critical sections is to have a local
+copy of the shared data in the task. The critical section is just used to
+copy the shared data into the local copy; all further, time consuming
+processing and user feedback operates on the copy only and is of course
+done outside the critical section. And the same vice versa for updating
+the shared data. An n-fold of data consumption is the consequence, as each
+accessing task needs to have its local copy.
+
+A mutex grants ownership to the shared data across any number of task
+switches. The scheduler stays fully operational. Only those tasks, which
+also want to have the mutex (but uttered their demand a bit later than the
+lucky one) are temporarily out of the loop. They are suspended. Please be
+aware, the mutual blocking of tasks that all demand the same shared
+resource will probably be in conflict with the requirement of having
+strictly regular tasks. If you have regular tasks, you will have to take
+care when applying mutexes to organize them. Specifying a timeout when
+waiting for a mutex may be a way out.
+
+Basically, a mutex could be acquired using \ident{rtos\_waitForEvent} and
+released using \ident{rtos\_setEvent} for a short, fast operation; the
+pair of functions could be used like the other pair
+\ident{rtos\_enter/leaveCriticalSection}. However, this is much, much more
+expensive in terms of CPU load and must not be done if a critical section
+is applicable. Examples, where a mutex reasonably replaces a critical
+section is when doing console output with \ident{Serial} or when accessing
+the LCD using the LiquidCrystal library.
 
 
 \section{Diagnosis: \ident{rtos\_getTaskOverrunCounter}}

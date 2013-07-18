@@ -172,7 +172,7 @@ C and M files in the scope of this project."
                      (concat make-cmd-base "bin\\DEBUG\\obj\\.o")
                      (concat make-cmd-base "build")
                      (concat make-cmd-base "rebuild")
-                     (concat latex-cmd-base "make -s & manual.pdf")
+                     (concat latex-cmd-base "make -s & RTuinOS-1.0-UserGuide.pdf")
                      (concat latex-cmd-base "make -s onePass")
                      (concat doxygen-cmd-base "doxygen doxyfile & start html\\index.html")
                      (concat doxygen-cmd-base "start html\\index.html")

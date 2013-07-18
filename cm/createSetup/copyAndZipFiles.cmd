@@ -26,9 +26,9 @@ copy doc\readMe.forSetup.txt %output%\readMe.txt
 mkdir %output%\doc
 mkdir %output%\doc\doxygen
 xcopy /S doc\doxygen\* %output%\doc\doxygen
-mkdir %output%\doc\manual
+mkdir %output%\doc\RTuinOS-1.0-UserGuide
 xcopy /S doc\manual\GNUmakefile %output%\doc\manual
-xcopy /S doc\manual\manual.pdf %output%\doc\manual
+xcopy /S doc\manual\RTuinOS-1.0-UserGuide.pdf %output%\doc\manual
 xcopy /S doc\manual\readMe.txt %output%\doc\manual
 xcopy /S doc\manual\*.tex %output%\doc\manual
 xcopy /S doc\manual\*.jpg %output%\doc\manual
