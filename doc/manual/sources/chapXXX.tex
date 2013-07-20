@@ -1381,8 +1381,9 @@ overrun won't be recognized. Task calls are silently skipped.
 Please refer to section \ref{secSystemTime}. Here you find a discussion
 how to choose the appropriate system time for your application.
 
-The function \ident{rtos\_getTaskOverrunCounter} may be called by any task,
-including the idle task.
+The function \ident{rtos\_getTaskOverrunCounter} may be called by any
+task. Please note, that the function is not defined for the idle task, but
+may be called by the idle task for querying any of the other tasks.
 
 
 \section{Diagnosis: \ident{rtos\_getStackReserve}}
@@ -1412,7 +1413,7 @@ actual stack usage is negligible.
 The current stack usage increases suddenly by 36 Byte in the instance of a
 system interrupt (the CPU context of the interrupted task is saved onto
 the stack of this task). \ident{rtos\_getStackReserve} returns the maximum
-stack usage so far (actually is returns the inverse value, the
+stack usage so far (actually it returns the inverse value, the
 \emph{reserve}, but this is equivalent). This is a useful value once your
 testing code ran through all code paths, particularly through the deepest
 nested sub-functions. You can ensure this by dedicated test routines. But
@@ -1424,8 +1425,9 @@ good practice to add another 36 Byte to the computed stack usage.
 Summarizing, you should add 41 Byte to the computed stack usage before
 reducing the stack size to the really needed value.
 
-The function \ident{rtos\_getStackReserve} may be called by any task,
-including the idle task.
+The function \ident{rtos\_getStackReserve} may be called by any task.
+Please note, that the function is not defined for the idle task, but may
+be called by the idle task for querying any of the other tasks.
 
 
 \chapter{Writing an \rtos{} Application}
@@ -1438,13 +1440,14 @@ The name of the folder is the name of your application. Copy the
 configuration template file \refRTOSConfigTemplateH{} into this folder and
 rename it to \ident{rtos.config.h}.
 
-Open \ident{rtos.config.h} and configure the number of tasks and the
-number of different priority classes. Do not use empty priority classes,
-this wastes expensive memory. Priorities should always be counted 0, 1,
-\ldots{}, max. Select the word width of the system time. Often an eight Bit
-value will be sufficient. Please refer to \ref{secSystemTime}. In
-general, you'll find a lot of hints and comments in the configuration file
-telling you what to do in detail.
+Open \ident{rtos.config.h} and configure the number of tasks, the number
+of different priority classes and the size of these. Do not use empty
+priority classes, this wastes expensive memory. Priorities should always
+be counted 0, 1, \ldots{}, max. Configure the number of mutexes and
+semaphores in use. Select the word width of the system time. Often an
+eight Bit value will be sufficient. Please refer to \ref{secSystemTime}.
+In general, you'll find a lot of hints and comments in the configuration
+file telling you what to do in detail.
 
 Open a new C source file in the same folder. This file implements the core
 of your application. You need two standard functions, \ident{setup} and
@@ -1491,10 +1494,11 @@ protecting the access to data shared between tasks; please refer to
 section \ref{secEnterLeaveCritSec}.
 
 Compile your application using the generic makefile. Double-check your
-environment: The make tool needs to be on the Windows search path and
-variable \ident{ARDUINO\_HOME} needs to point to your Arduino installation (see
-section \ref{secPrerequisites}). If you placed all your code in the single
-folder created at the beginning, all you have to do now is to run
+environment: The make tool needs to be on the Windows/Linux search path
+and the environment variable \ident{ARDUINO\_HOME} needs to point to your
+Arduino installation (see section \ref{secPrerequisites}). If you placed
+all your code in the single folder created at the beginning, all you have
+to do now is to run
 
 \verb+make -s APP=myFolderName build+
 
@@ -1528,12 +1532,12 @@ too. Even if your application grows and needs a more complex folder
 structure than the test cases to organize the source code you will still
 be able to use the makefile, however with some simple changes.
 
-Most often, you will do as follows: Open a Windows Command Prompt (or
-Powershell window) and cd to the root directory of the \rtos{} folder.
-This is where the file GNUmakefile is located. Connect your Arduino MEGA
-board\footnote{Other boards need some code customization first. Please,
-refer to section \ref{secArduinoBoards}.} to the USB port, e.g. port
-number 6. Now type
+Most often, you will do as follows: Open a Shell window (i.e. a Command
+Prompt or Powershell window under Windows or Bash under Linux) and cd to
+the root directory of the \rtos{} folder. This is where the file
+GNUmakefile is located. Connect your Arduino MEGA board\footnote{Other
+boards need some code customization first. Please, refer to section
+\ref{secArduinoBoards}.} to the USB port, e.g. port number 6. Now type
 
 \verb+make -s APP=tc05 COM_PORT=COM6 upload+
 
@@ -1551,14 +1555,15 @@ available targets to the console with a brief explanation:
 
 \verb+make -s help+
 
-An \rtos{} application can't be developed as sketch in the Arduino IDE. We
-made some minor changes of the Arduino file \ident{main.c}, which would be
-lost when using the IDE. You may however continue to use the IDE for
+An \rtos{} application can't be developed as a sketch in the Arduino IDE.
+We made some minor changes of the Arduino file \ident{main.c}, which would
+be lost when using the IDE. You may however continue to use the IDE for
 console I/O if you use the object \ident{Serial} for communication --
 which is particularly useful during application development and which is
-supported by the makefile process even better than by the IDE as it
-enables you to conditionally have the I/O commands in the code. Their
-presence may be restricted to a development compilation configuration.
+supported by the makefile process even better than by the IDE as the
+makefile enables you to have the I/O commands only conditionally in the
+code. Their presence may be restricted to a development compilation
+configuration by means of a \verb+#ifdef DEBUG+.
 
 
 \subsection{Prerequisites}
@@ -1586,7 +1591,7 @@ library \ident{core.a}. To do so, it needs to know, where the Arduino sources
 -- which are not part of this project -- are located. It expects an
 environment variable \ident{ARDUINO\_HOME} to point to the Arduino
 installation directory, e.g.
-c:/ProgramFiles/\-arduino-1.0.5. You will
+c:/ProgramFiles/\-arduino-1.0.5 on a Windows system. You will
 probably have to add such a variable to your system variables as it is not
 defined by the Arduino standard installation process.
 
@@ -1597,7 +1602,9 @@ they were located in different folders.
 
 Finally, all relevant paths to executables and source files and the file
 names themselves must not contain any blanks. This includes the path to
-the Arduino installation.
+the Arduino installation. If you are a Windows user, it particularly means
+that you will have to reinstall Arduino if you should have placed it into
+the standard installation path c:/Pro\-gram~Files/ar\-dui\-no\--1.0.5.
 
 \subsection{Concept of Makefile}
 
@@ -1611,14 +1618,15 @@ the Arduino board.
 
 An optional, final rule permits to upload the binary code to the Arduino
 board. If your application makes use of the USB communication with
-\ident{Serial} all you still have to do to make your application visibly
-run is an ALT-TAB to switch to the (open) Arduino IDE and a Ctrl-Shift-m
-to open the console window.
+\ident{Serial} all you still have to do on a Windows system to make your
+application visibly run is an ALT-TAB to switch to the (open) Arduino IDE
+and a Ctrl-Shift-m to open the console window.
 
 On the compilation output side, for sake of simplicity of the makefile,
 the folder structure of the source code is not retained. All compilation
-products (*.o, among more) are collected in a single output folder. This
-is the reason, why there must never be two source files of same name. Even
+products (*.o, among more) of an \rtos{} application are collected in a
+single output folder dedicated to this application. This is the reason,
+why there must never be two source files of same name. Even
 \ident{myModule.c} and \ident{myModule.cpp} would lead to a clash.
 
 In the Arduino IDE the library \ident{core.a} is source code part of the
@@ -1639,10 +1647,33 @@ application for compilation simply by stating
 \verb+APP=myRTuinOSApplication+ on the command line of make.
 
 If your application demands more than a simple, flat directory to manage
-all its source files, you can continue to use the makefile with minor
-changes: Explicitly list your source folders in \ident{srcDirList}. Now,
-the macro \ident{APP} probably becomes meaningless. Consider to modify all
-code locations which still reference the macro.
+all its source files, you can continue to use the makefile. The makefile
+knows a kind of "callback". If present, an application owned makefile
+fragment is read prior to do compilation and linkage. This makefile
+fragment can override or extend the default value of the makefile variable
+\ident{srcDirList}. Specify different folders or just add some. The
+fragment is looked for by name: It needs to be called
+\ident{\textless{}appName\textgreater.mk}, where
+\ident{\textless{}appName\textgreater} is the value of the makefile
+variable \ident{APP}.
+
+\subsubsection{Folder Structure}
+
+The makefile is organized in different files. The entry point is the file
+\ident{GNUmakefile}. This file name avoids the need to use the make tool's
+command line switch \ident{-f \textless{}makefileName\textgreater} and
+it avoids conflicts withs other, incompatible derivates of make.
+
+File \ident{GNUmakefile} only contains some settings common to all \rtos{}
+applications. Here, you would e.g. find the default setting for the COM
+port to be used for upload of the compiled software (please see
+\ref{secSelectUSBPort} also).
+
+After reading these settings, the "executable" makefile
+\ident{compileLinkAndUpload.mk} is read. It is located in the sub-folder
+\ident{makefile}. It in turn builds on some sub-routines, which are
+implemented in further included makefile fragments. All of these are
+located in the same sub-folder \ident{makefile}.
 
 
 \subsection{Compilation Configurations}
@@ -1730,6 +1761,7 @@ command line of avrdude instead of \verb+-cstk500v2+.
 
 
 \subsection{Selecting the USB Port}
+\label{secSelectUSBPort}
 
 The USB (or COM) port which is used for the connection between PC and
 Arduino board has to be known by the rule, which uploads (and flashes)
