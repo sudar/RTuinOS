@@ -165,7 +165,7 @@ C and M files in the scope of this project."
 
   ; Prepare all frequently used build commands
   (let*
-    ( (make-cmd-base (concat "cd /d " project-path-win32 " & make -f makefile.mk -s APP=tc14 "))
+    ( (make-cmd-base (concat "cd /d " project-path-win32 " & make -s APP=tc14 "))
       (doxygen-cmd-base (concat "cd /d " project-path-win32 "doc\\doxygen & "))
       (latex-cmd-base (concat "cd /d " project-path-win32 "doc\\manual & "))
       (history (list (concat make-cmd-base "upload")

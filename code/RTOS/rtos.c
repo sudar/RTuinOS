@@ -464,7 +464,7 @@ static uint16_t _mutexVec = MASK_EVT_IS_MUTEX;
 
 /** Temporary data, internally used to pass information between assembly and C code. */
 volatile uint16_t _tmpVarAsmToC_u16;
-/** Temporary data, internally used to pass information between assembly and C code. */
+/** Temporary data, internally used to pass information between C and assembly code. */
 volatile uint16_t _tmpVarCToAsm_u16;
 
 
@@ -626,6 +626,7 @@ RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void)
  * of the active task. Normally, looking for the active task is skipped if no task changed
  * its state from suspended to due. If this flag is set, this step is never skipped.
  */
+#if 0
 
 static bool checkForTaskActivation(
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
@@ -725,7 +726,91 @@ static bool checkForTaskActivation(
 
 } /* End of checkForTaskActivation */
 
+#else
+// @todo Optimization: pass pointer to task object instead of recomputation
+static inline bool checkTaskForActivation(uint8_t idxSuspTask)
+{
+    task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
+    uint16_t eventVec;
+    bool taskBecomesDue;
 
+    /* Check if the task becomes due because of the events posted prior to calling this
+       function. The optimally supported case is the more probable OR combination of
+       events.
+         The AND operation is less straight forward as the timeout character of the
+       timer events needs to be retained: AND only refers to the postable events but
+       does not include the timer events. All postable events need to be set in both
+       the mask and the vector of posted events OR any of the timer events in the mask
+       are set in the vector of posted events. */
+    eventVec = pT->postedEventVec;
+    if((pT->waitForAnyEvent &&  eventVec != 0)
+       ||  (!pT->waitForAnyEvent
+            &&  (((eventVec ^ pT->eventMask) & ~MASK_EVT_IS_TIMER) == 0
+                 ||  (eventVec & pT->eventMask & MASK_EVT_IS_TIMER) != 0
+                )
+           )
+      )
+    {
+        uint8_t u
+              , prio = pT->prioClass;
+
+        /* This task becomes due. */
+
+#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
+        /* If a round robin task voluntarily suspends it gets the right for a complete
+           new time slice. Reload the counter. */
+        pT->cntRoundRobin = pT->timeRoundRobin;
+#endif
+        /* Move the task from the list of suspended tasks to the list of due tasks of
+           its priority class. */
+        _pDueTaskAryAry[prio][_noDueTasksAry[prio]++] = pT;
+        -- _noSuspendedTasks;
+        for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
+            _pSuspendedTaskAry[u] = _pSuspendedTaskAry[u+1];
+
+        /* Since a task became due there might be a change of the active task. */
+        taskBecomesDue = true;
+    }
+    else
+        taskBecomesDue = false;
+    
+    return taskBecomesDue;
+    
+} /* End of checkTaskForActivation */
+
+
+static inline bool lookForActiveTask()
+{
+    /* The calling interrupt service routine will do a context switch only if we return
+       true. Otherwise it'll simply do a "reti" to the interrupted context and continue
+       it. */
+       
+    int8_t idxPrio;
+
+    /* Look for the task we will return to. It's the first entry in the highest
+       non-empty priority class. The loop requires a signed index. */
+    for(idxPrio=RTOS_NO_PRIO_CLASSES-1; idxPrio>=0; --idxPrio)
+    {
+        if(_noDueTasksAry[idxPrio] > 0)
+        {
+            _pSuspendedTask = _pActiveTask;
+            _pActiveTask    = _pDueTaskAryAry[idxPrio][0];
+
+            /* If we only entered the outermost if clause we made at least one task
+               due; these statements are thus surely reached. As the due becoming task
+               might however be of lower priority it can easily be that we nonetheless
+               don't have a task switch. */
+            return _pActiveTask != _pSuspendedTask;
+        }
+    }
+
+    /* @todo Find out if we can ever get here? If all tasks are currently suspended: Will
+       this function be called? */
+    ASSERT(_pActiveTask = _pIdleTask);
+    return false;
+
+} /* End of lookForActiveTask */
+#endif
 
 
 
@@ -740,22 +825,25 @@ static bool checkForTaskActivation(
  * The Boolean information is returned whether we have or not have a task switch. In most
  * invokations we won't have and therefore it's worth to optimize the code for this case:
  * Don't do the expensive switch of the stack pointers.\n
- *   The most important result of the function, the ID of the active task after leaving the
- * function, is returned by side effect: The global variable _pActiveTask is updated.
+ *   The most important result of the function, the reference to the active task after
+ * leaving the function, is returned by side effect: The global variable _pActiveTask is
+ * updated.
  */
 
 static RTOS_TRUE_FCT bool onTimerTic(void)
 {
-    uint8_t idxSuspTask;
-
     /* Clock the system time. Cyclic overrun is intended. */
     ++ _time;
 
+    bool activeTaskMayChange = false;
+
     /* Check for all suspended tasks if a timer event has to be posted. */
-    for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
+    uint8_t idxSuspTask = 0;
+    while(idxSuspTask<_noSuspendedTasks)
     {
         task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
-
+        bool taskGotEvt = false;
+        
         /* Check for absolute timer event. */
         if(_time == pT->timeDueAt)
         {
@@ -765,6 +853,11 @@ static RTOS_TRUE_FCT bool onTimerTic(void)
                change the status to due (see checkForTaskActivation), so that setting it a
                second time will never occur. */
             pT->postedEventVec |= (RTOS_EVT_ABSOLUTE_TIMER & pT->eventMask);
+            
+            /* This task needs to checked for a state transition. It might become due
+               because of the possibly received timer event. */
+            // @todo double check if it pays off to set the boolean even sharper, e.g. by comparing postedEventVec before and after
+            taskGotEvt = true;
         }
 
         /* Check for delay timer event. The code here should optimally support the standard
@@ -772,24 +865,43 @@ static RTOS_TRUE_FCT bool onTimerTic(void)
         if(pT->cntDelay > 0)
         {
             if(-- pT->cntDelay == 0)
+            {
                 pT->postedEventVec |= (RTOS_EVT_DELAY_TIMER & pT->eventMask);
+                
+                /* This task needs to checked for a state transition. It might become due
+                   because of the possibly received timer event. */
+                taskGotEvt = true;
+            }
         }
 
-        /* @todo Review code structure: Why don't we excute the code of
-           checkForTaskActivation right here instead of later? Here we'd do it just for
-           those tasks, which received an event, later we do it for all suspended tasks -
-           which might be significant more tests (all suspended tasks in any timer tic as
-           opposed to once per task and elapsed timer). Is it just for code reuse (resume
-           condition test shared with setEvent)? */
+        /* Check if this suspended task becomes due because of a timer event, which was
+           posted to it. */
+        if(taskGotEvt && checkTaskForActivation(idxSuspTask))
+        {
+            /* The task becomes due. */
+            activeTaskMayChange = true;
 
-    } /* End for(All suspended tasks) */
+            /* Check next suspended task, which is in this case found in the array
+               element with same index: The task which became due has been removed into the
+               due list of its priority class. */
+        }
+        else
+        {
+            /* The task remains suspended. */
+
+            /* Check next suspended task, which is in this case found in the next array
+               element. */
+            ++ idxSuspTask;
+
+        } /* End if(Did this suspended task become due?) */
+
+    } /* End while(All suspended tasks) */
 
 
 #if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
     /* Round-robin: Applies only to the active task. It can become inactive, however not
-       undue. If its time slice is elapsed it is put at the end of the due list in its
-       priority class. */
-    bool isNewActiveTask = false;
+       undue, or suspended respectively. If its time slice is elapsed it is put at the end
+       of the due list in its priority class. */
     if(_pActiveTask->cntRoundRobin > 0)
     {
         if(--_pActiveTask->cntRoundRobin == 0)
@@ -815,7 +927,7 @@ static RTOS_TRUE_FCT bool onTimerTic(void)
 
                 /* Force check for new active task - even if no suspended task should have been
                    resumed. */
-                isNewActiveTask = true;
+                activeTaskMayChange = true;
 
             } /* if(Did the task loose against another due one?) */
 
@@ -824,19 +936,16 @@ static RTOS_TRUE_FCT bool onTimerTic(void)
     } /* if(Do we have a round robin task?) */
 #endif
 
-    /* Check if the task becomes due because of the possibly occured timer events.
-         isNewActiveTask: Enforce the search for a new active task. Normally we do this
-       only if a suspended task was resumed. If round robin is compiled it depends. Always
-       look for a new active task if the round robin time has elapsed.
+    /* Check if another task becomes active because of the possibly occured timer events.
+         activeTaskMayChange: We do the search for the new active task only if at least one
+       suspended task was resumed. If round robin is compiled it depends. Always look for a
+       new active task if the round robin time has elapsed.
          The function has side effects: If there's a task which was suspended before and
        which is resumed because of the timer events and which is of higher priority than
-       the one being active so far, the ID of the old and newly active task are written
-       into global variables _pSuspendedTask and _pActiveTask. */
-    return checkForTaskActivation(
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-                                  isNewActiveTask
-#endif
-                                 );
+       the one being active so far, the refernces to the old and newly active task are
+       written into global variables _pSuspendedTask and _pActiveTask. */
+    return activeTaskMayChange && lookForActiveTask();
+
 } /* End of onTimerTic. */
 
 
@@ -931,7 +1040,7 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
 
 
 /**
- * Actual implentation of routine \a rtos_setEvent. The task posts a set of events and the
+ * Actual implementation of routine \a rtos_setEvent. The task posts a set of events and the
  * scheduler is asked which task is the one to be activated now.\n
  *   The action of this SW interrupt is placed into an own function in order to let the
  * compiler generate the stack frame required for all local data. (The stack frame
@@ -958,8 +1067,8 @@ static RTOS_TRUE_FCT bool setEvent(uint16_t postedEventVec)
     /* Avoid inlining under all circumstances. See attributes also. */
     asm("");
 
-    uint8_t idxSuspTask;
-
+    bool activeTaskMayChange = false;
+    
     /* The timer events must not be set manually. */
     ASSERT((postedEventVec & MASK_EVT_IS_TIMER) == 0);
 
@@ -986,14 +1095,20 @@ static RTOS_TRUE_FCT bool setEvent(uint16_t postedEventVec)
        priority and waits the longest for it. This loop is the reason, why we need to have
        the list of suspended tasks always sorted, when at least one semaphore or mutex is in
        use. */
-    for(idxSuspTask=0; idxSuspTask<_noSuspendedTasks; ++idxSuspTask)
+    uint8_t idxSuspTask = 0;
+    while(idxSuspTask<_noSuspendedTasks)
     {
         task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
+        
+        /* Remember the received events before (possibly) getting some more by this
+           setEvent: Only if this set changes it is necessary to check for a state
+           transition of the task. */
+        const uint16_t postedEventVecBefore = pT->postedEventVec;
 
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
         /* Mutexes are Boolean and can't be posted twice to a task. This is easily possible
            but an application error. This assertion fires if the application doesn't
-           properly keep track on who owns which mutex. */
+           properly keep track of who owns which mutex. */
         ASSERT((pT->postedEventVec & dbg_allMutexesToReleaseVec) == 0);
 
         /* The vector of all events this task will receive. */
@@ -1035,7 +1150,29 @@ static RTOS_TRUE_FCT bool setEvent(uint16_t postedEventVec)
             semMask <<= 1;
         }
 #endif
-    } /* End for(All suspended tasks) */
+
+        /* Check if this suspended task becomes due because of an event, which was posted
+           to it. */
+        if(postedEventVecBefore != pT->postedEventVec  && checkTaskForActivation(idxSuspTask))
+        {
+            /* The task becomes due. */
+            activeTaskMayChange = true;
+
+            /* Check next suspended task, which is in this case found in the array
+               element with same index: The task which became due has been removed into the
+               due list of its priority class. */
+        }
+        else
+        {
+            /* The task remains suspended. */
+
+            /* Check next suspended task, which is in this case found in the next array
+               element. */
+            ++ idxSuspTask;
+
+        } /* End if(Did this suspended task become due?) */
+
+    } /* End while(All suspended tasks) */
 
 #if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
     /* The remaining semaphores (more precise: semaphore counter values) are accumulated in
@@ -1075,16 +1212,15 @@ static RTOS_TRUE_FCT bool setEvent(uint16_t postedEventVec)
 #endif /* RTOS_USE_MUTEX == RTOS_FEATURE_ON */
 
 
-    /* Check if the task becomes due because of the posted events.
+    /* Check if another task becomes active because of the posted events.
+         activeTaskMayChange: We do the search for the new active task only if at least one
+       suspended task was resumed.
          The function has side effects: If there's a task which was suspended before and
-       which is released because of the timer events and which is of higher priority than
-       the one being active so far then the ID of the old and newly active task are written
-       into global variables _pSuspendedTask and _pActiveTask. */
-    return checkForTaskActivation(
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-                                   /* isNewActiveTask */ false
-#endif
-                                 );
+       which is resumed because of an event and which is of higher priority than the one
+       being active so far, the refernces to the old and newly active task are written into
+       global variables _pSuspendedTask and _pActiveTask. */
+    return activeTaskMayChange && lookForActiveTask();
+    
 } /* End of setEvent */
 
 
