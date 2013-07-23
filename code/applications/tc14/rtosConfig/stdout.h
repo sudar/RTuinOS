@@ -1,7 +1,7 @@
 #ifndef STDOUT_INCLUDED
 #define STDOUT_INCLUDED
 /**
- * @file tc12/stdout.h
+ * @file tc14/rtosConfig/stdout.h
  * Definition of global interface of module stdout.c
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)

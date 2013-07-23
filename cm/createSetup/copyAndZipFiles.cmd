@@ -26,9 +26,9 @@ copy doc\readMe.forSetup.txt %output%\readMe.txt
 mkdir %output%\doc
 mkdir %output%\doc\doxygen
 xcopy /S doc\doxygen\* %output%\doc\doxygen
-mkdir %output%\doc\manual
+mkdir %output%\doc\RTuinOS-1.0-UserGuide
 xcopy /S doc\manual\GNUmakefile %output%\doc\manual
-xcopy /S doc\manual\manual.pdf %output%\doc\manual
+xcopy /S doc\manual\RTuinOS-1.0-UserGuide.pdf %output%\doc\manual
 xcopy /S doc\manual\readMe.txt %output%\doc\manual
 xcopy /S doc\manual\*.tex %output%\doc\manual
 xcopy /S doc\manual\*.jpg %output%\doc\manual
@@ -38,19 +38,11 @@ xcopy /S doc\manual\*.png %output%\doc\manual
 mkdir %output%\code
 xcopy /S code\* %output%\code
 
-:: To soften the problems of the makefile with the creation of the output directories, we
-:: distribute RTuinOS with the (empty) directories in place.
-mkdir %output%\bin
-mkdir %output%\bin\core
-mkdir %output%\bin\core\obj
-mkdir %output%\bin\DEBUG
-mkdir %output%\bin\DEBUG\obj
-mkdir %output%\bin\PRODUCTION
-mkdir %output%\bin\PRODUCTION\obj
-
 :: The makefile, license. The version file needs to be supplied by the caller of this script.
 copy lgpl.txt %output%
 copy GNUmakefile %output%
+mkdir %output%\makefile
+xcopy /S makefile\*.mk %output%\makefile
 copy cm\createSetup\version.txt %output%
 
 :: Protect files

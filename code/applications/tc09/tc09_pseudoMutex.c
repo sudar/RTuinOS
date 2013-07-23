@@ -4,13 +4,13 @@
  * mutex is implemented, which is applied to control the alternating use of a shared
  * resource (Serial) by several tasks. The result is a kind of pseudo mutex (pseudo because
  * some polling is required). True to-the-point waiting for a resource is not possible in
- * RTuinOS.
- *   Observations:
- *   The test succeeds if the Arduino console shows correct text output. The tasks, which
+ * RTuinOS.\n
+ *   Observations:\n
+ *   The test succeeds if the Arduino console shows correct text output. The task, which
  * gets the resource uses the shared resource (the global object Serial) to write one line
  * of text to the console. This is purposely done in several portions of output, which are
  * interrupted by task switches. A certain percentage of the task switches will also oocur
- * in the middle of a print command. The lines must nonetheless be always complete.
+ * in the middle of a print command. The lines must nonetheless be always complete.\n
  *   Although the pseudo-mutex has some deficiencies with respect to regarding task
  * priorities (see below), it must be apparent, that the task of higher priority gets the
  * resource more often than the others.
@@ -45,7 +45,7 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
 #include "rtos_assert.h"
 #include "tc09_applEvents.h"

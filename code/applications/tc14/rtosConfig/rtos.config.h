@@ -1,7 +1,7 @@
 #ifndef RTOS_CONFIG_INCLUDED
 #define RTOS_CONFIG_INCLUDED
 /**
- * @file rtos.config.h
+ * @file tc14/rtosConfig/rtos.config.h
  * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  *
@@ -39,14 +39,14 @@
 /** Number of tasks in the system. Tasks aren't created dynamically. This number of tasks
     will always be existent and alive. Permitted range is 0..127.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_TASKS    1
+#define RTOS_NO_TASKS    5
 
 
 /** Number of distinct priorities of tasks. Since several tasks may share the same
     priority, this number is lower or equal to NO_TASKS. Permitted range is 0..NO_TASKS,
     but 1..NO_TASKS if at least one task is defined.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_NO_PRIO_CLASSES 1
+#define RTOS_NO_PRIO_CLASSES 3
 
 
 /** Since many tasks will belong to distinct priority classes, the maximum number of tasks
@@ -55,7 +55,7 @@
     structures. Set the value as low as possible. Permitted range is min(1, NO_TASKS)..127,
     but a value greater than NO_TASKS is not reasonable.\n
       A runtime check is not done. The code will crash in case of a bad setting. */
-#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 1
+#define RTOS_MAX_NO_TASKS_IN_PRIO_CLASS 3
 
 
 /** The number of events, which behave like semaphores. When posted, they are not
@@ -88,7 +88,7 @@
     mutex-event is saved until the first task requests it.
       Having mutexes in the application increases the overhead of RTuinOS. It should be
     null as long as mutexes are not essential to the application. */
-#define RTOS_NO_MUTEX_EVENTS    0
+#define RTOS_NO_MUTEX_EVENTS    1
 
 
 /** Select the interrupt which clocks the system time. Side effects to consider: This
@@ -99,14 +99,14 @@
     according peripheral). If so, this needs to be done by reimplementing void
     rtos_enableIRQTimerTic(void), which is an overridable default implementation.\n
       If an application redefines the interrupt source, the new source will probably
-    produce another system clock frquency. If so, the macro #RTOS_TIC needs to be redefined
+    produce another system clock frequency. If so, the macro #RTOS_TIC needs to be redefined
     also. */
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
 
 
 /** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
     floating point constant. The unit is s. */
-#define RTOS_TIC (2.0399999e-3)
+#define RTOS_TIC (2.04e-3)
 
 
 /** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in

@@ -1,7 +1,7 @@
 #ifndef AEV_APPLEVENTS_INCLUDED
 #define AEV_APPLEVENTS_INCLUDED
 /**
- * @file aev_applEvents.h
+ * @file tc14/applCode/aev_applEvents.h
  * Definition of application events. The application events are managed in a
  * central file to avoid inconistencies and accidental double usage.
  *
@@ -24,11 +24,26 @@
 /*
  * Include files
  */
+ 
+#include "rtos.h"
 
 
 /*
  * Defines
  */
+
+/** A mutex is applied to share the display between different tasks. */
+#define EVT_MUTEX_LCD                       (RTOS_EVT_MUTEX_00)
+
+/** An ordinary event is used to trigger the idle-follower task, which is capable to
+    acquire the display for displaying the results of the idle task. */
+#define EVT_TRIGGER_IDLE_FOLLOWER_TASK      (RTOS_EVT_EVENT_01)
+
+/** An ordinary event is used to trigger the button evaluation task. */
+#define EVT_TRIGGER_TASK_BUTTON             (RTOS_EVT_EVENT_02)
+
+/** An ordinary event is used to trigger the ADC result display task. */
+#define EVT_TRIGGER_TASK_DISPLAY_VOLTAGE    (RTOS_EVT_EVENT_03)
 
 /** A simple event is used to signal a new ADC conversion result. */
 #define EVT_ADC_CONVERSION_COMPLETE         (RTOS_EVT_ISR_USER_00)

@@ -1,8 +1,8 @@
-#ifndef STDOUT_INCLUDED
-#define STDOUT_INCLUDED
+#ifndef TC14_ADCINPUT_INCLUDED
+#define TC14_ADCINPUT_INCLUDED
 /**
- * @file stdout.h
- * Definition of global interface of module stdout.c
+ * @file tc14_adcInput.h
+ * Definition of global interface of module tc14_adcInput.c
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -24,6 +24,8 @@
  * Include files
  */
 
+#include <Arduino.h>
+
 
 /*
  * Defines
@@ -38,13 +40,14 @@
 /*
  * Global data declarations
  */
-
+ 
 
 /*
  * Global prototypes
  */
 
-void init_stdout();
-int puts_progmem(const char *string);
+void setup(void);
+void loop(void);
 
-#endif  /* STDOUT_INCLUDED */
+
+#endif  /* TC14_ADCINPUT_INCLUDED */

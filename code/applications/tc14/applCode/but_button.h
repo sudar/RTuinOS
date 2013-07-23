@@ -1,8 +1,8 @@
-#ifndef STDOUT_INCLUDED
-#define STDOUT_INCLUDED
+#ifndef BUT_BUTTON_INCLUDED
+#define BUT_BUTTON_INCLUDED
 /**
- * @file tc12/stdout.h
- * Definition of global interface of module stdout.c
+ * @file but_button.h
+ * Definition of global interface of module but_button.c
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -24,6 +24,8 @@
  * Include files
  */
 
+#include <Arduino.h>
+
 
 /*
  * Defines
@@ -44,7 +46,8 @@
  * Global prototypes
  */
 
-void init_stdout();
-int puts_progmem(const char *string);
+/** Callback to notify availability of a new measured input voltage value. */
+void but_onNewButtonVoltage();
 
-#endif  /* STDOUT_INCLUDED */
+
+#endif  /* BUT_BUTTON_INCLUDED */

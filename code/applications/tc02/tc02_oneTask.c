@@ -1,7 +1,21 @@
 /**
  * @file tc02_oneTask.c
  *   Test case 02 of RTuinOS. One task is defined, which runs alternatingly with the idle
- * task.
+ * task.\n
+ *   Observations:\n
+ *   The object Serial is used to write progress and status information to console, under
+ * which the current CPU load. It is remarkably high, which is not the consumption of the
+ * software implemented here but the effect of the data streaming over the RS 232
+ * connection. We have selected a Baud rate of only 9600 bps and all print command block
+ * until the characters to print are processed. At the beginning it is very fast as the
+ * characters immediately fit into the send buffer. Once is has been filled the print
+ * function is in mean as fast as the stream, 9600 characters a second. Even though the
+ * rest is just waiting somewhere inside print it's lost CPU processing time for RTuinOS. A
+ * hypothetical redesign of the library for serial communication for RTuinOS would
+ * obviously use a suspend command to free this time for use by other tasks. This way, the
+ * mean CPU load would become independent of the chosen Baud rate.\n
+ *   Please consider to change the Baud rate to 115200 bps in setup() to prove that the CPU
+ * load strongly goes down.
  *
  * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -30,7 +44,7 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
 #include "gsl_systemLoad.h"
 

@@ -7,7 +7,7 @@ sequential. \ident{loop} may of course call any sub-routines, which may
 call others, but this does not change the strictly sequential character of
 the execution of the statements. Therefore it is difficult to execute
 specific actions at specific points in time. For example toggle the state
-of a LED every seconds. This might still be easy to do if your sketch does
+of an LED every seconds. This might still be easy to do if your sketch does
 nothing else -- see Arduino's standard example \ident{blink} --, but if
 you're in the middle of a sketch, which e.g. transfers some data via the
 USB port, it becomes ugly: You will have to merge some specific, the LED
@@ -20,13 +20,13 @@ defined at the same time and will be executed, too. Now the USB code is no
 longer spoiled with double-checking the state of the LED but nonetheless
 the LED will blink as desired.
 
-This actually is what \rtos{} offers. It's however no a complete sketch
+This actually is what \rtos{} offers. It's however not a complete sketch
 but just a function -- which can of course be stored in a separate C
 source file --, which is executed in parallel. Write two such functions,
 make them so called tasks and you get what you want.
 
-How would this work? The Arduino board continues to have a single main
-CPU, which is available for code execution. The trick is to use it
+How would this work? The Arduino board continues to have a single CPU,
+which is available for code execution. The trick is to use it
 alternatingly to proceed with the one task and then with the other one. If
 this switching between the tasks happens fast enough, than it's just the
 same as if both would run at the same time -- only with limited execution
@@ -140,7 +140,7 @@ just a task scheduler. In fact, in this environment, the scheduler is just
 the most important part of the operating system, therefore referred to as
 kernel, but surrounded by tons of utilities, mostly to support various I/O
 operations. In the embedded world a real time operating system typically
-doesn't offer anything else than a scheduler and so does \rtos{}.}
+doesn't offer much more than a scheduler and so does \rtos{}.}
 Understanding the details of the decision rules implemented in \rtos{} is
 essential for writing applications that behave as desired. (An RTOS can
 easily show effects which are neither expected nor desired.) The rules of
@@ -181,10 +181,21 @@ parameter of kind \emph{when}.
 At system initialization time all tasks are put in state suspended.
 Consequently, the initial resume condition is part of the task
 initialization. Typically, this condition is weak, like "resume
-immediately". However, a delayed resume or a resume by an application
-event is also possible. Starting some tasks with differing delays may even
-be advantageous in order to avoid having too many regular tasks becoming
-due all at the same time.
+immediately". However, a delayed resume is possible. Starting some regular
+tasks with differing delays may be advantageous in order to avoid having
+too many tasks becoming due all at the same time. Furthermore, a task may
+specify the initial resume by a broadcasted application event. And if a
+task implements the handler of an application interrupt it will probably
+be initially resumed by this interrupt.
+
+Please note, that events of kind mutex or semaphore must not be used as
+part of a task's initial resume condition. In many cases such a condition
+simply doesn't define a suspended state; if the mutex or semaphore (or
+better to say a counter value of it) is currently available the requesting
+task would not be suspended -- which is a must at the time of
+initializing the task objects as the \rtos{} kernel is not yet running at
+this point in time.
+
 
 
 \section{Time based Events}
@@ -199,7 +210,7 @@ initial resume condition for a task. It'll start immediately.
 In the implementation a time event results from a system timer tic. The
 core of the scheduler is a clock based interrupt. In \rtos{} this clock
 has a default clock rate of about 2~ms, but this can be altered by the
-application code.\footnote{\rtos uses timer 2 as source for clocking its
+application code.\footnote{\rtos{} uses timer 2 as source for clocking its
 system time. In Arduino this timer -- intended for PWM output -- cycles
 with about 2~ms. \rtos doesn't change Arduino's timer configuration in its
 standard configuration.} In the interrupt service routine (ISR), a
@@ -258,12 +269,14 @@ event-receiving task has the higher priority, \ident{rtos\_setEvent} leads to
 temporary inactivation of the calling task and will return only when it is
 activated again.
 
-More in general, \ident{rtos\_setEvent} is implemented as a software interrupt
-(SWI) and behaves similar to the system timer ISR. It notifies the event
-to all currently suspended tasks, which are waiting for it. The rest is
-done exactly as the system timer ISR does. \ident{rtos\_setEvent} checks the
+More in general, \ident{rtos\_setEvent} is implemented as a software
+interrupt (SWI) and behaves similar to the system timer ISR. It notifies
+an ordinary, broadcasted event to all currently suspended tasks, which are
+waiting for it and passes events of kind mutex or semaphore to the very
+task of highest priority, which demanded to acquire it. The rest is done
+exactly as the system timer ISR does. \ident{rtos\_setEvent} checks the
 resume condition of all suspended tasks. Those tasks the condition of
-which is fulfilled are moved to the end of their due list. Then, the new
+which is fulfilled are moved to the end of their due list. Then the new
 active task is selected. This might be the same or another task. The SWI
 ends with continuing the new, active task.
 
@@ -308,11 +321,11 @@ managed resource. In \rtos{} it can't be queried by an API call who
 currently is the owner of a mutex; actually \rtos{} isn't even aware of
 it. The task code needs to keep track about, e.g. by implementing a
 related Boolean variable.\footnote{Such a Boolean variable could be hidden
-a C++ class embedding all calls of \ident{rtos\_waitForEvent} and
+in a C++ class embedding all calls of \ident{rtos\_waitForEvent} and
 \ident{rtos\_setEvent} into member functions like \ident{acquireMutex} and
 \ident{releaseMutex}. Each task would have its own, local object of this
-class. However, this concept is simple only if waiting for combinations
-of events is excluded -- which won't be a painful restriction for most
+class. However, this concept is simple only if waiting for combinations of
+events is excluded -- which won't be a painful restriction for most
 applications.}
 
 
@@ -341,9 +354,9 @@ Under all conditions a posted semaphore event is recorded somewhere, it's
 either notified to a waiting task or it's counted in the kernel, and the
 application needs to keep track of this. Normally, the acquired number of
 instances of a semaphore (or its counter values respectively) corresponds
-with the number of instances from a managed pool of resources the task
-was granted access to. The number of instances a task has accumulated
-across a series of \ident{rtos\_waitForEvent} and \ident{rtos\_setEvent}
+with the number of instances from a managed pool of resources the task was
+granted access to. The number of instances a task has accumulated across a
+series of calls of \ident{rtos\_waitForEvent} and \ident{rtos\_setEvent}
 can't be queried by an API call; actually \rtos{} isn't even aware of it.
 The application code needs to keep track of, e.g. by implementing a
 related counter variable.\footnote{An appropriate way of doing could be a
@@ -459,15 +472,25 @@ active -- in the same timer tic.} If all tasks in this list are configured
 to have time slices (and if there were no other resume conditions), the
 list is cycled and all tasks get the CPU for a predefined amount of time.
 
-Arrow 3 shows the effect of a suspend command. If the active tasks issues
+Arrow 3 shows the effect of a suspend command. If the active task issues
 such a command, it is moved from the head of its due list to the end of
-the list of suspended tasks.\footnote{It's just for simplicity of the
-implementation that we place it at the end. The list of suspended tasks is
-not ordered; actually it is not a list but a pool of task objects.} Again,
-arrow 2 shows how the next task in the due list will become the new head
-and active task. However, if there was no second task in this list, the
-head of a due list of lower priority would become the new active task. In
-our figure, this could then be the head of priority list 1.
+the list of suspended tasks. Again, arrow 2 shows how the next task in the
+due list will become the new head and active task. However, if there was
+no second task in this list, the head of a due list of lower priority
+would become the new active task. In our figure, this could then be the
+head of priority list 1.
+
+The explanation of arrow 3 needs some refinement. If \rtos{} is compiled
+without support for events of kind mutex and semaphore we indeed
+place the suspended task at the end of the list -- but just for sake of
+simplicity of the implementation. The list of suspended tasks is not
+ordered; actually it is not a list but a pool of task objects. The
+situation differs if we have either mutex or semaphore events. Now we
+really have an ordered list of suspended tasks. The list is ordered by
+task priority and the suspended task is not put at the end but behind the
+last task of same or higher priority. This list order will strongly
+facilitate the distribution of posted events of kind mutex or semaphore to
+the right receiver in a later call of \ident{rtos\_setEvent}.
 
 Arrows 4 and 5 show how a suspended task becomes due again. In any call of
 either the system timer ISR or \ident{rtos\_setEvent} all suspended tasks are
@@ -572,11 +595,11 @@ the left task it is not a prerequisite that the activated task terminates
 own, dedicated stack. Before switching from one task to another we need to
 save the stack of the left task. At runtime, i.e. out of scope of memory
 allocation and stack initialization considerations, the stack actually is
-completely represented by the pointer to its top -- and this "stack
-pointer" (the last CPU register to mention) is what we need to save also.
-Here, we use an absolute storage location. The task object has a member to
-hold the stack pointer of this task. The value of this object member is
-meaningful always and only while the task is inactive.
+completely represented by the pointer to its current top -- and this
+"stack pointer" (the last CPU register to mention) is what we need to save
+also. Here, we use an absolute storage location. The task object has a
+member to hold the stack pointer of this task. The value of this object
+member is meaningful always and only while the task is inactive.
 
 Before we proceed to the perhaps most difficult to understand detail, we
 will shortly summarize what we saw so far:
@@ -683,11 +706,11 @@ Some details still need explanation. First the stack balance; please refer
 to figure \ref{figFlowChartTaskSwitch}. Since we save the CPU context on
 the task stack we must always push and pop the same number of bytes at
 each task switch. When restoring the context on return to an originally
-suspended task we will not pop r24/r25 from the stack (but load it with
-the function result) and therefore we must not push these registers when
-saving the context. The context save operation on entry into a suspend
-command will save all registers but r24/r25 - anticipating that these
-registers will not be restored later.
+suspended task we will not restore r24/r25 from the stack (but load it
+with the function result) and therefore we must not push these registers
+when saving the context. The context save operation on entry into a
+suspend command will save all registers but r24/r25 - anticipating that
+these registers will not be restored later.
 
 \incFigFile{FlowChartTaskSwitch}{Implementation of task switches. On the
 left-hand side for interrupt service routines. On the right-hand side for
@@ -699,9 +722,8 @@ pushes the register pair}{0.8}
 The task switch causing API function \ident{rtos\_setEvent} is a void
 function. It doesn't return a result and all registers are thus saved on
 entry into \ident{rtos\_setEvent} and restored on return to the calling
-task. (Which might be immediately on exit from \ident{rtos\_setEvent} or
-later because of suspending another, intermediately executed task of
-higher priority.)
+task. (Which might be immediately or later because of releasing another,
+intermediately executed task of higher priority.)
 
 A second, less important detail is about how the register pair r24/r25 is
 loaded with the function result. If the task switching code recognizes
@@ -730,12 +752,13 @@ command or not.}{0.95}
 A task object owns a member \ident{postedEventVec}, which is null
 initially and when the task is active. It is still null on entry in state
 suspended. While a task is in state suspended it listens to all
-broadcasted events. Whenever another task posts an event it is
-double-checked if this event is relevant to the suspended task. If so, it
-is added to member \ident{postedEventVec} of the suspended task. This
-variable holds the set of events, which have been received by the task
-since it became suspended. As soon as the set of received events suffices
-to make the suspended task due again this variable is no longer changed.
+broadcasted events and it might wait for specific mutexes or semaphores.
+Whenever another task posts an event it is double-checked if this event is
+relevant to the suspended task. If so, it is added to member
+\ident{postedEventVec} of the suspended task. This variable holds the set
+of events, which have been received by the task since it became suspended.
+As soon as the set of received events suffices to make the suspended task
+due again this variable is no longer changed.
 
 A task can become due also on another path through the state chart. At any
 time the active task can be inactivated because of any other task of
@@ -779,19 +802,19 @@ return values, side effects, etc.
 Building an \rtos{} application starts with the configuration of the
 system. All elements of \rtos{}, which require application dependent
 configuration have been placed in the file \ident{rtos.config.template.h}.
-This file is not part of the build, it's just a template for the file which
-will actually by used. Copy the template to your application source code
-and rename it to \ident{rtos.config.h}. This is the name it has to have as
-this is the name used in the \ident{\#include} statements in the code.
-Open the renamed file in a text editor and read the comments. You'll find
-a number of \ident{\#define}'s which you need to adjust according to the
-demands of your application. The number of tasks (besides the idle task)
-you're going to use and the number of priority classes they belong to are
-the most evident settings. You may enable the round robin strategy (by
-default it's turned off), you may configure your application interrupts
-and you may chose the resolution of the system timer. Please find a more
-in detail discussion of some of these topics below and in the comments in
-the source code.
+This file is not part of the build, it's just a template for the file
+which will actually by used. Copy the template to your application source
+code and rename it to \ident{rtos.config.h}. This is the name it has to
+have as this is the name used in the \ident{\#include} statements in the
+code. Open the renamed file in a text editor and read the comments. You'll
+find a number of \ident{\#define}'s which you need to adjust according to
+the demands of your application. The number of tasks (besides the idle
+task) you're going to use, the number of priority classes they belong to
+and the size of these classes are the most evident settings. You may
+enable the round robin strategy (by default it's turned off), you may
+configure your application interrupts and you may chose the resolution of
+the system timer. Please find a more in detail discussion of some of these
+topics below and in the comments in the source code.
 
 \section{Initialization of \rtos: \ident{setup}}
 
@@ -846,8 +869,8 @@ time slice is set to 0 there is no such behavior for this task; with other
 words its time slice is of unlimited duration.
 
 Another important part of the task specification is the initial resume
-condition. It is specified exactly like at runtime when using the suspend
-command \ident{rtos\_waitForEvent}; please refer to section
+condition. It is specified like at runtime when using the suspend command
+\ident{rtos\_waitForEvent}; please refer to section
 \ref{secAPIWaitForEvent} for details. Your task will only start up if the
 condition specified now becomes true.
 
@@ -970,8 +993,13 @@ In \rtos{} a task can suspend and wait
 \end{itemize}
 
 The signature of the suspend command has a set of events as bit vector
-(with up to 16 bits or events respectively) a Boolean operator (all events
+(with up to 16 bits or events respectively), a Boolean operator (all events
 required or any event releases the task) and a time parameter.
+
+The events can be of any type, ordinary broadcasted, mutex or semaphore.
+Successfully waiting for an event of kind mutex or semaphore means to
+acquire the synchronization object, or getting ownership of the
+associated, managed resource respectively.
 
 The time parameter doesn't care if no timer event is part of the set of
 events. If the absolute timer event is in the set the time parameter has
@@ -1021,15 +1049,15 @@ not affected by the choice waiting for all or for any event.
 
 \subsection{Events of Kind Mutex}
 
-An event can be a mutex, a synchronization object for mutual exclusion
+An event to wait for can be a mutex, a synchronization object for mutual exclusion
 of tasks from a resource. The kind of an event is specified at compile
-time, it's part of the configuration of \rtos.
+time, it's part of the configuration of \rtos, see \refRTOSConfigH.
 
 From the perspective of a task waiting for a mutex is just like waiting
-for ordinary events. The task is suspended until the mutex is available.
-This will be the case when the other task, which currently owns the mutex
-will release it using \ident{rtos\_setEvent}. Or immediately, if no other
-task currently owns the mutex. 
+for ordinary broadcasted events. The task is suspended until the mutex is
+available. This will be the case when the other task, which currently owns
+the mutex will release it using \ident{rtos\_setEvent}. Or immediately, if
+no other task currently owns the mutex.
 
 If a task suspends waiting for a mutex it can happen that
 \ident{rtos\_waitForEvent} doesn't suspend the task but immediately
@@ -1041,23 +1069,25 @@ more.
 \label{secWaitForSemaphores}
 
 
-An event can be a semaphore, a synchronization object for managing access
-to a pool of resources shared between different tasks. The kind of an
-event is specified at compile time, it's part of the configuration of
-\rtos.
+An event to wait for can be a semaphore, a synchronization object for
+managing access to a pool of resources shared between different tasks. The
+kind of an event is specified at compile time, it's part of the
+configuration of \rtos, see \refRTOSConfigH.
 
 Waiting for a semaphore and getting it means to decrement the semaphores
 internal count. The task is granted access to one instance of the
 resources which are managed by the semaphore.
 
 Please note, that handling semaphores as Boolean valued events (being
-there or not being there) hinders to provide a more generalized
-API to semaphores. In \rtos{} is by principle impossible to acquire several
+there or not being there) hinders to provide a more generalized API to
+semaphores. In \rtos{} it is by principle impossible to acquire several
 instances from the resource pool at once. An application which needs to
 have several instances is obliged to repeat the invocation of
 \ident{rtos\_waitForEvent} that number of times. Although this eventually
 leads to the required number of instances it's not equivalent with respect
-to the distribution pattern of the shared resources.
+to the distribution pattern of the shared resources. The same
+consideration applies to returning/releasing a semaphore using
+\ident{rtos\_setEvent}.
 
 From the perspective of a task waiting for a semaphore is just like
 waiting for ordinary events. The task is suspended until one instance (or
@@ -1186,8 +1216,8 @@ like \verb$++u$, where \ident{u} is a of type \ident{uint8\_t}, is unsafe
 and requires protection.
 
 The pair of API functions \ident{rtos\_enterCriticalSection} and
-\ident{rtos\_leaveCriticalSection} makes any portion of code which is
-enclosed atomic -- and thus safe with respect to shared access from
+\ident{rtos\_leaveCriticalSection} makes any portion of code which they
+enclose atomic -- and thus safe with respect to shared access from
 different tasks.
 
 \ident{rtos\_enterCriticalSection} simply inhibits all those interrupts,
@@ -1213,9 +1243,9 @@ nearly has the same meaning and can also be used to make data access
 operations atomic. The difference is that they inhibit all interrupts. The
 responsiveness of the system could be somewhat degraded without need, e.g.
 the Arduino time functions like \ident{delay} or \ident{millis} could
-suffer. On the other hand, these two functions are a bit cheaper. We
-suggest to use them if the protected code sequence is rather short, e.g.
-just one or a few simple assignments and to use
+suffer. On the other hand, these two functions are a bit cheaper in terms
+of CPU load. We suggest to use them if the protected code sequence is
+rather short, e.g. just one or a few simple assignments and to use
 \ident{rtos\_enter/leaveCriticalSection} otherwise.
 
 In \rtos{} a task of higher priority will never become inactive in favor
@@ -1255,6 +1285,67 @@ To summarize,
 \end{itemize}
 
 
+\subsection{Mutex versus Critical Section}
+
+Accessing shared data from different tasks can safely be done with
+different code patterns. The critical section can be used or a mutex can
+be applied. There are significant differences and implications.
+
+Using a mutex is a kind of contract between different tasks. They agree to
+access the shared data only when they own the mutex and they promise to
+own it no longer than absolutely necessary. There's however no technical
+means which would ensure this; any task can actually access the shared
+data at any time and corrupt it. Moreover, there's no direct, visible link
+in the source code between the mutex and the shared data. The code samples
+coming along with \rtos{} demonstrate two techniques to overcome this:
+they either re-define the generic name of the mutex so that the relation
+to the shared objects become apparent or they hide the operations to
+acquire and release the mutex in the same class that implements the shared
+object.
+
+A critical section is a technical mechanism, which hinders the scheduler to
+switch to any other task (including interrupts and their handler tasks)
+while the enclosed code is executed. Handling an interrupt or activating
+another task is moved in time until immediately after the execution of the
+code inside the critical section.  
+
+Blocking the scheduler is the reason, why critical sections may be used
+only for short code sequences, typically some update operations of a data
+structure. An example would be queue, which an element is appended to or
+popped off. The code to append and to pop (a few lines each) would be
+placed into a critical section. It would already be bad style to place
+some debug or feedback code like \ident{Serial.println("Element
+appended")} in the critical section. The execution of this operation takes
+much too long.
+
+A very common code pattern when using critical sections is to have a local
+copy of the shared data in the task. The critical section is just used to
+copy the shared data into the local copy; all further, time consuming
+processing and user feedback operates on the copy only and is of course
+done outside the critical section. And the same vice versa for updating
+the shared data. An n-fold of data consumption is the consequence, as each
+accessing task needs to have its local copy.
+
+A mutex grants ownership to the shared data across any number of task
+switches. The scheduler stays fully operational. Only those tasks, which
+also want to have the mutex (but uttered their demand a bit later than the
+lucky one) are temporarily out of the loop. They are suspended. Please be
+aware, the mutual blocking of tasks that all demand the same shared
+resource will probably be in conflict with the requirement of having
+strictly regular tasks. If you have regular tasks, you will have to take
+care when applying mutexes to organize them. Specifying a timeout when
+waiting for a mutex may be a way out.
+
+Basically, a mutex could be acquired using \ident{rtos\_waitForEvent} and
+released using \ident{rtos\_setEvent} for a short, fast operation; the
+pair of functions could be used like the other pair
+\ident{rtos\_enter/leaveCriticalSection}. However, this is much, much more
+expensive in terms of CPU load and must not be done if a critical section
+is applicable. Examples, where a mutex reasonably replaces a critical
+section is when doing console output with \ident{Serial} or when accessing
+the LCD using the LiquidCrystal library.
+
+
 \section{Diagnosis: \ident{rtos\_getTaskOverrunCounter}}
 
 Each task has a built-in overrun counter. The meaning of this counter is
@@ -1290,8 +1381,9 @@ overrun won't be recognized. Task calls are silently skipped.
 Please refer to section \ref{secSystemTime}. Here you find a discussion
 how to choose the appropriate system time for your application.
 
-The function \ident{rtos\_getTaskOverrunCounter} may be called by any task,
-including the idle task.
+The function \ident{rtos\_getTaskOverrunCounter} may be called by any
+task. Please note, that the function is not defined for the idle task, but
+may be called by the idle task for querying any of the other tasks.
 
 
 \section{Diagnosis: \ident{rtos\_getStackReserve}}
@@ -1321,7 +1413,7 @@ actual stack usage is negligible.
 The current stack usage increases suddenly by 36 Byte in the instance of a
 system interrupt (the CPU context of the interrupted task is saved onto
 the stack of this task). \ident{rtos\_getStackReserve} returns the maximum
-stack usage so far (actually is returns the inverse value, the
+stack usage so far (actually it returns the inverse value, the
 \emph{reserve}, but this is equivalent). This is a useful value once your
 testing code ran through all code paths, particularly through the deepest
 nested sub-functions. You can ensure this by dedicated test routines. But
@@ -1333,8 +1425,9 @@ good practice to add another 36 Byte to the computed stack usage.
 Summarizing, you should add 41 Byte to the computed stack usage before
 reducing the stack size to the really needed value.
 
-The function \ident{rtos\_getStackReserve} may be called by any task,
-including the idle task.
+The function \ident{rtos\_getStackReserve} may be called by any task.
+Please note, that the function is not defined for the idle task, but may
+be called by the idle task for querying any of the other tasks.
 
 
 \chapter{Writing an \rtos{} Application}
@@ -1342,18 +1435,19 @@ including the idle task.
 
 \section{Short Recipe}
 
-Create an empty folder in folder \ident{code\textbackslash{}applications}.
+Create an empty folder in folder \ident{code/applications}.
 The name of the folder is the name of your application. Copy the
 configuration template file \refRTOSConfigTemplateH{} into this folder and
 rename it to \ident{rtos.config.h}.
 
-Open \ident{rtos.config.h} and configure the number of tasks and the
-number of different priority classes. Do not use empty priority classes,
-this wastes expensive memory. Priorities should always be counted 0, 1,
-\ldots{}, max. Select the word width of the system time. Often an eight Bit
-value will be sufficient. Please refer to \ref{secSystemTime}. In
-general, you'll find a lot of hints and comments in the configuration file
-telling you what to do in detail.
+Open \ident{rtos.config.h} and configure the number of tasks, the number
+of different priority classes and the size of these. Do not use empty
+priority classes, this wastes expensive memory. Priorities should always
+be counted 0, 1, \ldots{}, max. Configure the number of mutexes and
+semaphores in use. Select the word width of the system time. Often an
+eight Bit value will be sufficient. Please refer to \ref{secSystemTime}.
+In general, you'll find a lot of hints and comments in the configuration
+file telling you what to do in detail.
 
 Open a new C source file in the same folder. This file implements the core
 of your application. You need two standard functions, \ident{setup} and
@@ -1400,10 +1494,11 @@ protecting the access to data shared between tasks; please refer to
 section \ref{secEnterLeaveCritSec}.
 
 Compile your application using the generic makefile. Double-check your
-environment: The make tool needs to be on the Windows search path and
-variable \ident{ARDUINO\_HOME} needs to point to your Arduino installation (see
-section \ref{secPrerequisites}). If you placed all your code in the single
-folder created at the beginning, all you have to do now is to run
+environment: The make tool needs to be on the Windows/Linux search path
+and the environment variable \ident{ARDUINO\_HOME} needs to point to your
+Arduino installation (see section \ref{secPrerequisites}). If you placed
+all your code in the single folder created at the beginning, all you have
+to do now is to run
 
 \verb+make -s APP=myFolderName build+
 
@@ -1437,12 +1532,12 @@ too. Even if your application grows and needs a more complex folder
 structure than the test cases to organize the source code you will still
 be able to use the makefile, however with some simple changes.
 
-Most often, you will do as follows: Open a Windows Command Prompt (or
-Powershell window) and cd to the root directory of the \rtos{} folder.
-This is where the file GNUmakefile is located. Connect your Arduino MEGA
-board\footnote{Other boards need some code customization first. Please,
-refer to section \ref{secArduinoBoards}.} to the USB port, e.g. port
-number 6. Now type
+Most often, you will do as follows: Open a Shell window (i.e. a Command
+Prompt or Powershell window under Windows or Bash under Linux) and cd to
+the root directory of the \rtos{} folder. This is where the file
+GNUmakefile is located. Connect your Arduino MEGA board\footnote{Other
+boards need some code customization first. Please, refer to section
+\ref{secArduinoBoards}.} to the USB port, e.g. port number 6. Now type
 
 \verb+make -s APP=tc05 COM_PORT=COM6 upload+
 
@@ -1460,14 +1555,15 @@ available targets to the console with a brief explanation:
 
 \verb+make -s help+
 
-An \rtos{} application can't be developed as sketch in the Arduino IDE. We
-made some minor changes of the Arduino file \ident{main.c}, which would be
-lost when using the IDE. You may however continue to use the IDE for
+An \rtos{} application can't be developed as a sketch in the Arduino IDE.
+We made some minor changes of the Arduino file \ident{main.c}, which would
+be lost when using the IDE. You may however continue to use the IDE for
 console I/O if you use the object \ident{Serial} for communication --
 which is particularly useful during application development and which is
-supported by the makefile process even better than by the IDE as it
-enables you to conditionally have the I/O commands in the code. Their
-presence may be restricted to a development compilation configuration.
+supported by the makefile process even better than by the IDE as the
+makefile enables you to have the I/O commands only conditionally in the
+code. Their presence may be restricted to a development compilation
+configuration by means of a \verb+#ifdef DEBUG+.
 
 
 \subsection{Prerequisites}
@@ -1488,14 +1584,14 @@ the front of -- to avoid shadowing by an incompatible derivate of make --
 your Windows search path.\footnote{After installation, type make --version
 to find out.} Inside your Arduino 1.0.5 installation, you'll find the make
 tool as
-arduino-1.0.5\textbackslash\-hard\-ware\textbackslash\-tools\textbackslash\-avr\textbackslash\-utils\textbackslash\-bin\textbackslash\-make.exe.
+arduino-1.0.5/\-hard\-ware/\-tools/\-avr/\-utils/\-bin/\-make.exe.
 
 The makefile compiles the Arduino standard source files to the standard
 library \ident{core.a}. To do so, it needs to know, where the Arduino sources
 -- which are not part of this project -- are located. It expects an
 environment variable \ident{ARDUINO\_HOME} to point to the Arduino
 installation directory, e.g.
-c:\textbackslash{}ProgramFiles\textbackslash\-arduino-1.0.5. You will
+c:/ProgramFiles/\-arduino-1.0.5 on a Windows system. You will
 probably have to add such a variable to your system variables as it is not
 defined by the Arduino standard installation process.
 
@@ -1506,7 +1602,9 @@ they were located in different folders.
 
 Finally, all relevant paths to executables and source files and the file
 names themselves must not contain any blanks. This includes the path to
-the Arduino installation.
+the Arduino installation. If you are a Windows user, it particularly means
+that you will have to reinstall Arduino if you should have placed it into
+the standard installation path c:/Pro\-gram~Files/ar\-dui\-no\--1.0.5.
 
 \subsection{Concept of Makefile}
 
@@ -1520,14 +1618,15 @@ the Arduino board.
 
 An optional, final rule permits to upload the binary code to the Arduino
 board. If your application makes use of the USB communication with
-\ident{Serial} all you still have to do to make your application visibly
-run is an ALT-TAB to switch to the (open) Arduino IDE and a Ctrl-Shift-m
-to open the console window.
+\ident{Serial} all you still have to do on a Windows system to make your
+application visibly run is an ALT-TAB to switch to the (open) Arduino IDE
+and a Ctrl-Shift-m to open the console window.
 
 On the compilation output side, for sake of simplicity of the makefile,
 the folder structure of the source code is not retained. All compilation
-products (*.o, among more) are collected in a single output folder. This
-is the reason, why there must never be two source files of same name. Even
+products (*.o, among more) of an \rtos{} application are collected in a
+single output folder dedicated to this application. This is the reason,
+why there must never be two source files of same name. Even
 \ident{myModule.c} and \ident{myModule.cpp} would lead to a clash.
 
 In the Arduino IDE the library \ident{core.a} is source code part of the
@@ -1541,18 +1640,40 @@ depend on the compilation configuration.
 As said, the compilation is mainly controlled by a list of source code
 directories. This list is implemented as value of macro
 \ident{srcDirList}. The default is to have two directories: The \rtos{}
-source code directory \ident{code\textbackslash\-RTOS} and a second,
-variable directory. This directory is located in
-\ident{code\textbackslash\-applications} but its name is provided by macro
-\ident{APP}. This enables you to select an application for compilation
-simply by stating \verb+APP=myRTuinOSApplication+ on the command line of
-make.
+source code directory \ident{code/\-RTOS} and a second, variable
+directory. This directory is located in \ident{code/\-applications} but
+its name is provided by macro \ident{APP}. This enables you to select an
+application for compilation simply by stating
+\verb+APP=myRTuinOSApplication+ on the command line of make.
 
 If your application demands more than a simple, flat directory to manage
-all its source files, you can continue to use the makefile with minor
-changes: Explicitly list your source folders in \ident{srcDirList}. Now,
-the macro \ident{APP} probably becomes meaningless. Consider to modify all
-code locations which still reference the macro.
+all its source files, you can continue to use the makefile. The makefile
+knows a kind of "callback". If present, an application owned makefile
+fragment is read prior to do compilation and linkage. This makefile
+fragment can override or extend the default value of the makefile variable
+\ident{srcDirList}. Specify different folders or just add some. The
+fragment is looked for by name: It needs to be called
+\ident{\textless{}appName\textgreater.mk}, where
+\ident{\textless{}appName\textgreater} is the value of the makefile
+variable \ident{APP}.
+
+\subsubsection{Folder Structure}
+
+The makefile is organized in different files. The entry point is the file
+\ident{GNUmakefile}. This file name avoids the need to use the make tool's
+command line switch \ident{-f \textless{}makefileName\textgreater} and
+it avoids conflicts withs other, incompatible derivates of make.
+
+File \ident{GNUmakefile} only contains some settings common to all \rtos{}
+applications. Here, you would e.g. find the default setting for the COM
+port to be used for upload of the compiled software (please see
+\ref{secSelectUSBPort} also).
+
+After reading these settings, the "executable" makefile
+\ident{compileLinkAndUpload.mk} is read. It is located in the sub-folder
+\ident{makefile}. It in turn builds on some sub-routines, which are
+implemented in further included makefile fragments. All of these are
+located in the same sub-folder \ident{makefile}.
 
 
 \subsection{Compilation Configurations}
@@ -1640,6 +1761,7 @@ command line of avrdude instead of \verb+-cstk500v2+.
 
 
 \subsection{Selecting the USB Port}
+\label{secSelectUSBPort}
 
 The USB (or COM) port which is used for the connection between PC and
 Arduino board has to be known by the rule, which uploads (and flashes)

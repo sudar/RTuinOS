@@ -165,16 +165,14 @@ C and M files in the scope of this project."
 
   ; Prepare all frequently used build commands
   (let*
-    ( (dsmake-cmd-base (concat "cd /d " project-path-win32 " & dsmake TEST_CASE=tc05 "))
-      (make-cmd-base (concat "cd /d " project-path-win32 " & make -s APP=tc05 "))
+    ( (make-cmd-base (concat "cd /d " project-path-win32 " & make -f makefile.mk -s APP=tc14 "))
       (doxygen-cmd-base (concat "cd /d " project-path-win32 "doc\\doxygen & "))
       (latex-cmd-base (concat "cd /d " project-path-win32 "doc\\manual & "))
       (history (list (concat make-cmd-base "upload")
                      (concat make-cmd-base "bin\\DEBUG\\obj\\.o")
                      (concat make-cmd-base "build")
                      (concat make-cmd-base "rebuild")
-                     (concat dsmake-cmd-base "rebuild")
-                     (concat latex-cmd-base "make -s & manual.pdf")
+                     (concat latex-cmd-base "make -s & RTuinOS-1.0-UserGuide.pdf")
                      (concat latex-cmd-base "make -s onePass")
                      (concat doxygen-cmd-base "doxygen doxyfile & start html\\index.html")
                      (concat doxygen-cmd-base "start html\\index.html")

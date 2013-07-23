@@ -3,27 +3,28 @@
  * Test case 07 of RTuinOS. Several tasks of same priority are defined plus a few of
  * higher priority. The tasks of same priority use round robin and all tasks access some
  * shared global data using the two different pairs of functions for the implementation of
- * mutual exclusion.
+ * mutual exclusion.\n
  *   One task purposely accesses the data in the same way but disregarding the mutual
  * exclusion in order to prove that this leads to errors, which are not seen in all other
- * cases.
+ * cases.\n
  *   Also the task of highest priority doesn't use the specific function pairs to ensure
  * mutual exclusion. Just having the highest priority already guarantees this - no error
- * must be seen in this task.
- *   Observations:
+ * must be seen in this task.\n
+ *   Observations:\n
  *   The round robin tasks show far the most loops. They are free running and use all
- * remaining processing time.
+ * remaining processing time.\n
  *   The first and the forth of the round robin tasks have the same implementation
  * (including the implementation of mutual exclusion) but the latter has a larger time
- * slice and reports an accordingly larger number of loops.
+ * slice and reports an accordingly larger number of loops.\n
  *   The reporting task is clearly the slowest, although it got a significantly larger time
- * slice.
- *   One task reports occasional data errors, all others don't.
+ * slice.\n
+ * One task reports occasional data errors, all others don't. The particular task
+ * (purposely) disregards the need to use a critical section for safe data access.\n
  *   The first three of the round robin tasks have the same time slice and they are
  * implemented identically besides using different functions to implement mutual exclusion.
  * We would expect the same number of loops. Actually, we see a difference, which reflects
  * the different cost of the different implementations of mutual exclusion. cli/sei is
- * indeed faster than enter/leaveCriticalSection.
+ * indeed faster than enter/leaveCriticalSection.\n
  *   The idle task implements the blinking LED. However, here we have an example of
  * starvation: The idle task is always due but will not become active, since the round
  * robin tasks (which have a higher priority) never suspend. Consequently, the LED on the
@@ -63,7 +64,7 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
 #include "rtos_assert.h"
 

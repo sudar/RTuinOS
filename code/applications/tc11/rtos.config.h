@@ -78,7 +78,7 @@
       The use case of a semaphore pre-determines its initial value. To make it most easy
     and efficient for the application the array of semaphores is declared extern to
     RTuinOS. Please refer to rtos.h for the declaration of \a rtos_semaphoreAry and define
-    this array in your application code. */
+    \b and \b initialize this array in your application code. */
 #define RTOS_NO_SEMAPHORE_EVENTS    0
 
 
@@ -97,16 +97,16 @@
       If an application redefines the interrupt source, it'll probably have to implement
     the code to configure this interrupt (e.g. set the interrupt enable bit in the
     according peripheral). If so, this needs to be done by reimplementing void
-    rtos_enableIRQTimerTic(void), which is an overridable default implementation.
+    rtos_enableIRQTimerTic(void), which is an overridable default implementation.\n
       If an application redefines the interrupt source, the new source will probably
-    produce another system clock frquency. If so, the macro #RTOS_TIC needs to be redefined
+    produce another system clock frequency. If so, the macro #RTOS_TIC needs to be redefined
     also. */
 #define RTOS_ISR_SYSTEM_TIMER_TIC TIMER2_OVF_vect
 
 
 /** The system timer tic is about 2 ms. For more accurate considerations, it is defined here as
     floating point constant. The unit is s. */
-#define RTOS_TIC (2.0399999e-3)
+#define RTOS_TIC (2.04e-3)
 
 
 /** Enable the application defined interrupt 0. (Two such interrupts are pre-configured in
@@ -293,10 +293,11 @@ RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
 #if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
 /** The implementation of a semaphore is a simple unsigned integer. The value means the
     number of resources managed by the semaphore. In a resource management system it may be
-    available pooled resources, which can be still checked out by the clients, or it is the
-    number of produced objects in a producer-consumer system. In any application, the
-    maximum number of managed objects need to fit into the data type of the semaphore. Use
-    the smallest possible data type, which fits to all your semaphores.\n
+    the number of available pooled resources, which can be still checked out by the
+    clients, or it is the number of produced objects in a producer-consumer system. In any
+    application, the maximum number of managed objects need to fit into the data type of
+    the semaphore. Use the smallest possible data type, which fits to all your
+    semaphores.\n
       Possible data types for semaphores are uint8_t, uint16_t and uint32_t. */
 typedef uint8_t uintSemaphore_t;
 #endif
