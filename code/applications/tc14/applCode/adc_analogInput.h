@@ -43,10 +43,11 @@
     variable \a adc_userSelectedInput. */
 #define ADC_INPUT_INTERNAL_BAND_GAP 0x1e
 
-/** The number of sub-sequent ADC conversion results, which are avaraged before the mean
+/** The number of subsequent ADC conversion results, which are averaged before the mean
     value is passed to the waiting client tasks. The values 1..64 are possible. The smaller
-    the value the higher the overhead of the task processing. */
-#define ADC_NO_AVERAGED_SAMPLES     64
+    the value the higher the overhead of the task processing. A value greater than about 40
+    leads to a significant degradation of the responsiveness to button down events. */
+#define ADC_NO_AVERAGED_SAMPLES     32
 
 /** Value of ADC register ADMUX/REFS1:0. It selects the reference voltage or full scale
     value respectively. 1 means Ucc=5V, 2 means 1.1 V and 3 means 2.56 V. The internal

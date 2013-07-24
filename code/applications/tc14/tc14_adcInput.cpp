@@ -368,10 +368,10 @@ static void taskDisplayVoltage(uint16_t initialResumeCondition)
        better readable, more stable display.
          The disadvantage: The state machine in module adc synchronizes switching the ADC
        input with the series of averaged samples. This is impossible here, which means that
-       - in the instance od switching to another ADC input - the averaging series formed
+       - in the instance of switching to another ADC input - the averaging series formed
        here typically consist of some samples from the former input and some from the new
        input. We do no longer see a sharp switch but a kind of cross fading. */
-#define NO_AVERAGED_SAMPLES     3
+#define NO_AVERAGED_SAMPLES     5
 #define SCALING_BIN_TO_V(binVal)                                                            \
         ((ADC_U_REF/(double)((uint32_t)NO_AVERAGED_SAMPLES*ADC_NO_AVERAGED_SAMPLES)/1024.0) \
          *(double)(binVal)                                                                  \
