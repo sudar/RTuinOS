@@ -36,7 +36,8 @@
  *   rtos_getStackReserve
  * Local functions
  *   prepareTaskStack
- *   checkForTaskActivation
+ *   checkTaskForActivation
+ *   lookForActiveTask
  *   onTimerTic
  *   setEvent
  *   acquireFreeSyncObjs
@@ -610,123 +611,16 @@ RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void)
 
 
 /**
- * When an event has been posted to one or more of the currently suspended tasks, it might
- * easily be that some of these tasks are resumed and become due. This routine checks all
- * suspended tasks and reorders them into the due task lists if they are resumed.\n
- *   If there is at least one resumed task it might be that this task is of higher
- * priority than the currently active task - in which case it will become the new active
- * task. This routine determines which task is now the active task.
+ * When an event has been posted to a currently suspended task, it might easily be that
+ * this task is resumed and becomes due. This routine checks a suspended task for resume
+ * and moves it into the due task lists if it is resumed.
  *   @return
- * The Boolean information wheather the active task now is another task is returned.\n
- *   If the function returns true, the old and the new active task's IDs are reported by
- * side effect: They are written into the global variables _pSuspendedTask and
- * _pActiveTask.
- *   @param isNewActiveTask
- * For compilation with round robin only: This flag signals that there's probably a change
- * of the active task. Normally, looking for the active task is skipped if no task changed
- * its state from suspended to due. If this flag is set, this step is never skipped.
+ * The Boolean information wheather the task is resumed and becomes due is returned.
+ *   @param idxSuspTask
+ * The index of the investigated task. It is the index in the global list
+ * \a _pSuspendedTaskAry of suspended tasks.
  */
-#if 0
 
-static bool checkForTaskActivation(
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-                                   bool isNewActiveTask
-#endif
-                                  )
-{
-    uint8_t idxSuspTask = 0;
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_OFF
-    bool isNewActiveTask = false;
-#endif
-
-    while(idxSuspTask<_noSuspendedTasks)
-    {
-        task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
-        uint16_t eventVec;
-
-        /* Check if the task becomes due because of the events posted prior to calling this
-           function. The optimally supported case is the more probable OR combination of
-           events.
-             The AND operation is less straight forward as the timeout character of the
-           timer events needs to be retained: AND only refers to the postable events but
-           does not include the timer events. All postable events need to be set in both
-           the mask and the vector of posted events OR any of the timer events in the mask
-           are set in the vector of posted events. */
-        eventVec = pT->postedEventVec;
-        if((pT->waitForAnyEvent &&  eventVec != 0)
-           ||  (!pT->waitForAnyEvent
-                &&  (((eventVec ^ pT->eventMask) & ~MASK_EVT_IS_TIMER) == 0
-                     ||  (eventVec & pT->eventMask & MASK_EVT_IS_TIMER) != 0
-                    )
-               )
-          )
-        {
-            uint8_t u
-                  , prio = pT->prioClass;
-
-            /* This task becomes due. */
-
-#if RTOS_ROUND_ROBIN_MODE_SUPPORTED == RTOS_FEATURE_ON
-            /* If a round robin task voluntarily suspends it gets the right for a complete
-               new time slice. Reload the counter. */
-            pT->cntRoundRobin = pT->timeRoundRobin;
-#endif
-            /* Move the task from the list of suspended tasks to the list of due tasks of
-               its priority class. */
-            _pDueTaskAryAry[prio][_noDueTasksAry[prio]++] = pT;
-            -- _noSuspendedTasks;
-            for(u=idxSuspTask; u<_noSuspendedTasks; ++u)
-                _pSuspendedTaskAry[u] = _pSuspendedTaskAry[u+1];
-
-            /* Since a task became due there might be a change of the active task. */
-            isNewActiveTask = true;
-        }
-        else
-        {
-            /* The task remains suspended. */
-
-            /* Check next suspended task, which is in this case found in the next array
-               element. */
-            ++ idxSuspTask;
-
-        } /* End if(Did this suspended task become due?) */
-
-    } /* End while(All suspended tasks) */
-
-    /* Here, isNewActiveTask actually means "could be new active task". Find out now if
-       there's really a new active task. */
-    if(isNewActiveTask)
-    {
-        int8_t idxPrio;
-
-        /* Look for the task we will return to. It's the first entry in the highest
-           non-empty priority class. */
-        for(idxPrio=RTOS_NO_PRIO_CLASSES-1; idxPrio>=0; --idxPrio)
-        {
-            if(_noDueTasksAry[idxPrio] > 0)
-            {
-                _pSuspendedTask = _pActiveTask;
-                _pActiveTask    = _pDueTaskAryAry[idxPrio][0];
-
-                /* If we only entered the outermost if clause we made at least one task
-                   due; these statements are thus surely reached. As the due becoming task
-                   might however be of lower priority it can easily be that we nonetheless
-                   don't have a task switch. */
-                isNewActiveTask = _pActiveTask != _pSuspendedTask;
-
-                break;
-            }
-        }
-    } /* if(Is there a non-zero probability for a task switch?) */
-
-    /* The calling interrupt service routine will do a context switch only if we return
-       true. Otherwise it'll simply do a "reti" to the interrupted context and continue
-       it. */
-    return isNewActiveTask;
-
-} /* End of checkForTaskActivation */
-
-#else
 // @todo Optimization: pass pointer to task object instead of recomputation
 static inline bool checkTaskForActivation(uint8_t idxSuspTask)
 {
@@ -779,6 +673,20 @@ static inline bool checkTaskForActivation(uint8_t idxSuspTask)
 } /* End of checkTaskForActivation */
 
 
+
+
+/**
+ * After posting an event to one or more currently suspended tasks, it might easily be that
+ * one such task is resumed and becomes due - active because of its higher priority. To
+ * find out, this function needs to be called after posting the events. It determines which
+ * task is now the active task.
+ *   @return
+ * The Boolean information wheather the active task now is another task is returned.\n
+ *   If the function returns true, references to the old and the new active task are
+ * reported by side effect: They are written into the global variables \a _pSuspendedTask and
+ * \a _pActiveTask.
+ */
+ 
 static inline bool lookForActiveTask()
 {
     /* The calling interrupt service routine will do a context switch only if we return
@@ -810,7 +718,6 @@ static inline bool lookForActiveTask()
     return false;
 
 } /* End of lookForActiveTask */
-#endif
 
 
 
@@ -842,7 +749,11 @@ static RTOS_TRUE_FCT bool onTimerTic(void)
     while(idxSuspTask<_noSuspendedTasks)
     {
         task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
-        bool taskGotEvt = false;
+        
+        /* Remember the received events before (possibly) getting some more in this
+           timer tic: Only if this set changes it is necessary to check for a state
+           transition of the task. */
+        const uint16_t postedEventVecBefore = pT->postedEventVec;
         
         /* Check for absolute timer event. */
         if(_time == pT->timeDueAt)
@@ -853,32 +764,21 @@ static RTOS_TRUE_FCT bool onTimerTic(void)
                change the status to due (see checkForTaskActivation), so that setting it a
                second time will never occur. */
             pT->postedEventVec |= (RTOS_EVT_ABSOLUTE_TIMER & pT->eventMask);
-            
-            /* This task needs to checked for a state transition. It might become due
-               because of the possibly received timer event. */
-            // @todo double check if it pays off to set the boolean even sharper, e.g. by comparing postedEventVec before and after
-            taskGotEvt = true;
         }
 
         /* Check for delay timer event. The code here should optimally support the standard
            situation that the counter is constantly 0. */
-        if(pT->cntDelay > 0)
+        if(pT->cntDelay != 0)
         {
             if(-- pT->cntDelay == 0)
-            {
                 pT->postedEventVec |= (RTOS_EVT_DELAY_TIMER & pT->eventMask);
-                
-                /* This task needs to checked for a state transition. It might become due
-                   because of the possibly received timer event. */
-                taskGotEvt = true;
-            }
         }
 
         /* Check if this suspended task becomes due because of a timer event, which was
            posted to it. */
-        if(taskGotEvt && checkTaskForActivation(idxSuspTask))
+        if(postedEventVecBefore != pT->postedEventVec  && checkTaskForActivation(idxSuspTask))
         {
-            /* The task becomes due. */
+            /* The task becomes due, which may cause a task switch. */
             activeTaskMayChange = true;
 
             /* Check next suspended task, which is in this case found in the array
@@ -902,7 +802,7 @@ static RTOS_TRUE_FCT bool onTimerTic(void)
     /* Round-robin: Applies only to the active task. It can become inactive, however not
        undue, or suspended respectively. If its time slice is elapsed it is put at the end
        of the due list in its priority class. */
-    if(_pActiveTask->cntRoundRobin > 0)
+    if(_pActiveTask->cntRoundRobin != 0)
     {
         if(--_pActiveTask->cntRoundRobin == 0)
         {
@@ -1134,11 +1034,11 @@ static RTOS_TRUE_FCT bool setEvent(uint16_t postedEventVec)
            machine codes for most operations instead of much more expensive 16 Bit
            operations. */
         uint8_t semMask = 0x01;
-        while(semaphoreToReleaseVec &&  (semMask & MASK_EVT_IS_SEMAPHORE) != 0)
+        while(semaphoreToReleaseVec != 0  &&  (semMask & MASK_EVT_IS_SEMAPHORE) != 0)
         {
             /* Check if this task is waiting for this semaphore but didn't get it yet (i.e.
                in an earlier call of this routine). */
-            if((pT->eventMask & semMask & ~pT->postedEventVec) != 0)
+            if((semaphoreToReleaseVec & semMask & pT->eventMask & ~pT->postedEventVec) != 0)
             {
                 /* The semaphore release operation is handled by passing the semaphore to
                    the task. */
@@ -1578,7 +1478,7 @@ static inline bool acquireFreeSyncObjs(uint16_t eventMask, bool all)
  * implementation of saving/restoring the task context).
  *   @return
  * If mutex or semaphores are in use the function returns the Boolean information whether
- * the calling task has to be suspended. This is not the caes if all demanded sync objects
+ * the calling task has to be suspended. This is not the case if all demanded sync objects
  * are currently available. If RTuinOS is compiled without support of mutexes and
  * sempahores than the calling task is always suspended.\n
  *   By means of side effects, the function returns which task is to be activated and records
@@ -1636,9 +1536,7 @@ static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, bool all, uintTime_t 
 
     /* Put the task in the list of suspended tasks. If mutexes or semaphores are in use
        this list is sorted with decreasing priority. */
-#if RTOS_USE_MUTEX == RTOS_FEATURE_OFF
-    _pSuspendedTaskAry[_noSuspendedTasks++] = pT;
-#else
+#if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
     /* < rather than <=: The now suspended task becomes the last one in its prio class. The
        others of same priority are waiting longer and will receive a later posted event
        with priority. */
@@ -1653,6 +1551,8 @@ static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, bool all, uintTime_t 
 
     /* Insert the suspended task at the priority determined right position. */
     _pSuspendedTaskAry[idxPos] = pT;
+#else
+    _pSuspendedTaskAry[_noSuspendedTasks++] = pT;
 #endif
 
     /* Record which task suspends itself for the assembly code in the calling function
