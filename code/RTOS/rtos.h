@@ -320,7 +320,7 @@
  * been named \a rtos_setEvent in the first release of RTuinOS, version 0.9.
  *   @see void rtos_sendEvent(uint16_t)
  */
-#define /* void */ rtos_sendEvent(/* uint16_t */ eventVec) rtos_sendEvent(eventVec)
+#define /* void */ rtos_setEvent(/* uint16_t */ eventVec) rtos_sendEvent(eventVec)
 
 
 /*
