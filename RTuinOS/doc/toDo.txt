@@ -2,16 +2,8 @@ Test case for AND combination of events but a timeout at the same time.
 Has been implemented in r233 but never been tested at that time.
 
 Implement get/setRoundRobin?
-
-Timer ISR: onTimerTic, nur jedes n-te Mal. Bei Standardeinstellung 1 kein
-Overhead, da Code komplett ausgeblendet bleibt. Manual
-#define PRESCALER.
-#if PRESCALER != 1
-    static uint8_t cnt = 0;
-#endif
-  Abgelehnt: Macht wenig Sinn, weil mehrfache Interrupts bewusst ohne
-Taskwechsel nur Performancefresser sind. Dann lieber die Hardware
-langsamer programmieren.
+  Abgelehnt. Unwichtig, trivial und verstellt nur den ansonsten schlanken
+und schönen Code.
 
 EnterLeaveCriticalSection: Try without cli/sei but only TIMER2). Use tc07
   Done: cli/sei is essential, test case fails otherwise
@@ -19,29 +11,26 @@ EnterLeaveCriticalSection: Try without cli/sei but only TIMER2). Use tc07
 Manual: 3.8, API, enter/leaveCS: sei/cli will disable delay, but not
 delayMicroseconds. e/lCS would be okay with both
 
-TC05: T0C0: Documentation and implementation differ. Timeout event is
-commented out while value is still set. The task cycle time is documented
-to be slow while it is set very fast. T1C0: cycle time is documented
-different to implementation. The triggered T0C1 has a very long timeout to
-wait for each trigger. Should become much sharper
-  All done
-
-TC10: Document the observations
-  Done
-
 Mention the system load estimation in the manual
+  Mentioned in the readMe of release 2.
 
 Mention false task overrun recognitions in manual. The C comments
 reference it but it doesn't contain this issue yet. Furthermore, the API
 documentation of suspendTillTime and waitForEvent should mention this as a
 true problem appears if tiCycle is > 127: False task overrun recognitions
-lead to too soon activation. ANother location where to place a hint is the
+lead to too soon activation. Another location where to place a hint is the
 type-of-timer discussion in config.h
+  Done in manual, section 4.3.3
+  Limit 127 corrected in rtos.config.h, explanations given
+  Done
 
 R2:
 
 rtos_setEvent could become sendEvent, the old name is retained by macro.
 (sendEvent could fit better to mutex and semaphore.) 
+  Done in
+file:///M:/SVNMainRepository/Arduino/RTuinOS/branches/RTuinOS_refactoringPostEvents,
+r399.
 
 Manual: Serial.print blocks if buffer full. If a task writes more bytes
 than space in the buffer it blocks in CPU wait cycles and the CPU load is
@@ -52,10 +41,13 @@ Baud rate
 
 Consider to place gsl into the RTOS directory. It's proven to be valid and
 useful meanwhile. Adapt doxyfile accordingly
+  Done.
 
 Take relevant samples into the doxygen manual
+  Done.
 
 Makefile: -DARDUINO=101 should surely become 105, double-check
+  Done.
 
 Compile C files with avr-gcc. Already known issues: bool is undefined and
 _pActiveTask can't be dynamically initialized to be _pIdleTask.
@@ -67,7 +59,7 @@ Findings:
 environment. Ugly as it should be boolean_t for consistency reasons. But
 will we really introduce such a new typedef?
   The test case files either need to be renamed into *.cpp or all
-refernces to Serial need to be replaced by printf, using the stdout
+references to Serial need to be replaced by printf, using the stdout
 module.
   The ASSERT macro must no longer use Serial, but needs to use printf.
 This makes RTuinOS dependent on the module stdout. On the one hand it's
@@ -77,15 +69,10 @@ RTuinOS not deal with things like these. True RTuinOS application won't
 use stdio; this is just for demonstration, sample code and debugging. The
 trade off is undecided.
 
-Makefile: Gets a callback into the application folder by -include? In
-order to enable an application to have own customizations? Like name or
-IO_FLOAT_LIB? 
-  Done, works fine
-
 tc06: The config setting RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE should be
 RTOS_FEATURE_OFF and the meaning/why should be documented. Obviously, the
 test case doesn't do what it is expected to. If we change the feature, the
-anticipated timing cahnges and an assertion fires. Make this a clearer,
+anticipated timing changes and an assertion fires. Make this a clearer,
 better documented test case.
 
 tc12: The reported timing looks like a temporary task overrun for the
@@ -93,3 +80,10 @@ producer (while it waits for the Serial mutex from the consumer, which
 reports the entire list of queued elements). Task time is alright in mean.
 Is the not-recognition of the overrun a failure or an new effect of the
 already know weaknesses of the counter?
+
+Event macros in rtos.h: They should support up to 14 Mutexes if no
+application interrupt is defined. Use more #if to do.
+
+New test case: Only semaphores and no 1 is demanded, 0 should be got also:
+Bug detected in trunk, but already fixed in branch
+RTuinOS_refactoringPostEvents.
