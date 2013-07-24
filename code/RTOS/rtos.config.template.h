@@ -267,8 +267,8 @@
     type in the RTuinOS manual.
       @remark
     Please ignore the appendix _DOXYGEN_TAG in the displayed name of the macro. This is a
-    work around as the doxygen parser gets confused about the true (nested) macro syntax.
-    Inspect the header file to see. */
+    dummy define, just to make this explanation appear. The doxygen parser gets confused
+    about the (nested) syntax of the true macro. Inspect the header file to see. */
 #define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME_DOXYGEN_TAG
 RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
 
