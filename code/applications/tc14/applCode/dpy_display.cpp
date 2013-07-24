@@ -341,7 +341,7 @@ void dpy_display_t::printCpuLoad(uint8_t cpuLoad)
  *   @see void dpy_display_t::releaseMutex(void)
  */
 
-inline bool dpy_display_t::acquireMutex()
+inline boolean_t dpy_display_t::acquireMutex()
 {
     uint16_t gotEvtVec = rtos_waitForEvent( EVT_MUTEX_LCD | RTOS_EVT_DELAY_TIMER
                                           , /* all */ false
@@ -360,14 +360,14 @@ inline bool dpy_display_t::acquireMutex()
 
 /**
  * Release the display; return the mutex to the \b RTuinOS system that had been acquired
- * shortly before by a successful call of bool dpy_display_t::acquireMutex(void).\n
- *   @see bool dpy_display_t::acquireMutex(void)
+ * shortly before by a successful call of boolean_t dpy_display_t::acquireMutex(void).\n
+ *   @see boolean_t dpy_display_t::acquireMutex(void)
  */
 
 inline void dpy_display_t::releaseMutex()
 {
     /* Release the mutex. */
-    rtos_setEvent(EVT_MUTEX_LCD);
+    rtos_sendEvent(EVT_MUTEX_LCD);
 
 } /* End of dpy_display_t::releaseMutex */
 

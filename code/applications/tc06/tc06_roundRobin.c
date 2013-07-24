@@ -247,7 +247,7 @@ static void task01_class00(uint16_t initCondition)
         /* Release high priority task for a single cycle. It should continue operation
            before we leave the suspend function here. Check it. */
         u = noLoopsTask00_C1;
-        rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_00);
+        rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_00);
         ASSERT(u+1 == noLoopsTask00_C1)
         ASSERT(noLoopsTask01_C0 == noLoopsTask00_C1)
         
@@ -375,11 +375,11 @@ void loop(void)
     uint8_t idxStack;
     
     /* An event can be posted even if nobody is listening for it. */
-    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_04);
+    rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_04);
 
     /* This event will release task 0 of class 0. However we do not get here again fast
        enough to avoid all timeouts in that task. */
-    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
+    rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_03);
 
     Serial.println("RTuinOS is idle");
     Serial.print("noLoopsTask00_C0: "); Serial.println(noLoopsTask00_C0);

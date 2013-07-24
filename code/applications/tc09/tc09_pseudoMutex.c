@@ -98,7 +98,7 @@ static uint8_t _stackT0_C0[STACK_SIZE]
              , _stackT0_C1[STACK_SIZE];
 
 /** The mutex, which organizes the access to the global object Serial. */   
-static volatile bool _mutex = false;
+static volatile boolean_t _mutex = false;
 
 
 /*
@@ -148,7 +148,7 @@ static void getResource()
        priority, which gets the resource. */
     do
     {
-        bool copyOfMutex;
+        boolean_t copyOfMutex;
         
         /* The test and set operation needs to be atomic. */
         cli();
@@ -189,7 +189,7 @@ static void releaseResource()
     _mutex = false;
     
     /* Signal the availability of the resource to possibly waiting tasks. */
-    rtos_setEvent(EVT_RESOURCE_IS_AVAILABLE);
+    rtos_sendEvent(EVT_RESOURCE_IS_AVAILABLE);
     
 } /* End of releaseResource */
 
@@ -276,9 +276,9 @@ static void taskEntryC0(uint16_t initCondition)
        of the remaining tasks. Therefore, we chain the initial activation: one task
        initiates the next one. */
     if(idxTask == 0)
-        rtos_setEvent(EVT_START_TASK_T1_C0);
+        rtos_sendEvent(EVT_START_TASK_T1_C0);
     else if(idxTask == 1)
-        rtos_setEvent(EVT_START_TASK_T2_C0);
+        rtos_sendEvent(EVT_START_TASK_T2_C0);
     
     /* Here, the actual task code begins. The next statement will never return. */
     taskC0(idxTask);
@@ -424,11 +424,11 @@ void setup(void)
 void loop(void)
 {
     /* Idle is used only to start the first round robin task. */
-    rtos_setEvent(EVT_START_TASK_T0_C0);
+    rtos_sendEvent(EVT_START_TASK_T0_C0);
 
     /* Since we have a pseudo mutex only, which is implemented by polling (try and suspend
        until next try) there are minor gaps in time where all tasks are suspended. To not
-       run into the setEvent again, we place an empty loop here. Having a true mutex
+       run into the sendEvent again, we place an empty loop here. Having a true mutex
        implementation, we would place an ASSERT(false) instead. */
     while(true)
         ;

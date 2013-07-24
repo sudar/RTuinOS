@@ -64,7 +64,7 @@ public:
     void printCpuLoad(uint8_t cpuLoad);
 
 private:
-    inline bool acquireMutex(void);
+    inline boolean_t acquireMutex(void);
     inline void releaseMutex(void);
 
 }; /* End of class dpy_display_t */
