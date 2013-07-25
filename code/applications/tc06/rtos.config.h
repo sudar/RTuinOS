@@ -268,7 +268,7 @@
     work around as the doxygen parser gets confused about the true (nested) macro syntax.
     Inspect the header file to see. */
 #define RTOS_DEFINE_TYPE_OF_SYSTEM_TIME_DOXYGEN_TAG
-RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(8)
+RTOS_DEFINE_TYPE_OF_SYSTEM_TIME(16)
 
 
 /** Normally, when the overrun of a regular task has been recognized the task is made due

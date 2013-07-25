@@ -41,6 +41,7 @@ RTOS_FEATURE_OFF and the meaning/why should be documented. Obviously, the
 test case doesn't do what it is expected to. If we change the feature, the
 anticipated timing changes and an assertion fires. Make this a clearer,
 better documented test case.
+  Done in r404
 
 tc12: The reported timing looks like a temporary task overrun for the
 producer (while it waits for the Serial mutex from the consumer, which
