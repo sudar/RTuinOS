@@ -204,7 +204,7 @@ static void taskT0C0_producer()
     tiLastCall_ = tiNow;
     
     /* We need to release the mutex, so that the consumer can report its activities. */
-    rtos_setEvent(EVT_MUTEX_SERIAL);
+    rtos_sendEvent(EVT_MUTEX_SERIAL);
 
 } /* End of taskT0C0_producer */
 
@@ -326,7 +326,7 @@ static void taskT0C1_consumer(uint16_t eventToWaitForVec)
         
         /* Now we have to return the mutex related to the global, shared Serial object.
            Getting this mutex is one of the conditions to awake the data producer. */
-        rtos_setEvent(EVT_MUTEX_SERIAL);
+        rtos_sendEvent(EVT_MUTEX_SERIAL);
     }
 
     /* A task function must never return; this would cause a reset. */
@@ -405,7 +405,7 @@ void loop(void)
     /* In each loop - which is about once a second because of the behavior of
        gsl_getSystemLoad - we trigger the consumer task. It should then report all data
        samples produced meanwhile at once. */
-    rtos_setEvent(EVT_TRIGGER_CONSUMER_TASK);
+    rtos_sendEvent(EVT_TRIGGER_CONSUMER_TASK);
     
 } /* End of loop */
 

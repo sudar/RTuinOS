@@ -25,6 +25,7 @@
  */
 
 #include <Arduino.h>
+#include "rtos.h"
 
 
 /*
@@ -111,7 +112,7 @@ extern volatile uint16_t adc_inputVoltage;
 void adc_initAfterPowerUp();
 
 /** Select the next or previous input for the next conversion. */
-void adc_nextInput(bool up);
+void adc_nextInput(boolean_t up);
 
 /** Main function of ADC task. Process next conversion result. */
 void adc_onConversionComplete();

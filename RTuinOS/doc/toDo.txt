@@ -1,36 +1,13 @@
 Test case for AND combination of events but a timeout at the same time.
 Has been implemented in r233 but never been tested at that time.
 
-Implement get/setRoundRobin?
-  Abgelehnt. Unwichtig, trivial und verstellt nur den ansonsten schlanken
-und schönen Code.
-
-EnterLeaveCriticalSection: Try without cli/sei but only TIMER2). Use tc07
-  Done: cli/sei is essential, test case fails otherwise
-
 Manual: 3.8, API, enter/leaveCS: sei/cli will disable delay, but not
 delayMicroseconds. e/lCS would be okay with both
 
 Mention the system load estimation in the manual
   Mentioned in the readMe of release 2.
 
-Mention false task overrun recognitions in manual. The C comments
-reference it but it doesn't contain this issue yet. Furthermore, the API
-documentation of suspendTillTime and waitForEvent should mention this as a
-true problem appears if tiCycle is > 127: False task overrun recognitions
-lead to too soon activation. Another location where to place a hint is the
-type-of-timer discussion in config.h
-  Done in manual, section 4.3.3
-  Limit 127 corrected in rtos.config.h, explanations given
-  Done
-
 R2:
-
-rtos_setEvent could become sendEvent, the old name is retained by macro.
-(sendEvent could fit better to mutex and semaphore.) 
-  Done in
-file:///M:/SVNMainRepository/Arduino/RTuinOS/branches/RTuinOS_refactoringPostEvents,
-r399.
 
 Manual: Serial.print blocks if buffer full. If a task writes more bytes
 than space in the buffer it blocks in CPU wait cycles and the CPU load is
@@ -38,16 +15,6 @@ directly determinated by the Baud rate. If a regular task writes less than
 fits into the buffer it isn't blocked at all as the buffer will probably
 be flushed until its next activation. Now the CPU is independent of the
 Baud rate
-
-Consider to place gsl into the RTOS directory. It's proven to be valid and
-useful meanwhile. Adapt doxyfile accordingly
-  Done.
-
-Take relevant samples into the doxygen manual
-  Done.
-
-Makefile: -DARDUINO=101 should surely become 105, double-check
-  Done.
 
 Compile C files with avr-gcc. Already known issues: bool is undefined and
 _pActiveTask can't be dynamically initialized to be _pIdleTask.

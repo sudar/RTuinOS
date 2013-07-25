@@ -220,7 +220,7 @@ static void taskT0_C1(uint16_t initCondition)
            application interrupt sources must be inhibited/released. The customization is
            done in the application owned RTuinOS configuration file. */
         rtos_enterCriticalSection();
-        bool trigger = _cntLoopsT0_C2 >= lastTrigger;
+        boolean_t trigger = _cntLoopsT0_C2 >= lastTrigger;
         rtos_leaveCriticalSection();
 
         if(trigger)
@@ -240,7 +240,7 @@ static void taskT0_C1(uint16_t initCondition)
                 
             /* TRigger the other task. As it has the lower priority, it's actually not
                activated before we suspend a little bit later. */
-            rtos_setEvent(EVT_START_FLASH_SEQUENCE);
+            rtos_sendEvent(EVT_START_FLASH_SEQUENCE);
             
             /* Set next trigger point. If we are too slow, it may run away. */
             lastTrigger += TRIGGER_DISTANCE;

@@ -560,7 +560,7 @@ void loop()
 #endif
 
     /* Trigger the follower task, which is capable to safely display the results. */
-    rtos_setEvent(EVT_TRIGGER_IDLE_FOLLOWER_TASK);
+    rtos_sendEvent(EVT_TRIGGER_IDLE_FOLLOWER_TASK);
 
 } /* End of loop */
 
