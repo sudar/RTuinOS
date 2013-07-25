@@ -149,7 +149,7 @@ static RTOS_TRUE_FCT void getResource()
 static void releaseResource()
 {
     /* Signal the availability of the resource to possibly waiting tasks. */
-    rtos_setEvent(EVT_MUTEX_OWNING_RESOURCE);
+    rtos_sendEvent(EVT_MUTEX_OWNING_RESOURCE);
     
 } /* End of releaseResource */
 
@@ -244,9 +244,9 @@ static void taskEntryC0(uint16_t initCondition)
        of the remaining tasks. Therefore, we chain the initial activation: one task
        initiates the next one. */
     if(idxTask == 0)
-        rtos_setEvent(EVT_START_TASK_T1_C0);
+        rtos_sendEvent(EVT_START_TASK_T1_C0);
     else if(idxTask == 1)
-        rtos_setEvent(EVT_START_TASK_T2_C0);
+        rtos_sendEvent(EVT_START_TASK_T2_C0);
     
     /* Here, the actual task code begins. The next statement will never return. */
     taskC0(idxTask);
@@ -396,11 +396,11 @@ void setup(void)
 void loop(void)
 {
     /* Idle is used only to start the first round robin task. */
-    rtos_setEvent(EVT_START_TASK_T0_C0);
+    rtos_sendEvent(EVT_START_TASK_T0_C0);
 
     /* In test case tc09 of RTuinOS we had written: "Since we have a pseudo mutex only,
        which is implemented by polling (try and suspend until next try) there are minor
-       gaps in time where all tasks are suspended. To not run into the setEvent again, we
+       gaps in time where all tasks are suspended. To not run into the sendEvent again, we
        place an empty loop here. Having a true mutex implementation, we would place an
        ASSERT(false) instead."
          Now we have re-implemented the test case using a true mutex but the statement

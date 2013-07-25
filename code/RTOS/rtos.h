@@ -23,7 +23,10 @@
 /*
  * Include files
  */
+ 
+#include "Arduino.h"
 #include "rtos.config.h"
+
 
 /*
  * Defines
@@ -65,7 +68,7 @@
    resume condition when suspending a task.
      Conditional definition: If the application defines an interrupt which triggers an
    event, the same event gets a deviating name. */
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 0
 # define RTOS_EVT_SEMAPHORE_00      (0x0001u<<0)
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 0
@@ -74,7 +77,7 @@
 # define RTOS_EVT_EVENT_00          (0x0001u<<0)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 1
 # define RTOS_EVT_SEMAPHORE_01      (0x0001u<<1)
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 1
@@ -83,7 +86,7 @@
 # define RTOS_EVT_EVENT_01          (0x0001u<<1)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 2
 # define RTOS_EVT_SEMAPHORE_02      (0x0001u<<2)
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 2
@@ -92,7 +95,7 @@
 # define RTOS_EVT_EVENT_02          (0x0001u<<2)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 3
 # define RTOS_EVT_SEMAPHORE_03      (0x0001u<<3)
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 3
@@ -101,7 +104,7 @@
 # define RTOS_EVT_EVENT_03          (0x0001u<<3)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 4
 # define RTOS_EVT_SEMAPHORE_04      (0x0001u<<4)
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 4
@@ -110,7 +113,7 @@
 # define RTOS_EVT_EVENT_04          (0x0001u<<4)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 5
 # define RTOS_EVT_SEMAPHORE_05      (0x0001u<<5)
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 5
@@ -119,7 +122,7 @@
 # define RTOS_EVT_EVENT_05          (0x0001u<<5)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 6
 # define RTOS_EVT_SEMAPHORE_06      (0x0001u<<6)
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 6
@@ -128,7 +131,7 @@
 # define RTOS_EVT_EVENT_06          (0x0001u<<6)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 7
 # define RTOS_EVT_SEMAPHORE_07      (0x0001u<<7)
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 7
@@ -137,7 +140,7 @@
 # define RTOS_EVT_EVENT_07          (0x0001u<<7)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS > 8
 # error No more than eight semaphores are permitted
 #elif RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 8
@@ -146,21 +149,21 @@
 # define RTOS_EVT_EVENT_08          (0x0001u<<8)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 9
 # define RTOS_EVT_MUTEX_09          (0x0001u<<9)
 #else
 # define RTOS_EVT_EVENT_09          (0x0001u<<9)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 10
 # define RTOS_EVT_MUTEX_10          (0x0001u<<10)
 #else
 # define RTOS_EVT_EVENT_10          (0x0001u<<10)
 #endif
 
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 #if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 11
 # define RTOS_EVT_MUTEX_11          (0x0001u<<11)
 #else
@@ -184,7 +187,7 @@
     macros etc. must not be used. */
 # define RTOS_EVT_ISR_USER_00       (0x0001<<12)
 #else
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 # define RTOS_EVT_EVENT_12          (0x0001u<<12)
 #endif
 
@@ -196,7 +199,7 @@
     macros etc. must not be used. */
 # define RTOS_EVT_ISR_USER_01       (0x0001<<13)
 #else
-/** General purpose event, posted explicitly by rtos_setEvent. */
+/** General purpose event, posted explicitly by rtos_sendEvent. */
 # define RTOS_EVT_EVENT_13          (0x0001u<<13)
 #endif
 
@@ -305,10 +308,30 @@
                      )
 
 
+/**
+ * Alias of function void rtos_sendEvent(uint16_t). Post a set of events to the suspended
+ * tasks. Suspend the current task if the events resume another task of higher priority.
+ *   @param
+ * The set of events to be posted.
+ *   @remark
+ * This macro is deprecated. Use \a rtos_sendEvent instead. 
+ *   @remark
+ * This macro exists for backward compatibility only: The function \a rtos_sendEvent had
+ * been named \a rtos_setEvent in the first release of RTuinOS, version 0.9.
+ *   @see void rtos_sendEvent(uint16_t)
+ */
+#define /* void */ rtos_setEvent(/* uint16_t */ eventVec) rtos_sendEvent(eventVec)
+
 
 /*
  * Global type definitions
  */
+
+/** C++ knows bool, Arduino defines boolean but the type name, which is consistent with the
+    other basic data types used in the AVR environment, is missing. We define Booleans here
+    according to uint8_t, uint16_t, etc. */
+typedef boolean boolean_t;
+
 
 /** The type of any task.\n
       The function is of type void; it must never return.\n
@@ -353,7 +376,7 @@ void rtos_initializeTask( uint8_t idxTask
                         , uint8_t * const pStackArea
                         , uint16_t stackSize
                         , uint16_t startEventMask
-                        , bool startByAllEvents
+                        , boolean_t startByAllEvents
                         , uintTime_t startTimeout
                         );
 
@@ -385,15 +408,15 @@ extern void rtos_enableIRQUser01(void);
      This function is not called by the application (but only from main()). */
 void rtos_initRTOS(void);
 
-/* Post a set of events to all suspended tasks. Suspend the current task if the events
+/* Post a set of events to the suspended tasks. Suspend the current task if the events
    resume another task of higher priority. */
-void rtos_setEvent(uint16_t eventVec);
+void rtos_sendEvent(uint16_t eventVec);
 
 /* Suspend task until a combination of events appears or a timeout elapses. */
-uint16_t rtos_waitForEvent(uint16_t eventMask, bool all, uintTime_t timeout);
+uint16_t rtos_waitForEvent(uint16_t eventMask, boolean_t all, uintTime_t timeout);
 
 /* How often could a real time task not be reactivated timely? */
-uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, bool doReset);
+uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, boolean_t doReset);
 
 /* How many bytes of the stack of a task are still unsed? */
 uint16_t rtos_getStackReserve(uint8_t idxTask);

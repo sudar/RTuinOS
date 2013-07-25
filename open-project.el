@@ -97,7 +97,7 @@ C and M files in the scope of this project."
                   (concat etags-command (subst-char-in-string ?/ ?\\ operand-list))
                   operand-list ""
             )
-            (message exec-command)
+            (message "%s" exec-command)
             (shell-command exec-command)
           )
         ) ; End (if Command line complete for execution?)

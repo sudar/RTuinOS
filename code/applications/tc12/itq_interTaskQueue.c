@@ -116,11 +116,11 @@ void itq_writeElem(int16_t queuedElem)
        meaning of the semaphore is not to precisely indicate the number of queued elements
        but to give a guarantee that there's at least one element in case I could acquire
        the semaphore.
-         By the way, incrementing the semaphore by a call of rtos_setEvent implicitly ends a
-       critical section. We could implement write and increment as atomic by simply
+         By the way, incrementing the semaphore by a call of rtos_sendEvent implicitly ends
+       a critical section. We could implement write and increment as atomic by simply
        omitting the call of rtos_leaveCriticalSection - this would however make the code
        less readable and is useless. */
-    rtos_setEvent(EVT_SEMAPHORE_ELEM_IN_QUEUE);
+    rtos_sendEvent(EVT_SEMAPHORE_ELEM_IN_QUEUE);
     
 } /* End of itq_writeElem */
 

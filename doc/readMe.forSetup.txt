@@ -66,6 +66,10 @@ extended. An event can now be of kind ordinary (broadcasted event, as
 before), mutex or semaphore. Task resume conditions can continue to
 combine any events regardless of the kind.
 
+The API function rtos_setEvent has been renamed to the more adequate
+rtos_sendEvent. The old name is deprecated but still operational as a
+macro maps it onto the new name.
+
 More assertions have been placed in the kernel for debug compilation,
 which anticipate and notify many typical application errors, like an idle
 task, which tries to suspend.

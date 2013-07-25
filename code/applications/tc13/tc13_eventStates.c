@@ -194,7 +194,7 @@ static void tT0(uint16_t initCondition)
         
         /* Step 4: This task releases the aquired sync objects M0 and S0. */
         reqEvtVec = MTX_0 | SEM_0;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
@@ -202,7 +202,7 @@ static void tT0(uint16_t initCondition)
         
         /* Step 5: This task sends some ordinary broadcasted events. */
         reqEvtVec = EVT_1 | EVT_0;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
@@ -210,7 +210,7 @@ static void tT0(uint16_t initCondition)
         
         /* Step 6: This task releases the aquired sync object M1. */
         reqEvtVec = MTX_1;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
@@ -218,7 +218,7 @@ static void tT0(uint16_t initCondition)
         
         /* Step 8: This task broadcasts event E1. */
         reqEvtVec = EVT_1;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
@@ -226,7 +226,7 @@ static void tT0(uint16_t initCondition)
         
         /* Step 9: This task broadcasts events E1 and E0. */
         reqEvtVec = EVT_1 | EVT_0;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
@@ -279,7 +279,7 @@ static void tT0(uint16_t initCondition)
 
         /* Step 16: This task releases the aquired sync objects M1, S1 and S0. */
         reqEvtVec = MTX_1 | SEM_1 | SEM_0;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
@@ -287,7 +287,7 @@ static void tT0(uint16_t initCondition)
 
         /* Step 17: This task releases the aquired sync object S1. */
         reqEvtVec = SEM_1;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T0, /* all */ false, /* timeout */ 0);
@@ -295,7 +295,7 @@ static void tT0(uint16_t initCondition)
 
         /* Step 18: This task releases the aquired sync objects S1. */
         reqEvtVec = SEM_1;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* This task has completed the test sequence. */
         ++ _noTestCyclesT0;
@@ -345,7 +345,7 @@ static void tT1(uint16_t initCondition)
         /* Step 14: This task releases the aquired sync object M0 and the not acquired S1
            (meaning: it enlarges the pool managed by this semaphore). */
         reqEvtVec = MTX_0 | SEM_1;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T1, /* all */ false, /* timeout */ 0);
@@ -354,7 +354,7 @@ static void tT1(uint16_t initCondition)
         /* Step 15: This task releases the aquired sync object S0 and sends the ordinary
            event E1 (which is nobody listening for). */
         reqEvtVec = EVT_1 | SEM_0;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* This task has completed the test sequence. */ 
         ++ _noTestCyclesT1;
@@ -418,7 +418,7 @@ static void tT2(uint16_t initCondition)
 
         /* Step 10: This task releases all the sync objects. */
         reqEvtVec = MTX_1 | MTX_0 | SEM_1 | SEM_0;
-        rtos_setEvent(reqEvtVec);
+        rtos_sendEvent(reqEvtVec);
         
         /* Wait for next step. Check if we are still in sync with the test sequence. */
         rtos_waitForEvent( /* eventMask */ EVT_TRIGGER_T2, /* all */ false, /* timeout */ 0);
@@ -473,7 +473,7 @@ static void tTControl(uint16_t initCondition)
         /* Trigger one step of the next task. */
         uint16_t evtTriggerTask = EVT_TRIGGER_TASK << nextTaskAry[_step];
         ++ _step;
-        rtos_setEvent(evtTriggerTask);
+        rtos_sendEvent(evtTriggerTask);
         
         /* The test is cyclically repeated. */
         if(_step >= sizeof(nextTaskAry)/sizeof(nextTaskAry[0]))
