@@ -55,10 +55,11 @@ and to the repeated execution of function \ident{loop}. We say,
 
 A characteristic of \rtos{} is that the behavior of a task is not fully
 predetermined at compile time. \rtos{} supports regular, time-controlled
-tasks as well as purely event controlled ones. Tasks can be preemptive or
-behave cooperatively. Task scheduling can be done using time slices and a
-round robin pattern. Moreover, many of these modes can be mixed. A task is
-not per se regular, its implementing code decides what happens and this
+tasks as well as purely event controlled ones, where events can be
+broadcasted or behave as mutex or semaphore. Tasks can be preemptive or
+interact cooperatively. Task scheduling can be done using time slices and
+a round robin pattern. Moreover, many of these modes can be mixed. A task
+is not per se regular, its implementing code decides what happens and this
 can be decided context or situation dependent. This flexibility is
 achieved by the basic idea of having an event controlled scheduler, where
 typical RTOS use cases are supported by providing according events, e.g.
