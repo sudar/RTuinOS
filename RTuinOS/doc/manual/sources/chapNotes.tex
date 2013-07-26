@@ -71,7 +71,7 @@ taskProducer()
         ...
 
         /* Signal "data available". */
-        rtos_setEvent(myEvtStartToConsume);
+        rtos_sendEvent(myEvtStartToConsume);
     }
 }
 
@@ -83,7 +83,7 @@ taskConsumer()
         ...
 
         /* Signal termination. */
-        rtos_setEvent(myEvtStartToProduce);
+        rtos_sendEvent(myEvtStartToProduce);
     }
 }
 \end{lstlisting}
@@ -93,7 +93,7 @@ other events. If the consumer had e.g. a higher priority as the producer, it cou
 started in the instance the producer posts the event "data available". When it would post
 the event "start next production cycle", this event would be lost as the producer is not
 yet listening to this event. At this time the producer's program counter still points into
-the middle of its setEvent method - the lower priority task had no chance to reach the call
+the middle of its sendEvent method - the lower priority task had no chance to reach the call
 of \ident{rtos\_waitForEvent} yet.
 
 In practice we often have a loose coupling between consumer and producer. Consuming the

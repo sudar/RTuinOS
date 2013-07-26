@@ -49,10 +49,10 @@
 #define CLOCK_TIC_DENOMINATOR   (25000-(CLOCK_TIC_DENOMINATOR_TRIM_TERM))
  
 /** Trim term for clock: By long term observation a correction has been figured out, which
-    makes the clock significantly more accurate. The term is defined as addend to the
-    denominator #CLOCK_TIC_DENOMINATOR. It is device dependent. Starting point on a new
-    hardware device should be 0. Positive values advance the clock. */
-#define CLOCK_TIC_DENOMINATOR_TRIM_TERM 59
+    makes the clock significantly more accurate. The term is defined as (negative) addend
+    to the denominator #CLOCK_TIC_DENOMINATOR. It is device dependent. Starting point on a
+    new hardware device should be 0. Positive values advance the clock. */
+#define CLOCK_TIC_DENOMINATOR_TRIM_TERM 58
 
 /*
  * Local type definitions
