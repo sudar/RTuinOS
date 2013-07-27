@@ -327,12 +327,6 @@
  * Global type definitions
  */
 
-/** C++ knows bool, Arduino defines boolean but the type name, which is consistent with the
-    other basic data types used in the AVR environment, is missing. We define Booleans here
-    according to uint8_t, uint16_t, etc. */
-typedef boolean boolean_t;
-
-
 /** The type of any task.\n
       The function is of type void; it must never return.\n
       The function takes a single parameter. It is the event vector of the very event
@@ -376,7 +370,7 @@ void rtos_initializeTask( uint8_t idxTask
                         , uint8_t * const pStackArea
                         , uint16_t stackSize
                         , uint16_t startEventMask
-                        , boolean_t startByAllEvents
+                        , boolean startByAllEvents
                         , uintTime_t startTimeout
                         );
 
@@ -413,10 +407,10 @@ void rtos_initRTOS(void);
 void rtos_sendEvent(uint16_t eventVec);
 
 /* Suspend task until a combination of events appears or a timeout elapses. */
-uint16_t rtos_waitForEvent(uint16_t eventMask, boolean_t all, uintTime_t timeout);
+uint16_t rtos_waitForEvent(uint16_t eventMask, boolean all, uintTime_t timeout);
 
 /* How often could a real time task not be reactivated timely? */
-uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, boolean_t doReset);
+uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, boolean doReset);
 
 /* How many bytes of the stack of a task are still unsed? */
 uint16_t rtos_getStackReserve(uint8_t idxTask);

@@ -1,11 +1,13 @@
 Test case for AND combination of events but a timeout at the same time.
 Has been implemented in r233 but never been tested at that time.
+  Done, used and double-checked e.g. in tc15
 
 Manual: 3.8, API, enter/leaveCS: sei/cli will disable delay, but not
 delayMicroseconds. e/lCS would be okay with both
 
 Mention the system load estimation in the manual
   Mentioned in the readMe of release 2.
+  Done in manual also, new section in API chapter, see r405
 
 R2:
 
@@ -36,13 +38,6 @@ RTuinOS not deal with things like these. True RTuinOS application won't
 use stdio; this is just for demonstration, sample code and debugging. The
 trade off is undecided.
 
-tc06: The config setting RTOS_OVERRUN_TASK_IS_IMMEDIATELY_DUE should be
-RTOS_FEATURE_OFF and the meaning/why should be documented. Obviously, the
-test case doesn't do what it is expected to. If we change the feature, the
-anticipated timing changes and an assertion fires. Make this a clearer,
-better documented test case.
-  Done in r404
-
 tc12: The reported timing looks like a temporary task overrun for the
 producer (while it waits for the Serial mutex from the consumer, which
 reports the entire list of queued elements). Task time is alright in mean.
@@ -55,3 +50,4 @@ application interrupt is defined. Use more #if to do.
 New test case: Only semaphores and no 1 is demanded, 0 should be got also:
 Bug detected in trunk, but already fixed in branch
 RTuinOS_refactoringPostEvents.
+  Done, tc15, see r408

@@ -508,8 +508,7 @@ static void tTControl(uint16_t initCondition)
 
 void setup(void)
 {
-    /* Start serial port at high Baud rate (we print a lot) and redirect stdout into
-       Serial. */
+    /* Start serial port and redirect stdout into Serial. */
     init_stdout();
     Serial.begin(9600);
     

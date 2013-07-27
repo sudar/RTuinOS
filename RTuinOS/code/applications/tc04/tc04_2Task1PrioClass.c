@@ -220,7 +220,7 @@ static void task02_class00(uint16_t initCondition)
 void loop(void)
 {
     uint8_t u;    
-    boolean_t ok = true;
+    boolean ok = true;
     
     /* Check stack reserve. */
     for(u=0; u<10; ++u)
