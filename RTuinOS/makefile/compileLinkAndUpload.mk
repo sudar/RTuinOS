@@ -106,6 +106,18 @@ srcDirList := code/RTOS/ code/applications/$(APP)/
 # makefile fragment code/applications/$(APP)/$(APP).mk.
 cFileListExcl :=
 
+# Double-check environment.
+#   The original Arduino code is referenced in the Arduino installation directory. By
+# default the location of this is not known. To run this makefile an environment variable
+# needs to point to the right location. This is checked now.
+ifdef ARDUINO_HOME
+    # Ensure a trailing slash at the end of this externally set variabale.
+	ARDUINO_HOME := $(patsubst %/,%,$(subst \,/,$(ARDUINO_HOME)))/
+else
+    $(error Variable ARDUINO_HOME needs to be set prior to running this makefile. It points \
+to the installation directory of the Arduino environment, where arduino.exe is located)
+endif
+
 # Read support code for different operating systems, Windows and Linux in the first place.
 include $(sharedMakefilePath)operatingSystem.mk
 
@@ -176,19 +188,6 @@ endif
 # Where to place all generated products?
 targetDir := bin/$(APP)/$(CONFIG)/
 coreDir := bin/core/
-
-# Double-check environment.
-#   The original Arduino code is referenced in the Arduino installation directory. By
-# default the location of this is not known. To run this makefile an environment variable
-# needs to point to the right location. This is checked now.
-ifdef ARDUINO_HOME
-    # Ensure a trailing slash at the end of this externally set variabale.
-	ARDUINO_HOME := $(patsubst %/,%,$(subst \,/,$(ARDUINO_HOME)))/
-else
-    $(error Variable ARDUINO_HOME needs to be set prior to running this makefile. It points \
-to the installation directory of the Arduino environment, where arduino.exe is located)
-endif
-
 
 # Ensure existence of target directory.
 .PHONY: makeDir
@@ -380,24 +379,3 @@ clean:
 cleanCore:
 	-$(rm) -r $(coreDir)core.a 2> nul
 	-$(rm) -fr $(coreDir)obj 2> nul
-
-# Quite typical, the GNU tools reside on a system at several locations as they come along
-# with many applications. Hard to locate problems due to arbitrary order of references in
-# the Windows search PATH can easily result. To avoid these problems we reference all tools
-# by absolute path. The path is known as we have the Arduino installation directory.
-make := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/make.exe
-mkdir := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/mkdir.exe
-rmdir := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/rmdir.exe
-cat := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/cat.exe
-echo := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/echo.exe
-rm := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/rm.exe
-gawk := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/gawk.exe
-awk := $(gawk)
-touch := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/touch.exe
-mv := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/mv.exe
-avr-gcc := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-gcc.exe
-avr-g++ := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-g++.exe
-avr-ar := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-ar.exe
-avr-objcopy := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-objcopy.exe
-avr-size := $(ARDUINO_HOME)hardware/tools/avr/bin/avr-size.exe
-avrdude := $(ARDUINO_HOME)hardware/tools/avr/bin/avrdude
