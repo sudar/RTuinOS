@@ -117,7 +117,7 @@ void init_stdout()
 
 /**
  * Write a null terminated string located in the CPU's flash ROM to stdout. End output with
- * writing a newline character.
+ * writing an additional newline character.
  *   @return
  * No failure is recognized and the function always returns the non-negative value 0.
  *   @param string

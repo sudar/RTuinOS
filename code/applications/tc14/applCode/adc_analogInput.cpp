@@ -185,7 +185,7 @@ void adc_initAfterPowerUp()
  * task has the same or a lower priority than this task, the ADC interrupt task.
  */
 
-void adc_nextInput(boolean_t up)
+void adc_nextInput(boolean up)
 {
     /* Select the new input by increment/decrement. 
          Remark: Although implemented here in the ADC module the variable
@@ -248,7 +248,7 @@ void adc_onConversionComplete()
        the LCD shield's button input every first time and the "true", user selected input
        every second time.
          Averaging: Each series accumulates 64 samples. */
-    static boolean_t readButton_ = true;
+    static boolean readButton_ = true;
     static uint16_t accumuatedAdcResult_ = 0;
     static uint8_t noMean_ = ADC_NO_AVERAGED_SAMPLES;
     

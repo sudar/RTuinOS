@@ -98,7 +98,7 @@ static uint8_t _stackT0_C0[STACK_SIZE]
              , _stackT0_C1[STACK_SIZE];
 
 /** The mutex, which organizes the access to the global object Serial. */   
-static volatile boolean_t _mutex = false;
+static volatile boolean _mutex = false;
 
 
 /*
@@ -148,7 +148,7 @@ static void getResource()
        priority, which gets the resource. */
     do
     {
-        boolean_t copyOfMutex;
+        boolean copyOfMutex;
         
         /* The test and set operation needs to be atomic. */
         cli();

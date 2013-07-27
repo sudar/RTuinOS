@@ -119,7 +119,7 @@ void clk_taskRTC()
     sei();
     
     /* Adjust time. */
-    boolean_t doDisplay = deltaTime != 0;
+    boolean doDisplay = deltaTime != 0;
     if(doDisplay)
     {
         /* Reset the second and fraction of a second counters. */

@@ -1,5 +1,5 @@
 /**
- * @file stdout.c
+ * @file tc13/stdout.c
  *   stdout, the character stream used by the printf & co routines from the C standard
  * library, is redirected into the stream Serial. Using printf, Arduino applications can
  * communicate much easier with the console window as possible with the members of Serial
@@ -25,6 +25,7 @@
  */
 /* Module interface
  *   init_stdout
+ *   puts_progmem
  * Local functions
  *   serial_putchar
  */
@@ -110,3 +111,40 @@ void init_stdout()
     fdev_setup_stream (&myStdout, serial_putchar, NULL, _FDEV_SETUP_WRITE);
 
 } /* End of init_stdout */
+
+
+
+
+/**
+ * Write a null terminated string located in the CPU's flash ROM to stdout. End output with
+ * writing a newline character.
+ *   @return
+ * No failure is recognized and the function always returns the non-negative value 0.
+ *   @param string
+ * A pointer into the flash ROM.
+ *   @remark
+ * The function behaves like the function puts from the C library.
+ */
+
+int puts_progmem(const char *string)
+{
+    while(true)
+    {
+        char nextChar = pgm_read_byte_near(string++); 
+        if(nextChar == '\0')
+            break;
+        
+        putchar(nextChar);
+    }
+    
+    putchar('\n');
+
+    /* puts: "On success, a non-negative value is returned. On error, the function returns
+       EOF and sets the error indicator (ferror)." */
+    return 0;
+    
+} /* End of puts_progmem */
+
+
+
+

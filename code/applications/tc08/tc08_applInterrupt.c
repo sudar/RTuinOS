@@ -220,7 +220,7 @@ static void taskT0_C1(uint16_t initCondition)
            application interrupt sources must be inhibited/released. The customization is
            done in the application owned RTuinOS configuration file. */
         rtos_enterCriticalSection();
-        boolean_t trigger = _cntLoopsT0_C2 >= lastTrigger;
+        boolean trigger = _cntLoopsT0_C2 >= lastTrigger;
         rtos_leaveCriticalSection();
 
         if(trigger)

@@ -367,7 +367,7 @@ typedef struct
     uint16_t eventMask;
 
     /** Do we need to wait for the first posted event or for all events? */
-    boolean_t waitForAnyEvent;
+    boolean waitForAnyEvent;
 
     /** All recognized overruns of the timing of this task are recorded in this variable.
         The access to this variable is considered atomic by the implementation, therefore
@@ -388,21 +388,21 @@ typedef struct
  */
 
 RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void);
-static RTOS_TRUE_FCT boolean_t onTimerTic(void);
-static RTOS_TRUE_FCT boolean_t sendEvent(uint16_t eventVec);
+static RTOS_TRUE_FCT boolean onTimerTic(void);
+static RTOS_TRUE_FCT boolean sendEvent(uint16_t eventVec);
 RTOS_NAKED_FCT void rtos_sendEvent(uint16_t eventVec);
 
 #if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
-static RTOS_TRUE_FCT boolean_t waitForEvent( uint16_t eventMask
-                                           , boolean_t all
+static RTOS_TRUE_FCT boolean waitForEvent( uint16_t eventMask
+                                           , boolean all
                                            , uintTime_t timeout
                                            );
 #else
-static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, boolean_t all, uintTime_t timeout);
+static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, boolean all, uintTime_t timeout);
 #endif
 
 RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
-                                         , boolean_t all
+                                         , boolean all
                                          , uintTime_t timeout
                                          );
 
@@ -625,11 +625,11 @@ RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void)
  */
 
 // @todo Optimization: pass pointer to task object instead of recomputation
-static inline boolean_t checkTaskForActivation(uint8_t idxSuspTask)
+static inline boolean checkTaskForActivation(uint8_t idxSuspTask)
 {
     task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
     uint16_t eventVec;
-    boolean_t taskBecomesDue;
+    boolean taskBecomesDue;
 
     /* Check if the task becomes due because of the events posted prior to calling this
        function. The optimally supported case is the more probable OR combination of
@@ -690,7 +690,7 @@ static inline boolean_t checkTaskForActivation(uint8_t idxSuspTask)
  * \a _pActiveTask.
  */
  
-static inline boolean_t lookForActiveTask()
+static inline boolean lookForActiveTask()
 {
     /* The calling interrupt service routine will do a context switch only if we return
        true. Otherwise it'll simply do a "reti" to the interrupted context and continue
@@ -740,12 +740,12 @@ static inline boolean_t lookForActiveTask()
  * updated.
  */
 
-static RTOS_TRUE_FCT boolean_t onTimerTic(void)
+static RTOS_TRUE_FCT boolean onTimerTic(void)
 {
     /* Clock the system time. Cyclic overrun is intended. */
     ++ _time;
 
-    boolean_t activeTaskMayChange = false;
+    boolean activeTaskMayChange = false;
 
     /* Check for all suspended tasks if a timer event has to be posted. */
     uint8_t idxSuspTask = 0;
@@ -877,7 +877,7 @@ static RTOS_TRUE_FCT boolean_t onTimerTic(void)
  *   @remark
  * The cycle time of the system time can be influenced by the typedef of uintTime_t. Find a
  * discussion of pros and cons at the location of this typedef.
- *   @see boolean_t onTimerTic(void)
+ *   @see boolean onTimerTic(void)
  *   @see #rtos_enterCriticalSection
  */
 
@@ -965,12 +965,12 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
  * operate only if all interrupts are disabled.
  */
 
-static RTOS_TRUE_FCT boolean_t sendEvent(uint16_t postedEventVec)
+static RTOS_TRUE_FCT boolean sendEvent(uint16_t postedEventVec)
 {
     /* Avoid inlining under all circumstances. See attributes also. */
     asm("");
 
-    boolean_t activeTaskMayChange = false;
+    boolean activeTaskMayChange = false;
     
     /* The timer events must not be set manually. */
     ASSERT((postedEventVec & MASK_EVT_IS_TIMER) == 0);
@@ -1240,7 +1240,7 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
  * A bit vector of posted events. Known events are defined in rtos.h. The timer events
  * RTOS_EVT_ABSOLUTE_TIMER and RTOS_EVT_DELAY_TIMER cannot be posted.
  *   @see
- * uint16_t rtos_waitForEvent(uint16_t, boolean_t, uintTime_t)
+ * uint16_t rtos_waitForEvent(uint16_t, boolean, uintTime_t)
  *   @remark
  * It is absolutely essential that this routine is implemented as naked and noinline. See
  * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
@@ -1323,7 +1323,7 @@ RTOS_NAKED_FCT void rtos_sendEvent(uint16_t eventVec)
  *   @param timeout
  * See function \a rtos_waitForEvent for details.
  *   @see
- * void rtos_waitForEvent(uint16_t, boolean_t, uintTime_t)
+ * void rtos_waitForEvent(uint16_t, boolean, uintTime_t)
  *   @remark
  * For performance reasons this function needs to be inlined. A macro would be an
  * alternative.
@@ -1331,12 +1331,12 @@ RTOS_NAKED_FCT void rtos_sendEvent(uint16_t eventVec)
 
 static inline void storeResumeCondition( task_t * const pT
                                        , uint16_t eventMask
-                                       , boolean_t all
+                                       , boolean all
                                        , uintTime_t timeout
                                        )
 {
     /* Check event condition: It must not be empty. The two timers can't be used at the
-       same time (which is a rather harmless application designe error) and at least one
+       same time (which is a rather harmless application design error) and at least one
        other event needs to be required for a resume in case of the AND condition.
          The latter bad situation leads to a crash. If all is set then RTuinOS interprets
        the empty event mask as the always fulfilled resume condition. The task became due
@@ -1411,12 +1411,12 @@ static inline void storeResumeCondition( task_t * const pT
  *   @param all
  * See function \a rtos_waitForEvent for details.
  *   @see
- * void rtos_waitForEvent(uint16_t, boolean_t, uintTime_t)
+ * void rtos_waitForEvent(uint16_t, boolean, uintTime_t)
  *   @remark
  * This function is inlined for performance reasons.
  */
 
-static inline boolean_t acquireFreeSyncObjs(uint16_t eventMask, boolean_t all)
+static inline boolean acquireFreeSyncObjs(uint16_t eventMask, boolean all)
 {
     ASSERT(_pActiveTask->postedEventVec == 0);
 
@@ -1494,19 +1494,19 @@ static inline boolean_t acquireFreeSyncObjs(uint16_t eventMask, boolean_t all)
  *   @param timeout
  * See software interrupt \a rtos_waitForEvent.
  *   @see
- * uint16_t rtos_waitForEvent(uint16_t, boolean_t, uintTime_t)
+ * uint16_t rtos_waitForEvent(uint16_t, boolean, uintTime_t)
  *   @remark
  * This function and particularly passing the return codes via a global variable will
  * operate only if all interrupts are disabled.
  */
 
 #if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON  ||  RTOS_USE_MUTEX == RTOS_FEATURE_ON
-static RTOS_TRUE_FCT boolean_t waitForEvent( uint16_t eventMask
-                                           , boolean_t all
+static RTOS_TRUE_FCT boolean waitForEvent( uint16_t eventMask
+                                           , boolean all
                                            , uintTime_t timeout
                                            )
 #else
-static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, boolean_t all, uintTime_t timeout)
+static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, boolean all, uintTime_t timeout)
 #endif
 
 {
@@ -1663,7 +1663,7 @@ static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, boolean_t all, uintTi
 #endif
 
 RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
-                                         , boolean_t all
+                                         , boolean all
                                          , uintTime_t timeout
                                          )
 {
@@ -1755,7 +1755,7 @@ RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
  * void rtos_initializeTask()
  */
 
-uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, boolean_t doReset)
+uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, boolean doReset)
 {
     if(doReset)
     {
@@ -1898,7 +1898,7 @@ uint16_t rtos_getStackReserve(uint8_t idxTask)
  * the task will not be activated by a time condition. Do not set both timer events at
  * once! See rtos_waitForEvent for details.
  *   @see void rtos_initRTOS(void)
- *   @see uint16_t rtos_waitForEvent(uint16_t, boolean_t, uintTime_t)
+ *   @see uint16_t rtos_waitForEvent(uint16_t, boolean, uintTime_t)
  *   @remark
  * The restriction that the initial resume condition must not comprise the request for mutex
  * or semaphore kind of events has been made just for simplicity. No additional code is
@@ -1919,7 +1919,7 @@ void rtos_initializeTask( uint8_t idxTask
                         , uint8_t * const pStackArea
                         , uint16_t stackSize
                         , uint16_t startEventMask
-                        , boolean_t startByAllEvents
+                        , boolean startByAllEvents
                         , uintTime_t startTimeout
                         )
 {

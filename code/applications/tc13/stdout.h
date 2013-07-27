@@ -1,7 +1,7 @@
 #ifndef STDOUT_INCLUDED
 #define STDOUT_INCLUDED
 /**
- * @file stdout.h
+ * @file tc13/stdout.h
  * Definition of global interface of module stdout.c
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
@@ -45,6 +45,6 @@
  */
 
 void init_stdout();
-
+int puts_progmem(const char *string);
 
 #endif  /* STDOUT_INCLUDED */
