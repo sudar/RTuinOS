@@ -1,32 +1,35 @@
 /**
  * @file tc12_queue.c
  *   Test case 12 of RTuinOS. Two tasks implement a producer-consumer system. The producer
- * computes samples of the sine function and files them in a queue. The second task,
- * which is of higher priority, waits for queued data and prints the values to the terminal
- * output.\n
- *   Such an architecture leads to a simple pattern. The producer puts one sample into
- * the queue. The consumer gets immediately awaken as he has the higher priority. He
+ * computes samples of the sine function and files them in a queue. The second task, which
+ * is of higher priority, waits for queued data and prints the values to the terminal
+ * output. How to build queues on semaphores for safe and polling-free inter-task
+ * communication is demonstrated by this code sample.\n
+ *   Such an architecture basically leads to a simple pattern. The producer puts one sample
+ * into the queue. The consumer gets immediately awaken as he has the higher priority. He
  * consumes the sample and goes sleeping; control returns to the consumer.\n
  *   To make this pattern somewhat more complex and to demonstrate the capability of
  * combining wait-for-event conditions to a more complex resume condition we have defined a
  * second phase of processing. After a predetermined number of the simple producer-consumer
  * cycles, the consumer extends its resume condition: It now waits for the semaphore event,
- * which continues to notify data-queued events AND for an other, ordinary event. This
- * event is broadcasted by the idle task after each completion of a CPU load estimation.
- * This means a cycle of about 1 second. The consumer is triggered by this event and
- * receives all meanwhile queued elements en block.
+ * which continues to notify data-queued events and for an other, ordinary event. This
+ * event is broadcasted asynchronously by the idle task. The consumer is triggered by this
+ * event and reads all meanwhile queued elements en block.\n
+ *   The pattern has been made even more complex by introducing a mutex for shared,
+ * alternating access to the console output: Both tasks write their progress messages into
+ * Serial. Caution, this is not an example of proper code design but just to make it more
+ * complex and a better test case. The mutual exclusion from the serial output degrades the
+ * accurate timing of the basically regular consumer task.
  *   @remark: This application produces a lot of screen output and requires a terminal Baud
  * rate higher then the standard setting. It'll produce a lot of trash in the Arduino
- * console window if you do not switch the Baud rate in Arduino's Serial Monitor. See
- * setup() for more.
+ * console window if you do not switch the Baud rate in Arduino's Serial Monitor to 115200
+ * Baud. See setup() for more.
  *   @remark The output of the sine generator is printed with the printf command applying
  * its floating point formatting characters. This requires that the code is linked against
  * a special library, which supports the printf floating point features (and which
  * increases the code size by about 2k). If you see question marks instead of figures you
- * linked against the standard library. Consider to rebuild the application using switch \a
- * IO_FLOAT_LIB=1 on the command line of make. Type make help for more.
- *   @remark: The idle task must not use the terminal as it can't use the suspend command to
- * acquire the related mutex.
+ * linked against the standard library. This sample makes use of the makefile "callback" in
+ * order to let the right library be linked. Please refer to tc12.mk for details.
  *
  * Copyright (C) 2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -71,10 +74,6 @@
  * Defines
  */
  
-/** Pin 13 has an LED connected on most Arduino boards. */
-#define LED 13
- 
-
 /** Common stack size of tasks. */
 #define STACK_SIZE   256
  
@@ -134,31 +133,6 @@ uintSemaphore_t rtos_semaphoreAry[RTOS_NO_SEMAPHORE_EVENTS] = {0};
  * Function implementation
  */
 
-/**
- * Trivial routine that flashes the LED a number of times to give simple feedback. The
- * routine is blocking.
- *   @param noFlashes
- * The number of times the LED is lit.
- */
- 
-static void blink(uint8_t noFlashes)
-{
-#define TI_FLASH 150
-
-    while(noFlashes-- > 0)
-    {
-        digitalWrite(LED, HIGH);  /* Turn the LED on. (HIGH is the voltage level.) */
-        delay(TI_FLASH);          /* The flash time. */
-        digitalWrite(LED, LOW);   /* Turn the LED off by making the voltage LOW. */
-        delay(TI_FLASH);          /* Time between flashes. */
-    }                              
-    delay(1000-TI_FLASH);         /* Wait for a second after the last flash - this command
-                                     could easily be invoked immediately again and the
-                                     bursts need to be separated. */
-#undef TI_FLASH
-} /* End of blink */
-
-
 
 /**
  * The function code of the producer task. This function code is regularly called. It
@@ -167,6 +141,8 @@ static void blink(uint8_t noFlashes)
 
 static void taskT0C0_producer()
 {
+    uint32_t tiNow = millis();
+    
     static uint32_t cnt_ = 0
                   , tiLastCall_ = 0;
                   
@@ -185,8 +161,8 @@ static void taskT0C0_producer()
     ASSERT(gotEvents == EVT_MUTEX_SERIAL);
 
     /* Do some reporting. We own the mutex. */
-    uint32_t tiNow = millis();
-    printf("Producer:\n  Time: %3lu\n  CPU load: %3u%%\n", tiNow-tiLastCall_, (_cpuLoad+1)/2);
+    printf("Producer:\n  Time: %3lu\n  CPU load: %5.1f%%\n", tiNow-tiLastCall_, 0.5*_cpuLoad);
+    tiLastCall_ = tiNow;
     
     /* Produce data. */
     integerSineZ_step();
@@ -201,7 +177,6 @@ static void taskT0C0_producer()
     
     /* Do some more reporting after task switch hence and force. We still own the mutex. */
     printf("  Queued data sample %8lu = %.6f\n", cnt_++, nextSampleSine/32768.0);
-    tiLastCall_ = tiNow;
     
     /* We need to release the mutex, so that the consumer can report its activities. */
     rtos_sendEvent(EVT_MUTEX_SERIAL);
@@ -231,8 +206,15 @@ static void tT0C0(uint16_t initCondition)
     {
         taskT0C0_producer();       
         
-        /* Any task may query the task overrun counter and this task is known to be
-           regular. So we double-check the counter. */
+        /* Any task may query the task overrun counter and this task is intended to be
+           regular. So we can double-check the counter.
+             Remark: Both tasks request and wait for the mutex, which synchronizes the
+           access to the serial communication channel. The consumer task is awaken by the
+           idle task at arbitrary times; if this happens shortly before this task, the
+           producer, becomes due, it'll not become active at the expected time. The
+           consumer has the higher priority and its many printf statements take a lot of
+           time. The activation of the consumer is postponed accordingly. However, this is
+           just a priority caused jitter and not (yet) a task overrun. */
         ASSERT(rtos_getTaskOverrunCounter(_idxTaskT0C0, /* doReset */ false) == 0);
     }
     while(rtos_waitForEvent( /* eventMask */ RTOS_EVT_ABSOLUTE_TIMER              
@@ -287,13 +269,15 @@ static void taskT0C1_consumer(uint16_t eventToWaitForVec)
         /* Since we awaked because of the received semaphore event we can be sure to get at
            least one element from the queue. Then we have a loop to read all other elements
            which were possibly queued meanwhile: There's no guarantee, that this task got
-           due and active because of the first semaphore posted by the producer. */
+           due and immediately active because of the first semaphore posted by the
+           producer. */
         do
         {
             int16_t nextSampleSine = itq_readElem();
             ++ noElemGot;
-            printf("  Received data sample %6lu = %.6f\n", cnt_++, nextSampleSine/32768.0);
-            
+            printf("  Received data sample %6lu = %.6f\n", cnt_, nextSampleSine/32768.0);
+            ++ cnt_;
+
             /* The while condition of this loop necessarily needs to use a timeout: If data
                is available in the queue, rtos_waitForEvent will return immediately with
                the semaphore event, without suspending this task. If there's no data left,
@@ -350,10 +334,6 @@ void setup(void)
     
     puts_progmem(rtos_rtuinosStartupMsg);
 
-    /* Initialize the digital pin as an output. The LED is used for most basic feedback about
-       operability of code. */
-    pinMode(LED, OUTPUT);
-    
     ASSERT(_noTasks == RTOS_NO_TASKS);
 
     /* Configure task 0 of priority class 0. The producer has the lower priority. It is
@@ -396,10 +376,14 @@ void setup(void)
 
 void loop(void)
 {
-    blink(3);
+    /* Remark: The idle task must not use the terminal as it can't use the suspend command
+       to acquire the related mutex. */
     
-    /* Share current CPU load measurement with task code, which owns Serial and which can
-       thus display it. */
+    /* Caution, reliable CPU load measurement is not possible in this application: The idle
+       task triggers the consumer of the data and is thus not asynchronous with the task
+       activation pattern. The observation time window of the system load estimation does
+       not not have a view on an arbitrary part of this pattern, but will always see the
+       same task activation - which does not necessarily result in a valid average. */
     _cpuLoad = gsl_getSystemLoad();
     
     /* In each loop - which is about once a second because of the behavior of
