@@ -1,13 +1,5 @@
-Test case for AND combination of events but a timeout at the same time.
-Has been implemented in r233 but never been tested at that time.
-  Done, used and double-checked e.g. in tc15
-
 Manual: 3.8, API, enter/leaveCS: sei/cli will disable delay, but not
 delayMicroseconds. e/lCS would be okay with both
-
-Mention the system load estimation in the manual
-  Mentioned in the readMe of release 2.
-  Done in manual also, new section in API chapter, see r405
 
 R2:
 
@@ -43,11 +35,18 @@ producer (while it waits for the Serial mutex from the consumer, which
 reports the entire list of queued elements). Task time is alright in mean.
 Is the not-recognition of the overrun a failure or an new effect of the
 already know weaknesses of the counter?
+  Everything alright, irregular timing due to mutual exclusion from Serial.
+  Done.
 
 Event macros in rtos.h: They should support up to 14 Mutexes if no
 application interrupt is defined. Use more #if to do.
 
-New test case: Only semaphores and no 1 is demanded, 0 should be got also:
-Bug detected in trunk, but already fixed in branch
-RTuinOS_refactoringPostEvents.
-  Done, tc15, see r408
+The pit-fall in the makefall (linking the core)
+
+tc06, PRODUCTION: Unused variable
+
+Manual, 4.6.1: Rewrite it. The mentioned function is a dispatcher for
+serial input to weak implemented handlers. Basically calleable but one has
+to consider the sharing of Serial. See HardwareSerial.cpp (What differs
+between robot and arduino? Which of the two do we use? Can we alter TAGS
+accordingly? 
