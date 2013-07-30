@@ -22,6 +22,11 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+
+# Quite typical, the GNU tools reside on a system at several locations as they come along
+# with many applications. Hard to locate problems due to arbitrary order of references in
+# the Windows search PATH can easily result. To avoid these problems we reference all tools
+# by absolute path. The path is known as we have the Arduino installation directory.
 ifeq ($(OS),WINDOWS)
     make := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/make.exe
     mkdir := $(ARDUINO_HOME)hardware/tools/avr/utils/bin/mkdir.exe

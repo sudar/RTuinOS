@@ -76,7 +76,7 @@
 #define MASK_EVT_IS_TIMER (RTOS_EVT_ABSOLUTE_TIMER | RTOS_EVT_DELAY_TIMER)
 
 /** A pattern byte, which is used as prefill byte of any task stack area. A simple and
-    unexpensive stack usage check at runtime can be implemented by looking for up to where
+    inexpensive stack usage check at runtime can be implemented by looking for up to where
     this pattern has been destroyed. Any value which is not the null and which is
     improbable to be a true stack contents byte can be used - whatever this value might
     be. */
@@ -103,7 +103,7 @@
 
 
 /** An important code pattern, which is used in every suspend command. The CPU context
-    execpt for the register pair r24/r25 is saved by pushing it onto the stack of the given
+    except for the register pair r24/r25 is saved by pushing it onto the stack of the given
     context. (Exception program counter: see macro #PUSH_CONTEXT_ONTO_STACK.)\n
       When returning to a context which had become un-due by invoking one of the suspend
     commands, the restore context should still be done with the other macro
@@ -244,7 +244,7 @@
     command. (Only) in the latter case the return value of the suspend command is put onto
     the stack. From there it'll be loaded into the CPU when ending the interrupt routine.\n
       Side effects: The new task is read from the global variable _pActiveTask.\n
-      Prerequisites: The use of the macro needs to be preceeded by a use of macro
+      Prerequisites: The use of the macro needs to be preceded by a use of macro
     SWITCH_CONTEXT.\n
       The routine depends on a reset global interrupt flag.\n
       The implementation must be compatible with a naked function. In particular, it must
@@ -375,7 +375,7 @@ typedef struct
           Task overruns are defined only in the (typical) use case of regular real time
         tasks. In all other applications of a task this value is useless and undefined.\n
           @remark Even for regular real time tasks, overruns can only be recognized with a
-        certain probablity, which depends on the range of the cyclic system timer. Find a
+        certain probability, which depends on the range of the cyclic system timer. Find a
         discussion in the documentation of type uintTime_t. */
     uint8_t cntOverrun;
 
@@ -429,8 +429,8 @@ __attribute__((section(".progmem.strings"))) const char rtos_rtuinosStartupMsg[]
 static uintTime_t _time = (uintTime_t)-1;
 
 /** Array of all the task objects. The array has one additional element to store the
-    information about the implictly defined idle task. (Although most fields of the task
-    object are irrelevant for the idle task. Here potential to save meory space.)\n
+    information about the implicitly defined idle task. (Although most fields of the task
+    object are irrelevant for the idle task. Here is potential to save memory space.)\n
       The array is partly initialized by the application repeatedly calling \a
     rtos_initializeTask. The rest of the initialization and the initialization of the idle
     task element is done in \a rtos_initRTOS. */
@@ -462,7 +462,7 @@ static uint8_t _noSuspendedTasks;
 
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
 /** All of the mutex events are combined in a bit vector. The mutexes are initially
-    released, all according bits are set. All remainig bits are don't care bits. */
+    released, all according bits are set. All remaining bits are don't care bits. */
 static uint16_t _mutexVec = MASK_EVT_IS_MUTEX;
 #endif
 
@@ -515,7 +515,7 @@ static uint8_t *prepareTaskStack( uint8_t * const pEmptyTaskStack
 
     /* Push 3 Bytes of guard program counter, which is the reset address, 0x00000. If
        someone returns from a task, this will cause a reset of the controller (instead of
-       an undertermined kind of crash).
+       an undetermined kind of crash).
          CAUTION: The distinction between 2 and 3 byte PC is the most relevant modification
        of the code when porting to another AVR CPU. Many types use a 16 Bit PC. */
     * sp-- = 0x00;
@@ -618,7 +618,7 @@ RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void)
  * this task is resumed and becomes due. This routine checks a suspended task for resume
  * and moves it into the due task lists if it is resumed.
  *   @return
- * The Boolean information wheather the task is resumed and becomes due is returned.
+ * The Boolean information whether the task is resumed and becomes due is returned.
  *   @param idxSuspTask
  * The index of the investigated task. It is the index in the global list
  * \a _pSuspendedTaskAry of suspended tasks.
@@ -733,7 +733,7 @@ static inline boolean lookForActiveTask()
  * empty priority class is activated.
  *   @return
  * The Boolean information is returned whether we have or not have a task switch. In most
- * invokations we won't have and therefore it's worth to optimize the code for this case:
+ * invocations we won't have and therefore it's worth to optimize the code for this case:
  * Don't do the expensive switch of the stack pointers.\n
  *   The most important result of the function, the reference to the active task after
  * leaving the function, is returned by side effect: The global variable _pActiveTask is
@@ -816,7 +816,7 @@ static RTOS_TRUE_FCT boolean onTimerTic(void)
                   , noTasks = _noDueTasksAry[prio];
 
             /* If there are more due tasks in the same class the next one will be made the
-               acitive one by a cyclic move of the positions in the list. */
+               active one by a cyclic move of the positions in the list. */
             if(noTasks-- > 1)
             {
                 uint8_t idxTask;
@@ -839,7 +839,7 @@ static RTOS_TRUE_FCT boolean onTimerTic(void)
     } /* if(Do we have a round robin task?) */
 #endif
 
-    /* Check if another task becomes active because of the possibly occured timer events.
+    /* Check if another task becomes active because of the possibly occurred timer events.
          activeTaskMayChange: We do the search for the new active task only if at least one
        suspended task was resumed. If round robin is compiled it depends. Always look for a
        new active task if the round robin time has elapsed.
@@ -947,7 +947,7 @@ ISR(RTOS_ISR_SYSTEM_TIMER_TIC, ISR_NAKED)
  * scheduler is asked which task is the one to be activated now.\n
  *   The action of this SW interrupt is placed into an own function in order to let the
  * compiler generate the stack frame required for all local data. (The stack frame
- * generation of the SW interupt entry point needs to be inhibited in order to permit the
+ * generation of the SW interrupt entry point needs to be inhibited in order to permit the
  * implementation of saving/restoring the task context).
  *   @return
  * The function determines which task is to be activated and records which task is left
@@ -976,7 +976,7 @@ static RTOS_TRUE_FCT boolean sendEvent(uint16_t postedEventVec)
     ASSERT((postedEventVec & MASK_EVT_IS_TIMER) == 0);
 
     /* We keep track of all semaphores and mutexes, which have to be posted (released)
-       exactely once - to the first task, which is waiting for them. This task is done,
+       exactly once - to the first task, which is waiting for them. This task is done,
        when the related mask, semaphoreToReleaseVec or mutexToReleaseVec becomes null. */
 #if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
     uint8_t semaphoreToReleaseVec = postedEventVec & MASK_EVT_IS_SEMAPHORE;
@@ -1162,7 +1162,7 @@ ISR(RTOS_ISR_USER_00, ISR_NAKED)
     PUSH_CONTEXT_ONTO_STACK
 
 	/* We must not exclude that the zero_reg is temporarily altered in the arbitrarily
-       interrupted code. To make the local code here running, we need to aniticpate this
+       interrupted code. To make the local code here running, we need to anticipate this
        situation and clear the register. */
     asm volatile
     ("clr __zero_reg__ \n\t"
@@ -1200,7 +1200,7 @@ ISR(RTOS_ISR_USER_01, ISR_NAKED)
     PUSH_CONTEXT_ONTO_STACK
 
 	/* We must not exclude that the zero_reg is temporarily altered in the arbitrarily
-       interrupted code. To make the local code here running, we need to aniticpate this
+       interrupted code. To make the local code here running, we need to anticipate this
        situation and clear the register. */
     asm volatile
     ("clr __zero_reg__ \n\t"
@@ -1387,7 +1387,7 @@ static inline void storeResumeCondition( task_t * const pT
             ++ timeout;
         pT->cntDelay = timeout;
 
-    } /* if(Wich timer is addressed for the timeout condition?) */
+    } /* if(Which timer is addressed for the timeout condition?) */
 
     pT->eventMask = eventMask;
     pT->waitForAnyEvent = !all;
@@ -1403,7 +1403,7 @@ static inline void storeResumeCondition( task_t * const pT
  * This routine checks all demanded sync objects and locks and allocates all those objects
  * to the calling task, which are currently free.
  *   @return
- * Finally the routine checkes if the wait condition of the suspend command is already
+ * Finally the routine checks if the wait condition of the suspend command is already
  * fulfilled with the found sync objects. If and only if so it returns true and the suspend
  * command won't actually block the calling task.
  *   @param eventMask
@@ -1462,7 +1462,7 @@ static inline boolean acquireFreeSyncObjs(uint16_t eventMask, boolean all)
     /* postedEventVec now contains all requested mutexes, which were currently available.
        If these were all demanded events, we don't need to suspend the task but can
        immediately and successfully return. The timer bits (events 14 and 15) don't matter
-       as they are always OR terms. We definitly don't need to wait for them. */
+       as they are always OR terms. We definitely don't need to wait for them. */
     return (!all &&  _pActiveTask->postedEventVec != 0)
            || (all &&  ((_pActiveTask->postedEventVec ^ eventMask) & ~MASK_EVT_IS_TIMER) == 0);
 
@@ -1477,7 +1477,7 @@ static inline boolean acquireFreeSyncObjs(uint16_t eventMask, boolean all)
  * suspended until a specified event occurs.\n
  *   The action of this SW interrupt is placed into an own function in order to let the
  * compiler generate the stack frame required for all local data. (The stack frame
- * generation of the SW interupt entry point needs to be inhibited in order to permit the
+ * generation of the SW interrupt entry point needs to be inhibited in order to permit the
  * implementation of saving/restoring the task context).
  *   @return
  * If mutex or semaphores are in use the function returns the Boolean information whether
@@ -1643,7 +1643,7 @@ static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, boolean all, uintTime
  * optimization: It doesn't generate a stack frame but still does save the local parameter
  * into the (not existing) stack frame as very first assembly operation of the function
  * code. There's absolutely no work around; when the earliest code, we can write inside
- * the function is executed, the stack is already corrupted in a harzardous way. A crash is
+ * the function is executed, the stack is already corrupted in a hazardous way. A crash is
  * unavoidable.\n
  *   A discussion of the issue can be found at
  * http://lists.gnu.org/archive/html/avr-gcc-list/2012-08/msg00014.html.\n
@@ -1785,21 +1785,21 @@ uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, boolean doReset)
 
 
 /**
- * Compute how many bytes of the stack area of a task are still unsued. If the value is
+ * Compute how many bytes of the stack area of a task are still unused. If the value is
  * requested after an application has been run a long while and has been forced to run
  * through all its paths many times, it may be used to optimize the static stack allocation
  * of the task. The function is useful only for diagnosis purpose as there's no chance to
  * dynamically increase or decrease the stack area at runtime.\n
  *   The function may be called from a task or from the idle task.\n
- *   The alogorithm is as follows: The unused part of the stack is initialized with a
+ *   The algorithm is as follows: The unused part of the stack is initialized with a
  * specific pattern byte. This routine counts the number of subsequent pattern bytes down
  * from the top of the stack area. This number is returned.\n
  *   The returned result must not be trusted too much: It could of course be that a pattern
- * byte is found not because of teh initialization but because it has been pushed onto the
+ * byte is found not because of the initialization but because it has been pushed onto the
  * stack - in which case the return value is too great (too optimistic) by one. The
- * probability that this happens is significanly greater than zero. The chance that two
+ * probability that this happens is significantly greater than zero. The chance that two
  * pattern bytes had been pushed is however much less and the probability of three, four,
- * five such bytes in sequence is neglectable. (Except the irrelevant case you initialize
+ * five such bytes in sequence is negligible. (Except the irrelevant case you initialize
  * an automatic array variable with all pattern bytes.) Any stack size optimization based
  * on this routine should therefore subtract e.g. five bytes from the returned reserve and
  * diminish the stack outermost by this modified value.\n
@@ -1813,7 +1813,7 @@ uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, boolean doReset)
  * the stack reserve from this routine, subtract 5+36 Byte and diminish the stack by this
  * value.
  *   @return
- * The number of still unsused stack bytes. See function description for details.
+ * The number of still unused stack bytes. See function description for details.
  *   @param idxTask
  * The index of the task the stack usage has to be investigated for. The index is the
  * same as used when initializing the tasks (see rtos_initializeTask).
@@ -1958,7 +1958,7 @@ void rtos_initializeTask( uint8_t idxTask
 /**
  * Application called initialization of RTOS.\n
  *   Most important is the application handled task information. A task is characterized by
- * several static settings which need to be preset by the application. To save ressources,
+ * several static settings which need to be preset by the application. To save resources,
  * a standard situation will be the specification of all relevant settings at compile time
  * in the initializer expression of the array definition. The array is declared extern to
  * enable this mode.\n

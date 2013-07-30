@@ -35,7 +35,6 @@ else
 endif
 
 # General settings for the makefile.
-#$(info Makeprocessor in use is $(MAKE))
 ifeq ($(OS),WINDOWS)
     SHELL = cmd
     .SHELLFLAGS = /c

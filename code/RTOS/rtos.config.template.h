@@ -167,13 +167,13 @@
  *   The use of the function pair cli() and sei() is an alternative to
  * rtos_enter/leaveCriticalSection. Globally locking the interrupts is less expensive than
  * inhibiting a specific set but degrades the responsiveness of the system. cli/sei should
- * preferrably be used if the data accessing code is rather short so that the global lock
+ * preferably be used if the data accessing code is rather short so that the global lock
  * time of all interrupts stays very brief.
  *   @remark
- * The implementation does not permit recursive invokation of the function pair. The status
+ * The implementation does not permit recursive invocation of the function pair. The status
  * of the interrupt lock is not saved. If two pairs of the functions are nested, the task
  * switches are re-enabled as soon as the inner pair is left - the remaining code in the
- * outer pair of function would no longer be protected agianst unforeseen task switches.
+ * outer pair of function would no longer be protected against unforeseen task switches.
  * This is the same as if using nested pairs of cli/sei.
  *   @remark
  * This pair of functions is implemented as a macro in the application owned copy of the

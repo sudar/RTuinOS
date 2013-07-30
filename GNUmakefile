@@ -38,9 +38,9 @@
 # copy the contents of the IDE's output window and paste them into a text editor. You will
 # find appropriate command lines for all the tools.
 #   The Arduino installation directory needs to be referenced. The location is determined
-# by environment variable ARDUINO_HOME. The variable holds the name of the folder which
-# arduino.exe is located in. Caution: This variable is not created by the original Arduino
-# installation process but needs to be created manually.
+# by environment variable ARDUINO_HOME. The variable holds the name of the folder in which
+# the arduino executable is present. Caution: This variable is not created by the original
+# Arduino installation process but needs to be created manually.
 #   For your convenience, the Windows path should contain the location of the GNU make
 # processor. If you name this file either makefile or GNUmakefile you will just have to
 # type "make" in order to get your make process running. Typically, the path to the
@@ -98,7 +98,7 @@ project = RTuinOS_$(APP)
 # The target micro controller the code is to be compiled for. The Setting is used in the
 # command line of compiler, linker and flash tool. Please be aware, that changing this
 # setting is not sufficient to ensure that this makefile is working with another target.
-# You definitly have to double-check all the avr tool's command lines.
+# You definitely have to double-check all the avr tool's command lines.
 targetMicroController := atmega2560
 
 # Communication port to be used by the flash tool. The default may be adjusted here to your

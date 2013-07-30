@@ -4,7 +4,7 @@
  * @file rtos_assert.h
  * Implementation of macro ASSERT for the Arduino board. If the assertion fires the code
  * attempts to write an error string into the global Serial object (its initialization
- * therefore is a prerequiste of using ASSERT), wait for a while and than makes a reset.
+ * therefore is a prerequisite of using ASSERT), wait for a while and than makes a reset.
  *
  * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
@@ -33,7 +33,7 @@
 #ifdef DEBUG
 /** Implementation of macro ASSERT for the Arduino board. If the assertion fires the code
     attempts to write an error string into the global Serial object (its initialization
-    therefore is a prerequiste of using ASSERT), wait for a while and than makes a reset.\n
+    therefore is a prerequisite of using ASSERT), wait for a while and than makes a reset.\n
       If the compilation is not made in DEBUG mode ASSERT expands to nothing. */
 # define ASSERT(cond)                                                                   \
     {                                                                                   \
