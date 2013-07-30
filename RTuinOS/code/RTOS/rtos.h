@@ -348,7 +348,7 @@ extern __attribute__((section(".progmem.strings"))) const char rtos_rtuinosStart
       The type of the counter depends on the maximum number of pooled resources managed by
     a semaphore and is configurable, please see rtos.config.h for the typedef of
     typeSemaphore_t.\n
-      The array is decalred extern and it is defined by the application code. This way,
+      The array is declared extern and it is defined by the application code. This way,
     it's most easy to initialize the semaphore counters. Any value is possible as a start
     value, this depends only on the application. */
 extern uintSemaphore_t rtos_semaphoreAry[RTOS_NO_SEMAPHORE_EVENTS];
@@ -412,7 +412,7 @@ uint16_t rtos_waitForEvent(uint16_t eventMask, boolean all, uintTime_t timeout);
 /* How often could a real time task not be reactivated timely? */
 uint8_t rtos_getTaskOverrunCounter(uint8_t idxTask, boolean doReset);
 
-/* How many bytes of the stack of a task are still unsed? */
+/* How many bytes of the stack of a task are still unused? */
 uint16_t rtos_getStackReserve(uint8_t idxTask);
 
 #endif  /* RTOS_INCLUDED */

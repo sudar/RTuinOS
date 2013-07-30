@@ -66,7 +66,7 @@
  * function executes some test code of known CPU execution time and relates this known time
  * to the measured, actually elapsed world time. The function needs to be called from the
  * idle task only. Now the mentioned ratio is a measure for the system load: The less the
- * system idles the longer it'll take to exceute the test code.\n
+ * system idles the longer it'll take to execute the test code.\n
  *   On principal, the execution time of the function depends on the system load and can
  * raise to infinite if the load approaches 100%. This effect is lowered by splitting the
  * test code in pieces and ending the measurement if enough pieces have been executed to

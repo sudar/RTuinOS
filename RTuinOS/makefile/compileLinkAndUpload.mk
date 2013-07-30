@@ -1,6 +1,3 @@
-# TODO:
-#   Test "pit-fall" with too large code size for short jumps
-
 #
 # Generic Makefile for Arduino Project
 #
@@ -41,9 +38,9 @@
 # copy the contents of the IDE's output window and paste them into a text editor. You will
 # find appropriate command lines for all the tools.
 #   The Arduino installation directory needs to be referenced. The location is determined
-# by environment variable ARDUINO_HOME. The variable holds the name of the folder which
-# arduino.exe is located in. Caution: This variable is not created by the original Arduino
-# installation process but needs to be created manually.
+# by environment variable ARDUINO_HOME. The variable holds the name of the folder in which
+# the arduino executable is present. Caution: This variable is not created by the original
+# Arduino installation process but needs to be created manually.
 #   For your convenience, the Windows path should contain the location of the GNU make
 # processor. If you name this file either makefile or GNUmakefile you will just have to
 # type "make" in order to get your make process running. Typically, the path to the
@@ -111,7 +108,7 @@ cFileListExcl :=
 # default the location of this is not known. To run this makefile an environment variable
 # needs to point to the right location. This is checked now.
 ifdef ARDUINO_HOME
-    # Ensure a trailing slash at the end of this externally set variabale.
+    # Ensure a trailing slash at the end of this externally set variable.
 	ARDUINO_HOME := $(patsubst %/,%,$(subst \,/,$(ARDUINO_HOME)))/
 else
     $(error Variable ARDUINO_HOME needs to be set prior to running this makefile. It points \
@@ -163,7 +160,7 @@ h help targets usage:
 
 # Concept of compilation configurations:
 #
-# Configuration PRODCUTION:
+# Configuration PRODUCUTION:
 # - no self-test code
 # - no debug output
 # - no assertions
@@ -257,7 +254,7 @@ $(targetDir)obj/%.o: %.cpp
 	$(avr-g++) $(cDbgFlags) $(cFlags) -o $@ $<
 
 
-# Compile and link all (original) Arduino core files into libray core.a. Although not
+# Compile and link all (original) Arduino core files into library core.a. Although not
 # subject to any changes the Arduino code is still referenced as source code for reference.
 # Do not replace by a completely anonymous library.
 #   The compilation of the code is implemented configuration independent - the original
@@ -285,52 +282,22 @@ $(coreDir)core.a: $(objListCoreWithPath)
 $(objListWithPath) $(objListCoreWithPath): GNUmakefile
 
 # Let the linker create the binary ELF file.
-#   Here we have a serious pit-fall. We know from the Arduino IDE, that the compiled
-# Arduino standard files are bundled in the archive file core.a and that the program is
-# linked against this archive. We started doing the same. Following problem appears: The
-# vector table at the beginning of the code section uses short 12 Bit jumps to the
-# implementation of the interrupt service routines. These jumps can't be changed, as
-# there's no source code available. If we place core.a behind the object files of the
-# program the size of the program is limited by the 12 Bit jump from before till behind -
-# which is unacceptable. If we place core.a in front of the program's object files we end
-# up with numerous unresolved references since the linker doesn't seem to do two passes
-# across an archive as naturally for a set of object files. The work around is to not use
-# the archive but to place all the distinct object files into the command line. Now the
-# object files from the Arduino files may come first (i.e. safely inside the 12 Bit range)
-# followed by the object files of the program itself. We keep the file core.a nonetheless
-# but only as a kind of structural element of the compilation process. It is used as target
-# of the Arduino file compilation and as prerequisite for the linkage of the RTuinOS
-# application. If it is up-to-date, we can be sure, that all Arduino object file are also
-# up-to-date.
-#   Remark: It seems that only the vectors to the ISRs in HardwareSerial use short jumps.
-# The implementation of some other ISRs (e.g. in rtos.o) is definitly allowed to be more
-# than 4 kByte away from the vector table.
-#   TODO The loader permits the usage of "--start-group archives --end-group" and it
-# permits to place the same archive repeatedly in the command line. These options should
-# solve the problem.
-#   Done: Both possibilities are accepted by the linker, the SW is built. However,
-# currently we don't have any example, where we would run into the mentioned problem - all
-# sample's code is too little. Therefore, we removed the first use of $< (before
-# $(objListWithPath)) in order to provoke the error in the future. If it pops up, we will
-# see if it disappears by reinserting the $<. The previous work around as commented above
-# looked like:
-#	$(avr-gcc) $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm       	\
-#              -Wl,-M > $(targetDir)$(project).map
-lFlags := -Os -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)		\
+lFlags := -Wl,--gc-sections,--relax,--cref -mmcu=$(targetMicroController)		        \
           --fatal-warnings --no-undefined --reduce-memory-overheads --stats
 ifeq ($(IO_FLOAT_LIB),1)
     lFlags += -Wl,-u,vfprintf -lprintf_flt
 endif
-$(targetDir)$(project).elf: $(coreDir)core.a $(objListWithPath)
+$(targetDir)$(project).elf: $(coreDir)core.a $(objListWithPath) 
 	$(info Linking project. Ouput is redirected to $(targetDir)$(project).map)
-	$(avr-gcc) $(lFlags) -o $@ $(objListCoreWithPath) $(objListWithPath) -lm   		\
+	$(avr-gcc) $(lFlags) -o $@ -Wl,--start-group $^ -Wl,--end-group -lm   		        \
                -Wl,-M > $(targetDir)$(project).map
 	$(avr-size) -C --mcu=$(targetMicroController) $@ >> $(targetDir)$(project).map
 	$(avr-size) -C --mcu=$(targetMicroController) $@
 
+
 # Derive eep and hex file formats from the ELF file.
 $(targetDir)$(project).eep: $(targetDir)$(project).elf
-	$(avr-objcopy) -O ihex -j .eeprom --set-section-flags=.eeprom=alloc,load        \
+	$(avr-objcopy) -O ihex -j .eeprom --set-section-flags=.eeprom=alloc,load            \
                 --no-change-warnings --change-section-lma .eeprom=0 $< $@
 
 $(targetDir)$(project).hex: $(targetDir)$(project).elf
