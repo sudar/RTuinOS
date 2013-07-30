@@ -170,13 +170,23 @@
 # define RTOS_EVT_EVENT_11          (0x0001u<<11)
 #endif
 
-/** @todo Complete the macros. Consider to define the interrupt events as secondary
-    defines: They become equal to one out of the generic defines made so far. This way
-    interrupts could decide to increment a semaphore or to broadcast an ordinary event.
-    (Releasing a mutex is basically permitted but probably useless for an interrupt and
-    involves the risk of an assertion if the interrupt comes again too soon.) */
-#if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 12
-# error Complete the macros to support up to 14 mutexes/semaphores
+/* The name of the next event depends on the configuration of RTuinOS. */
+#if RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON
+/** This event is posted by the application defined ISR 01.
+      @remark The expression here is passed on to the assembler as is. It needs to be
+    compatible with both, compiler and assembler. Type casts, type post fixes, nested
+    macros etc. must not be used. */
+# define RTOS_EVT_ISR_USER_01       (0x0001<<12)
+# if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 12
+#  error Too many semaphores and mutexes specified. The limit is 12 when using two application interrupts
+# endif
+#else
+/** General purpose event, posted explicitly by rtos_sendEvent. */
+# if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 12
+#  define RTOS_EVT_MUTEX_12         (0x0001u<<12)
+# else
+#  define RTOS_EVT_EVENT_12         (0x0001u<<12)
+# endif
 #endif
 
 /* The name of the next event depends on the configuration of RTuinOS. */
@@ -185,22 +195,21 @@
       @remark The expression here is passed on to the assembler as is. It needs to be
     compatible with both, compiler and assembler. Type casts, type post fixes, nested
     macros etc. must not be used. */
-# define RTOS_EVT_ISR_USER_00       (0x0001<<12)
+# define RTOS_EVT_ISR_USER_00       (0x0001<<13)
+# if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 13
+#  error Too many semaphores and mutexes specified. The limit is 13 when using a single application interrupt
+# endif
 #else
 /** General purpose event, posted explicitly by rtos_sendEvent. */
-# define RTOS_EVT_EVENT_12          (0x0001u<<12)
+# if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 13
+#  define RTOS_EVT_MUTEX_13         (0x0001u<<13)
+# else
+#  define RTOS_EVT_EVENT_13         (0x0001u<<13)
+# endif
 #endif
 
-/* The name of the next event depends on the configuration of RTuinOS. */
-#if RTOS_USE_APPL_INTERRUPT_01 == RTOS_FEATURE_ON
-/** This event is posted by the application defined ISR 01.
-      @remark The expression here is passed on to the assembler as is. It needs to be
-    compatible with both, compiler and assembler. Type casts, type post fixes, nested
-    macros etc. must not be used. */
-# define RTOS_EVT_ISR_USER_01       (0x0001<<13)
-#else
-/** General purpose event, posted explicitly by rtos_sendEvent. */
-# define RTOS_EVT_EVENT_13          (0x0001u<<13)
+#if RTOS_NO_SEMAPHORE_EVENTS + RTOS_NO_MUTEX_EVENTS > 14
+# error Too many semaphores and mutexes specified. The limit is 14 in total
 #endif
 
 /** Real time clock is elapsed for the task. */

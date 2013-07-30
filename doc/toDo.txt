@@ -30,20 +30,21 @@ RTuinOS not deal with things like these. True RTuinOS application won't
 use stdio; this is just for demonstration, sample code and debugging. The
 trade off is undecided.
 
-tc12: The reported timing looks like a temporary task overrun for the
-producer (while it waits for the Serial mutex from the consumer, which
-reports the entire list of queued elements). Task time is alright in mean.
-Is the not-recognition of the overrun a failure or an new effect of the
-already know weaknesses of the counter?
-  Everything alright, irregular timing due to mutual exclusion from Serial.
-  Done.
-
 Event macros in rtos.h: They should support up to 14 Mutexes if no
 application interrupt is defined. Use more #if to do.
+  Done in r413, but requires re-run of all test cases
 
 The pit-fall in the makefall (linking the core)
+  Removed. Problem can't be reproduced although the documented conditions
+are clearly fulfilled. The suggested solution has been implemented but
+can't be proven as the problemn disappeared. The lengthy explanation has
+been completely removed.
+  Done.
 
 tc06, PRODUCTION: Unused variable
+  Is tolerated as otherwise too many #if/#endif would obscure the actual
+code. And it's a test case anyway.
+  Done.
 
 Manual, 4.6.1: Rewrite it. The mentioned function is a dispatcher for
 serial input to weak implemented handlers. Basically calleable but one has
