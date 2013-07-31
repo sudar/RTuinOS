@@ -624,7 +624,6 @@ RTOS_DEFAULT_FCT void rtos_enableIRQTimerTic(void)
  * \a _pSuspendedTaskAry of suspended tasks.
  */
 
-// @todo Optimization: pass pointer to task object instead of recomputation
 static inline boolean checkTaskForActivation(uint8_t idxSuspTask)
 {
     task_t * const pT = _pSuspendedTaskAry[idxSuspTask];
@@ -715,9 +714,9 @@ static inline boolean lookForActiveTask()
         }
     }
 
-    /* @todo Find out if we can ever get here? If all tasks are currently suspended: Will
-       this function be called? */
-    ASSERT(_pActiveTask = _pIdleTask);
+    /* We never get here. This function is called under the precondition that a task was
+       put into a due list, so the search above will surely have found one. */
+    ASSERT(false);
     return false;
 
 } /* End of lookForActiveTask */
@@ -1085,9 +1084,6 @@ static RTOS_TRUE_FCT boolean sendEvent(uint16_t postedEventVec)
     {
         if((semaphoreToReleaseVec & 0x01) != 0)
         {
-            /* @todo Remove development assertion after thorough testing! */
-            ASSERT(idxSem < RTOS_NO_SEMAPHORE_EVENTS);
-
             ++ rtos_semaphoreAry[idxSem];
 
             /* The assertion validates the application code. It fires if the application
@@ -1418,8 +1414,6 @@ static inline void storeResumeCondition( task_t * const pT
 
 static inline boolean acquireFreeSyncObjs(uint16_t eventMask, boolean all)
 {
-    ASSERT(_pActiveTask->postedEventVec == 0);
-
 #if RTOS_USE_MUTEX == RTOS_FEATURE_ON
     /* Check for immediate availability of all/any mutex. These mutexes are locked now and
        entered in the calling task's postedEventVec. */
@@ -1442,9 +1436,6 @@ static inline boolean acquireFreeSyncObjs(uint16_t eventMask, boolean all)
     {
         if((semaphoreToAcquireVec & 0x01) != 0)
         {
-            /* @todo Remove development assertion after thorough testing! */
-            ASSERT(idxSem < RTOS_NO_SEMAPHORE_EVENTS);
-
             if(rtos_semaphoreAry[idxSem] > 0)
             {
                 -- rtos_semaphoreAry[idxSem];
@@ -2014,6 +2005,8 @@ void rtos_initRTOS(void)
     {
         pT = &_taskAry[idxTask];
 
+        /* Anticipate typical application errors with respect to the initialization of task
+           objects. */
         ASSERT(pT->taskFunction != NULL  &&  pT->pStackArea != NULL  &&  pT->stackSize >= 50);
 
         /* Prepare the stack of the task and store the initial stack pointer value. */
