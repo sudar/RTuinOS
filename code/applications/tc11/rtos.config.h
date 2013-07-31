@@ -1,7 +1,7 @@
 #ifndef RTOS_CONFIG_INCLUDED
 #define RTOS_CONFIG_INCLUDED
 /**
- * @file rtos.config.h
+ * @file tc11/rtos.config.h
  * Switches to define the most relevant compile-time settings of RTuinOS in an application
  * specific way.
  *

@@ -94,6 +94,8 @@ static uint8_t _readPos = _writePos;
  * critical section. This function must not be used inside a critical section of the
  * caller, that outer critical section would be broken. (Critical sections in RTuinOS are
  * not implemented recursively.)
+ *   @param queuedElem
+ * The queue stored integer values. The passed value is appended to the queue.
  *   @see int16_t itq_readElem(void)
  */
 

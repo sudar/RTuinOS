@@ -34,20 +34,9 @@ Event macros in rtos.h: They should support up to 14 Mutexes if no
 application interrupt is defined. Use more #if to do.
   Done in r413, but requires re-run of all test cases
 
-The pit-fall in the makefall (linking the core)
-  Removed. Problem can't be reproduced although the documented conditions
-are clearly fulfilled. The suggested solution has been implemented but
-can't be proven as the problemn disappeared. The lengthy explanation has
-been completely removed.
-  Done.
-
-tc06, PRODUCTION: Unused variable
-  Is tolerated as otherwise too many #if/#endif would obscure the actual
-code. And it's a test case anyway.
-  Done.
-
 Manual, 4.6.1: Rewrite it. The mentioned function is a dispatcher for
 serial input to weak implemented handlers. Basically calleable but one has
 to consider the sharing of Serial. See HardwareSerial.cpp (What differs
 between robot and arduino? Which of the two do we use? Can we alter TAGS
 accordingly? 
+  Done in r414

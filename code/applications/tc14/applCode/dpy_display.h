@@ -37,6 +37,11 @@
  * Global type definitions
  */
 
+/** A single object of this class exists. It encapsulates the functionality of the Arduino
+    standard library LiquidCrystal and reduces it to the printf functions needed for this
+    application of the display. Furthermore the print functions implement all needed task
+    synchronization: The display is shared by several tasks, which will all write their
+    specific information into the display. */
 class dpy_display_t: private LiquidCrystal
 {
 public:
