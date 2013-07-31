@@ -320,7 +320,7 @@
 /**
  * Alias of function void rtos_sendEvent(uint16_t). Post a set of events to the suspended
  * tasks. Suspend the current task if the events resume another task of higher priority.
- *   @param
+ *   @param eventVec
  * The set of events to be posted.
  *   @remark
  * This macro is deprecated. Use \a rtos_sendEvent instead. 
