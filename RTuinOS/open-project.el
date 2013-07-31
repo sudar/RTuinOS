@@ -39,6 +39,14 @@
     (fls-find-directories (concat project-path "code") ".")
     (fls-find-directories (getenv "ARDUINO_HOME") ".")
   )
+; TODO: Modify code sample to filter out the unwanted directory robot from the returned
+; list. See http://wikemacs.org/index.php/Emacs_Lisp_Cookbook
+;  (let ((result))
+;      (dolist (word '("fight" "foo" "for" "food!"))
+;        (when (string-match "o" word)
+;          (setq result (cons word result))))
+;      (nreverse result))
+
 ) ; End of (defun list-of-source-dirs)
 
 
