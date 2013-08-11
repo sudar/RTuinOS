@@ -15,12 +15,12 @@ The second technical change is a complete revision of the makefile. It has
 been improved in many aspects and it now supports three operating systems;
 the RTuinOS samples (as well as your applications) can be build under
 Linux, Windows and Mac OS. Many thanks to Sudar Muthu
-(mailto:sudar@sudarmuthu.com, http://SudarMuthu.com), who has made the
+(mailto:sudar@sudarmuthu.com, http://HardwareFun.com), who has made the
 port from Windows to the other systems.
 
 To us Arduino is a toy and we believe it's the same to many of you. To
 strengthen this idea we added one particular sample (tc14), which does not
-only prove the operability of RTuinOS but which implements a true
+only prove the operability of RTuinOS but also implements a true
 application of the Arduino 2560 Mega board with the LCD shield. Different
 tasks measure the analog input voltage and compute other information and
 handle the button input. All of these tasks share the display to present
