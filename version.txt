@@ -1,4 +1,4 @@
-RTuinOS 1.0.1 for Arduino 1.0.5
+RTuinOS 1.0.2 for Arduino 1.0.5
 Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
 
 This program is free software: you can redistribute it and/or modify it

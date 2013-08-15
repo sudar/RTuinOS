@@ -412,13 +412,12 @@ RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
  */
 
 /** The RTuinOS startup message is placed in the flash ROM. Here, memory is not expensive.
-    Consider to use \a puts_progmem to print such a string in the Arduino console window.
-    Please refer to stdout.c, test case tc12, for more.\n
+    Consider to use \a Serial.println or \a puts_progmem to print such a string in the
+    Arduino console window. Or Please refer to tc12/stdout.c, test case tc12, for more.\n
       See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=34734 why not using PROGMEM for the
-    declaration.
+    declaration and #RTOS_PROGMEM_SECTION for a valid substitute.
       @see int puts_progmem(const char *) */
-__attribute__((section(".progmem.strings"))) const char rtos_rtuinosStartupMsg[] = \
-                                                                "\r" RTOS_RTUINOS_STARTUP_MSG;
+RTOS_PROGMEM_SECTION const char rtos_rtuinosStartupMsg[] = "\r" RTOS_RTUINOS_STARTUP_MSG;
 
 /** The system time. A cyclic counter of the timer tics. The counter is interrupt driven.
     The unit of the time is defined only by the it triggering source and doesn't matter at
@@ -1624,40 +1623,41 @@ static RTOS_TRUE_FCT void waitForEvent(uint16_t eventMask, boolean all, uintTime
  * timing can't be guaranteed.\n
  *   If neither #RTOS_EVT_DELAY_TIMER nor #RTOS_EVT_ABSOLUTE_TIMER is set in the event mask,
  * this parameter should be zero.
- *   @remark
- * It is absolutely essential that this routine is implemented as naked and noinline. See
- * http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details
- *   @remark
- * GCC doesn't create a stack frame for naked functions. For normal functions, the calling
- * parameter of the function is stored in such a stack frame. In the combination naked and
- * having local function parameters, GCC has a problem when generating code without
- * optimization: It doesn't generate a stack frame but still does save the local parameter
- * into the (not existing) stack frame as very first assembly operation of the function
- * code. There's absolutely no work around; when the earliest code, we can write inside
- * the function is executed, the stack is already corrupted in a hazardous way. A crash is
- * unavoidable.\n
- *   A discussion of the issue can be found at
- * http://lists.gnu.org/archive/html/avr-gcc-list/2012-08/msg00014.html.\n
- *   To avoid this problem we forbid to compile the code with optimization off.
- * Nonetheless, who will ever know or understand under which circumstances, e.g. which
- * combination of optimization flags, GCC will again generate this crash-code. This issue
- * remains a severe risk! Consequently, at any change of a compiler setting you will need
- * to inspect the assembly listing file and double-check that it is proper with respect of
- * using (better not using) the stack frame for this function (and \a rtos_sendEvent).\n
- *   Another idea would be the implementation of this function completely in assembly code.
- * Doing so, we have the new problem of calling assembly code as C functions. Find an
- * example of how to do in
- * file:///M:/SVNMainRepository/Arduino/RTuinOS/trunk/RTuinOS/code/RTOS/rtos.c, revision 215.
  */
-#ifndef __OPTIMIZE__
-# error This code must not be compiled with optimization off. See source code comments for more
-#endif
-
+ 
 RTOS_NAKED_FCT uint16_t rtos_waitForEvent( uint16_t eventMask
                                          , boolean all
                                          , uintTime_t timeout
                                          )
 {
+    /* It is absolutely essential that this routine is implemented as naked and noinline.
+       See http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html for details.
+         GCC doesn't create a stack frame for naked functions. For normal functions, the
+       calling parameter of the function is stored in such a stack frame. In the
+       combination naked and having local function parameters, GCC has a problem when
+       generating code without optimization: It doesn't generate a stack frame but still
+       does save the local parameter into the (not existing) stack frame as very first
+       assembly operation of the function code. There's absolutely no work around; when the
+       earliest code, we can write inside the function is executed, the stack is already
+       corrupted in a hazardous way. A crash is unavoidable.
+         A discussion of the issue can be found at
+       http://lists.gnu.org/archive/html/avr-gcc-list/2012-08/msg00014.html.
+         To avoid this problem we forbid to compile the code with optimization off.
+       Nonetheless, who will ever know or understand under which circumstances, e.g. which
+       combination of optimization flags, GCC will again generate this crash-code. This
+       issue remains a severe risk! Consequently, at any change of a compiler setting you
+       will need to inspect the assembly listing file and double-check that it is proper
+       with respect of using (better not using) the stack frame for this function (and
+       rtos_sendEvent).
+         Another idea would be the implementation of this function completely in assembly
+       code. Doing so, we have the new problem of calling assembly code as C functions.
+       Find an example of how to do in
+       file:///M:/SVNMainRepository/Arduino/RTuinOS/trunk/RTuinOS/code/RTOS/rtos.c,
+       revision 215. */
+#ifndef __OPTIMIZE__
+# error This code must not be compiled with optimization off. See source code comments for more
+#endif
+
     /* This function is a pseudo-software interrupt. A true interrupt had reset the global
        interrupt enable flag, we inhibit any interrupts now. */
     asm volatile
@@ -1895,7 +1895,7 @@ uint16_t rtos_getStackReserve(uint8_t idxTask)
  * or semaphore kind of events has been made just for simplicity. No additional code is
  * needed for broadcasted events but would be needed to allow mutexes and semaphores, too.\n
  *   The main use case for the start condition is to delay the take off of different tasks
- * by individual time spans to avoid having to many regular tasks becoming due at the same
+ * by individual time spans to avoid having too many regular tasks becoming due at the same
  * timer tic. If there should be a use case for initial waiting for a mutex or semaphore
  * this can be easily implemented by an according suspend command at the beginning of the
  * actual task code.

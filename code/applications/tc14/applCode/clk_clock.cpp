@@ -68,9 +68,6 @@
  * Data definitions
  */
 
-/* Accumlator for task tics which generates a precise one second clock. */
-static uint16_t _noTaskTics = 0;
-
 /** Counter of seconds. The value is written without access synchronization code. The time
     information clk_noHour, clk_noMin, clk_noSec can be safely and consistently read only by
     a task of same or lower priority and using a critical section. */ 
@@ -93,6 +90,10 @@ volatile uint8_t clk_noButtonEvtsUp = 0;
 /** Input to the module: Recognized button-down events, which are used to adjust the clock
     towards lower time designations. The value is read/modified using a critical section. */
 volatile uint8_t clk_noButtonEvtsDown = 0;
+
+
+/* Accumulator for task tics which generates a precise one second clock. */
+static uint16_t _noTaskTics = 0;
 
 
 /*
@@ -138,11 +139,11 @@ void clk_taskRTC()
         }
         while(deltaTime < 0)
         {
-            /* By defining the downwards operation not strictly inverse to upwards, we can
-               reach all times not just the muliples of five. A bit strange and not what one
-               expects and no true alternative to a state machine which begins to auto-repeat
-               the key-event after a while, but this is just a simple demonstration of
-               RTuinOS, not a high-end application. */ 
+            /* By defining the downwards operation not strictly inverse to upwards we can
+               reach all times, not just the multiples of five. Maybe not the kind of thing
+               one would expect and no true alternative to a state machine, which begins to
+               auto-repeat the key event after a while, but this is just a simple
+               demonstration of RTuinOS, not a high-end application. */
             ++ deltaTime;
             if((clk_noMin-=4) > 59)
             {
@@ -183,5 +184,5 @@ void clk_taskRTC()
     /* Display because visible information has changed. */
     if(doDisplay)    
         dpy_display.printTime(clk_noHour, clk_noMin, clk_noSec);
-        
+
 } /* End of clk_taskRTC */

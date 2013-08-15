@@ -306,7 +306,9 @@ $(targetDir)$(project).hex: $(targetDir)$(project).elf
 # Upload compiled software on the controller.
 #   Option -cWiring: The Arduino IDE uses a quite similar protocol which unfortunately
 # requires an additional, preparatory reset command. This protocol can't therefore be
-# applied in an automated process. Here we need to use protocol Wiring instead.
+# applied in an automated process. Here we need to use protocol Wiring instead. Use -c? to
+# get a list of options.
+#   Option -p: Run avrdude with -C... -p? to get a list of supported controllers.
 .PHONY: upload
 upload: makeDir																				\
         $(targetDir)$(project).hex $(targetDir)$(project).elf $(targetDir)$(project).eep	\

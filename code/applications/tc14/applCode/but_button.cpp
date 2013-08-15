@@ -78,8 +78,7 @@ typedef enum { btnInvalid
  *   @param adcVal
  * The measured analog value of analog pin 0, which the buttons of the LCD shield are
  * connetced to. The voltage at this pin is determined by the currently pressed button.\n
- *   The passed value is either a left aligned raw ADC value or the
- * #ADC_NO_AVERAGED_SAMPLES times accumulated raw ADC.
+ *   The passed value is the #ADC_NO_AVERAGED_SAMPLES times accumulated raw ADC value.
  */
 
 static enumButton_t decodeLCDButton(uint16_t adcVal)
@@ -118,7 +117,7 @@ static enumButton_t decodeLCDButton(uint16_t adcVal)
 
 
 /**
- * The entry into the state machine that evaluates the button and represents the user
+ * The entry into the state machine that evaluates the buttons and represents the user
  * interface is the notification of the input voltage at the analog input which all buttons
  * are connected to. The buttons shortcut a voltage divider at individual paths and can be
  * indentified because of the resulting voltage. The state machine is required to debounce
@@ -134,7 +133,7 @@ static enumButton_t decodeLCDButton(uint16_t adcVal)
 void but_onNewButtonVoltage()
 {
     /* Get the currently recognized button. The input voltage is written by a task of
-       higher protection and accordingly, we need to apply a critical section to read the
+       higher priority and accordingly, we need to apply a critical section to read the
        value. */
     cli();
     uint16_t buttonVoltage = adc_buttonVoltage;
@@ -142,7 +141,7 @@ void but_onNewButtonVoltage()
     enumButton_t btn = decodeLCDButton(buttonVoltage);
 
     /* Debouncing: The recognized button is unsafe. The voltage measurement averages the
-       input and the actual button event is in now way synchronized with the averaging time
+       input and the actual button event is in no way synchronized with the averaging time
        window. Any intermediate voltage can be seen and any wrong, never touched button can
        be temporarily recognized. A recognized button is considered pressed only after we
        saw the same information a number of times. */
@@ -205,7 +204,7 @@ void but_onNewButtonVoltage()
         switch(btn)
         {
             /* Up and down are used to adjust the real time clock. The number of such
-               events is counted, the RTC code acknowledges by decrementing by the number
+               events is counted; the RTC code acknowledges by decrementing by the number
                of events it has considered.
                  The RTC task is running at a lower priority, so we can safely access its
                global interface without synchronization code. */
