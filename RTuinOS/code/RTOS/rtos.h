@@ -256,6 +256,12 @@
     calling function which implements the software interrupt. */
 #define RTOS_TRUE_FCT __attribute__((used, noinline))
 
+/** A data type decoration to place constant data in the program memory. Mainly used for
+    the RTuinOS startup message.\n
+      See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=34734 why not simply using PROGMEM
+    for such declarations. */
+#define RTOS_PROGMEM_SECTION __attribute__((section(".progmem.rtuinos")))
+
 
 /**
  * Delay a task without looking at other events. \a rtos_delay(delayTime) is identical to
@@ -350,7 +356,7 @@ typedef void (*rtos_taskFunction_t)(uint16_t postedEventVec);
 
 /** The RTuinOS startup message is placed in the flash ROM. See #RTOS_RTUINOS_STARTUP_MSG
     for the definition of string contents. */
-extern __attribute__((section(".progmem.strings"))) const char rtos_rtuinosStartupMsg[];
+extern RTOS_PROGMEM_SECTION const char rtos_rtuinosStartupMsg[];
 
 #if RTOS_USE_SEMAPHORE == RTOS_FEATURE_ON
 /** All declared semaphores are held in an array of counters.\n

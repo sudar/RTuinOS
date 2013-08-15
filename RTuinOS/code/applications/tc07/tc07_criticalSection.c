@@ -288,7 +288,7 @@ static void taskT4_C0(uint16_t initCondition)
 
         ++ _cntLoopsT4_C0;
 
-        /* This tasks (the last one in the chain of round robin tasks) reports the errors
+        /* This task (the last one in the chain of round robin tasks) reports the errors
            and loop counts. */
 #define REPORT_TASK(T, C)                                                                   \
         {                                                                                   \

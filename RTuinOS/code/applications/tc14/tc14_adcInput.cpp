@@ -18,7 +18,8 @@
  * used only for slowly changing input signals, it might e.g. be adequate for reading a
  * temperature input. All other applications need to trigger the conversions by a software
  * independent, accurate hardware signal. The software becomes a slave of this hardware
- * trigger.\n
+ * trigger. The jitter of the task now only doing the data evaluation doesn't matter at
+ * all.\n
  *   This RTuinOS sample application uses timer/counter 0 in the unchanged Arduino standard
  * configuration to trigger the conversions of the ADC. The overflow interrupt is used for
  * this purpose yielding a conversion rate of about 977 Hz. A task of high priority is
@@ -35,14 +36,14 @@
  * considered for any output operation anyway. It doesn't matter to this "consider" which
  * scaling we actually have, it's just another constant to use.\n
  *   What do you need? What do you get?\n
- * To run this sample you need a Arduino Mega board with the LCD shield connected. Porting
+ * To run this sample you need an Arduino Mega board with the LCD shield connected. Porting
  * this sample to one of the tiny AVRs will be difficult as it requires about 3kByte of RAM
  * and 22 kByte of ROM (in DEBUG configuration). Furthermore, all the 16 ADC inputs are
- * addressed, so functional code modifications would also become necessary. The sample can
+ * addressed, so functional code modifications would become necessary, too. The sample can
  * be run without the LCD shield as it prints a lot of information to the Arduino console
  * window also (in DEBUG configuration only). The function is as follows: The LCD shield
- * buttons left/right switch to the next ADC input. The internal band gap voltage reference
- * can also be selected as input. The voltage measured at the selected input is
+ * buttons left/right switch to the previous/next ADC input. The internal band gap voltage
+ * reference can also be selected as input. The voltage measured at the selected input is
  * continuously displayed on the LCD. Another area of the display displays the current
  * time. (The clock can be adjusted with the buttons up/down.) The last display area shows
  * the current CPU load. All of these areas are continuously updated asynchronously to one
@@ -53,21 +54,21 @@
  * so, the display has been associated with a mutex and each display writing task will
  * acquire the mutex first. All of this has been encapsulated in the class dpy_display_t and
  * all a task needs to do is calling a simple function printXXX. (Please find more detailed
- * consideration about the use of library LiquidCrystal in the RTuinOS manual.)\n
+ * considerations about the use of library LiquidCrystal in the RTuinOS manual.)\n
  * *) The the input voltage displaying task (taskDisplayVoltage) is regular but not by an
  * RTOS timer operation as usual but because it is associated with the ADC conversion
  * complete interrupt (which is purposely triggered by a regular hardware event). So this
  * part of the application is synchronous to an external event, whereas a concurrent task
  * (taskRTC) is an asynchronous regular task by means of RTuinOS timer operations. Both of
- * these tasks complete for the display without harmful side effects. (The regular timer
+ * these tasks compete for the display without harmful side effects. (The regular timer
  * task implements a real time clock, see clk_clock.cpp.)\n
  * *) A user interface task scans the buttons, which are mounted on the LCD shield. It
  * decodes the buttons and dispatches the information to the different tasks, which are
- * controlled by the buttons. This part of the code demonstrates how to implement
+ * controlled by the buttons. This part of the code demonstrates how to implement safe
  * inter-task interfaces, mainly built on broadcasted events and critical sections in
  * conjunction with volatile data objects. The interfaces are implemented in both styles,
  * by global, shared data or as functional interface. Priority considerations avoid having
- * superfluous access synchronization code.\n
+ * superfluous access synchronization code. See code comments for more.\n
  * *) A totally asynchronous, irregular task also competes for the display. The idle task
  * estimates the CPU load and an associated display task of low priority prints the result
  * on the LCD.\n
@@ -249,12 +250,7 @@ static void taskOnADCComplete(uint16_t initialResumeCondition)
 
     do
     {
-        /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF.
-             Remark: Although this task has a higher priority than the ADC task, that
-           writes adc_noAdcResults without a critical section we can safely access it here
-           as both tasks are synchronized by triggering events. The ADC task synchronously
-           follows this interrupt task. It could become a failure only in case of high
-           system load. */
+        /* Test: Our ADC interrupt should be synchronous with Arduino's TIMER0_OVF. */
         ASSERT(adc_noAdcResults + deltaCnt == timer0_overflow_count);
 
         /* Call the actual interrupt handler code. */
@@ -264,11 +260,15 @@ static void taskOnADCComplete(uint16_t initialResumeCondition)
                            , /* all */ false
                            , /* timeout */ 1
                            )
+#ifdef DEBUG
+          == EVT_ADC_CONVERSION_COMPLETE
+#endif
          );
 
     /* The following assertion fires if the ADC interrupt isn't timely. The wait condition
        specifies a sharp timeout. True production code would be designed more failure
-       tolerant. This code would cause a reset in case. */
+       tolerant and e.g. not specify a timeout at all. This code would cause a reset in
+       case. */
     ASSERT(false);
 
 } /* End of taskOnADCComplete */
@@ -277,7 +277,7 @@ static void taskOnADCComplete(uint16_t initialResumeCondition)
 
 
 /**
- * A regular task of about 200 ms task time, which implements a real time clock.
+ * A regular task of about 250 ms task time, which implements a real time clock.
  *   @param initialResumeCondition
  * The vector of events which made the task due the very first time.
  */
