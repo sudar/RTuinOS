@@ -157,9 +157,6 @@ static void task01_class00(uint16_t initCondition)
     Serial.print("task01_class00: Activated by 0x");
     Serial.println(initCondition, HEX);
 
-    for(u=0; u<1; ++u)
-        blink(2);
-    
     for(;;)
     {
         ++ _t1;
@@ -241,7 +238,7 @@ void loop(void)
     /* No task overruns should occur. */
     for(u=0; u<RTOS_NO_TASKS; ++u)
     {
-        ASSERT(rtos_getTaskOverrunCounter(/* idxTask */ u, /* doReset */ false));
+        ASSERT(rtos_getTaskOverrunCounter(/* idxTask */ u, /* doReset */ false) == 0);
     }
 
     ++ _id;    
