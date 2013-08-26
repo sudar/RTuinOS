@@ -424,7 +424,7 @@ void setup(void)
 {
     /* Start serial port at 9600 bps. */
     Serial.begin(9600);
-    Serial.println("\n" RTOS_RTUINOS_STARTUP_MSG);
+    Serial.println(F("\r" RTOS_RTUINOS_STARTUP_MSG));
 
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */
