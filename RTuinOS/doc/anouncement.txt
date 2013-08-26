@@ -1,7 +1,7 @@
 Dear Arduino Fans,
 
-RTuinOS, a small Real Time Operation System (RTOS) for Arduino, is now
-released as 1.0.
+RTuinOS, the Real-Time Operating System (RTOS) for Arduino, has been
+revised and is now released as 1.0.
 
 Two technical changes have been made in comparison to the first release
 (December 2012, version 0.9,
@@ -13,7 +13,7 @@ details.
 
 The second technical change is a complete revision of the makefile. It has
 been improved in many aspects and it now supports three operating systems;
-the RTuinOS samples (as well as your applications) can be build under
+the RTuinOS samples (as well as your applications) can be built under
 Linux, Windows and Mac OS. Many thanks to Sudar Muthu
 (mailto:sudar@sudarmuthu.com, http://HardwareFun.com), who has made the
 port from Windows to the other systems.
@@ -35,8 +35,9 @@ setting a single environment variable (not necessary for those, who
 already run RTuinOS 0.9).
 
 Forum members can download the setup from the forum, but in the past this
-turned out to be unreliable. A second location for the download of the setup
-is https://github.com/PeterVranken/RTuinOS/blob/master/RTuinOS-1.0.2.zip.
+turned out to be unreliable. A second location for the download of the
+setup is https://github.com/PeterVranken/RTuinOS. Click on the desired ZIP
+file entry (RTuinOS-1.0.2.zip), then on button Raw to start the download.
 
 Furthermore, Sudar Muthu set up a GitHub repository meanwhile which hosts
 all the source files. This repository will become the principal location for
