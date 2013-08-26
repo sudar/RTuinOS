@@ -6,9 +6,9 @@ documentation is found as doc\manual\RTuinOS-1.0-UserGuide.pdf. The hints
 given here are just a brief summary of what's stated there.
 
 This distribution has been compiled for Arduino 1.0.5 under Windows, Linux
-or Mac OS. Only the Mega 2560 board is supported without more. In the user
-guide, in the source code and by compiler error directives you'll get
-hints how to adapt the code for other Arduino boards.
+or Mac OS. Only the Mega 2560 board is supported just like that. In the
+user guide, in the source code and by compiler error directives you'll get
+hints how to modify the code for other Arduino boards.
 
 The Arduino environment can be got at www.Arduino.cc. It needs to be
 installed and operational. Before using RTuinOS ensure that the original
@@ -57,8 +57,9 @@ called explicitly.
 separated and clearly recognizable and readable to the user. The invariant
 parts of the makefile have been hidden in a sub-directory.
   A kind of "callback" is made into the application folder. An (optional)
-makefile fragment located here will be included into the build and permits
-to override general settings in an application related fashion.
+makefile fragment located in the application folder will be included into
+the build and permits to override general settings in an application
+related fashion.
 
 Support of Arduino 1.0.5, the current release as of today (31.7.2013)
   All test cases can be built and run with Arduino 1.0.5.
@@ -84,5 +85,5 @@ The CPU load estimation is unchanged but has been moved from a test case
 folder to the common folder RTOS and is now available to any application
 just like that.
 
-The doxygen documentation now includes some of the test cases, which
-contain instructive sample code of general interest.
+The doxygen documentation now includes those test cases, which contain
+instructive sample code of general interest.
