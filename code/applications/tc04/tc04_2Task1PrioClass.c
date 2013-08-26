@@ -30,8 +30,9 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
+#include "rtos_assert.h"
 
 
 /*
@@ -219,8 +220,9 @@ static void task02_class00(uint16_t initCondition)
 void loop(void)
 {
     uint8_t u;    
-    bool ok = true;
+    boolean ok = true;
     
+    /* Check stack reserve. */
     for(u=0; u<10; ++u)
     {
         if(_taskStack1[u] != 0x29  ||  _taskStack2[u] != 0x29)
@@ -236,8 +238,14 @@ void loop(void)
     else
         blink(3);
 
+    /* No task overruns should occur. */
+    for(u=0; u<RTOS_NO_TASKS; ++u)
+    {
+        ASSERT(rtos_getTaskOverrunCounter(/* idxTask */ u, /* doReset */ false));
+    }
+
     ++ _id;    
-    
+   
 } /* End of loop */
 
 

@@ -1,9 +1,23 @@
 /**
  * @file tc02_oneTask.c
  *   Test case 02 of RTuinOS. One task is defined, which runs alternatingly with the idle
- * task.
+ * task.\n
+ *   Observations:\n
+ *   The object Serial is used to write progress and status information to console, under
+ * which the current CPU load. It is remarkably high, which is not the consumption of the
+ * software implemented here but the effect of the data streaming over the RS 232
+ * connection. We have selected a Baud rate of only 9600 bps and all print command block
+ * until the characters to print are processed. At the beginning it is very fast as the
+ * characters immediately fit into the send buffer. Once is has been filled the print
+ * function is in mean as fast as the stream, 9600 characters a second. Even though the
+ * rest is just waiting somewhere inside print it's lost CPU processing time for RTuinOS. A
+ * hypothetical redesign of the library for serial communication for RTuinOS would
+ * obviously use a suspend command to free this time for use by other tasks. This way, the
+ * mean CPU load would become independent of the chosen Baud rate.\n
+ *   Please consider to change the Baud rate to 115200 bps in setup() to prove that the CPU
+ * load strongly goes down.
  *
- * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -30,8 +44,9 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
+#include "gsl_systemLoad.h"
 
 
 /*
@@ -62,6 +77,7 @@ static void task01_class00(uint16_t taskParam);
  */
  
 static uint8_t _taskStack[STACK_SIZE_TASK00];
+static uint8_t _cpuLoad = 200;
 
  
 /*
@@ -97,12 +113,12 @@ static void blink(uint8_t noFlashes)
 /**
  * The only task in this test case (besides idle).
  *   @param initCondition
- * The task gets an initialization parameter for whatever configuration purpose.
+ * The task gets the vector of events, which made it initially due.
  *   @remark
  * A task function must never return; this would cause a reset.
  */ 
 
-static void task01_class00(uint16_t taskCondition)
+static void task01_class00(uint16_t initCondition)
 
 {
 #define TICS_CYCLE  125
@@ -112,7 +128,7 @@ static void task01_class00(uint16_t taskCondition)
            , tiCycle;
     
     Serial.print("task01_class00: Activated by 0x");
-    Serial.println(taskCondition, HEX);
+    Serial.println(initCondition, HEX);
 
     for(u=0; u<3; ++u)
         blink(2);
@@ -138,6 +154,11 @@ static void task01_class00(uint16_t taskCondition)
         Serial.print("Cycle time: ");
         Serial.print((tiCycle-ti) * (100.0/1000.0 / (TICS_CYCLE/490.1961)));
         Serial.println("%");
+        
+        Serial.print("CPU load: ");
+        Serial.print(_cpuLoad/2);
+        Serial.println("%");
+        
         ti = tiCycle;
     }
     
@@ -189,8 +210,11 @@ void setup(void)
 
 void loop(void)
 {
-    delay(1000);
     blink(3);
+    
+    /* Share current CPU load measurement with task code, which owns Serial and which can
+       thus display it. */
+    _cpuLoad = gsl_getSystemLoad();
     
 } /* End of loop */
 

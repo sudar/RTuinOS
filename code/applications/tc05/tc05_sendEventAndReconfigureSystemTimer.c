@@ -1,5 +1,5 @@
 /**
- * @file tc05_setEventAndReconfigureSystemTimer.c
+ * @file tc05_sendEventAndReconfigureSystemTimer.c
  *   Test case 05 of RTuinOS. Several tasks of different priority are defined. Task
  * switches are partly controlled by posted events and counted and reported in the idle
  * task.\n
@@ -61,7 +61,7 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
 #include "rtos_assert.h"
 
@@ -135,13 +135,13 @@ static void blink(uint8_t noFlashes)
 
         /* Blink takes many hundreds of milli seconds. To prevent too many timeouts in
            task00_C0 we post the event also inside of blink. */
-        rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
+        rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_03);
     }
 
     /* Wait for a second after the last flash - this command could easily be invoked
        immediately again and the series need to be separated. */
     delay(500);
-    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
+    rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_03);
     delay(500-TI_FLASH);
 
 #undef TI_FLASH
@@ -338,9 +338,9 @@ static void task01_class00(uint16_t initCondition)
         delay(5 /*ms*/);
 
         /* Release high priority task for a single cycle. It should continue operation
-           before we return from the suspend function setEvent. Check it. */
+           before we return from the suspend function sendEvent. Check it. */
         u = _noLoopsTask00_C1;
-        rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_00);
+        rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_00);
         ASSERT(u+1 == _noLoopsTask00_C1)
 
         /* Double-check that this task keep in sync with the triggered task of higher
@@ -463,11 +463,11 @@ void loop(void)
     ++ _noLoopsIdleTask;
 
     /* An event can be posted even if nobody is listening for it. */
-    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_04);
+    rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_04);
 
     /* This event will release task 0 of class 0. However we do not get here again fast
        enough to avoid all timeouts in that task. */
-    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
+    rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_03);
 
     Serial.println("RTuinOS is idle");
     Serial.print("noLoopsIdleTask: "); Serial.println(_noLoopsIdleTask);

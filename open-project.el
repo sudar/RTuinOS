@@ -39,6 +39,14 @@
     (fls-find-directories (concat project-path "code") ".")
     (fls-find-directories (getenv "ARDUINO_HOME") ".")
   )
+; TODO: Modify code sample to filter out the unwanted directory robot from the returned
+; list. See http://wikemacs.org/index.php/Emacs_Lisp_Cookbook
+;  (let ((result))
+;      (dolist (word '("fight" "foo" "for" "food!"))
+;        (when (string-match "o" word)
+;          (setq result (cons word result))))
+;      (nreverse result))
+
 ) ; End of (defun list-of-source-dirs)
 
 
@@ -97,7 +105,7 @@ C and M files in the scope of this project."
                   (concat etags-command (subst-char-in-string ?/ ?\\ operand-list))
                   operand-list ""
             )
-            (message exec-command)
+            (message "%s" exec-command)
             (shell-command exec-command)
           )
         ) ; End (if Command line complete for execution?)
@@ -165,16 +173,14 @@ C and M files in the scope of this project."
 
   ; Prepare all frequently used build commands
   (let*
-    ( (dsmake-cmd-base (concat "cd /d " project-path-win32 " & dsmake TEST_CASE=tc05 "))
-      (make-cmd-base (concat "cd /d " project-path-win32 " & make -s APP=tc05 "))
+    ( (make-cmd-base (concat "cd /d " project-path-win32 " & make -s APP=tc14 "))
       (doxygen-cmd-base (concat "cd /d " project-path-win32 "doc\\doxygen & "))
       (latex-cmd-base (concat "cd /d " project-path-win32 "doc\\manual & "))
       (history (list (concat make-cmd-base "upload")
                      (concat make-cmd-base "bin\\DEBUG\\obj\\.o")
                      (concat make-cmd-base "build")
                      (concat make-cmd-base "rebuild")
-                     (concat dsmake-cmd-base "rebuild")
-                     (concat latex-cmd-base "make -s & manual.pdf")
+                     (concat latex-cmd-base "make -s & RTuinOS-1.0-UserGuide.pdf")
                      (concat latex-cmd-base "make -s onePass")
                      (concat doxygen-cmd-base "doxygen doxyfile & start html\\index.html")
                      (concat doxygen-cmd-base "start html\\index.html")
@@ -187,6 +193,9 @@ C and M files in the scope of this project."
     )
   ) ; End of (let Prepare list of compile commands)
 
+
+  ; Select this project as default for new instances of the I-Explorer.
+  (shell-command (concat "setCurrentProject.cmd " project-path-win32 "code\\RTOS"))
 
   ; Start interaction with user by switching to and presenting the most relevant source
   ; directory.

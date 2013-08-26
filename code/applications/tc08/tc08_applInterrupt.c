@@ -8,13 +8,14 @@
  * application interrupts. Occasionally, a series of flashes is produced, which represents
  * the number of interrupts so far. (To not overburden the flashes counting human, the
  * length of the series is limited to ten.) This feedback giving task gets active only on
- * demand; it's triggered by an application event from another task.
+ * demand; it's triggered by an application event from another task.\n
  *   Observations:\n
  *   The frequency of the timer interrupts (timers 4 and 5 have been used) can be varied in
  * a broad range. In this test case the application interrupt 00 is configured to occur
- * with 1024 Hz, which is more than double the frequency of the RTuinOS system clock, which
- * determine the highest frequency of calling regular tasks. This doesn't matter, the
- * scheduler easily handles task switches faster than the system timer.\n
+ * with about 1 kHz. This is more than double the frequency of the RTuinOS system clock,
+ * which determines the highest frequency of calling regular tasks. Having an even faster
+ * application interrupt doesn't matter, the scheduler easily handles task switches faster
+ * than the system timer.\n
  *   The start of the application interrupts is significantly delayed. The first interrupts
  * are seen only 2 or 3 seconds after reset. The application reports an according number of
  * timeouts at the beginning. This is a strange, still unexplained behavior. It's probably
@@ -57,7 +58,7 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
 #include "rtos_assert.h"
 #include "tc08_applEvents.h"
@@ -219,7 +220,7 @@ static void taskT0_C1(uint16_t initCondition)
            application interrupt sources must be inhibited/released. The customization is
            done in the application owned RTuinOS configuration file. */
         rtos_enterCriticalSection();
-        bool trigger = _cntLoopsT0_C2 >= lastTrigger;
+        boolean trigger = _cntLoopsT0_C2 >= lastTrigger;
         rtos_leaveCriticalSection();
 
         if(trigger)
@@ -239,7 +240,7 @@ static void taskT0_C1(uint16_t initCondition)
                 
             /* TRigger the other task. As it has the lower priority, it's actually not
                activated before we suspend a little bit later. */
-            rtos_setEvent(EVT_START_FLASH_SEQUENCE);
+            rtos_sendEvent(EVT_START_FLASH_SEQUENCE);
             
             /* Set next trigger point. If we are too slow, it may run away. */
             lastTrigger += TRIGGER_DISTANCE;
@@ -423,7 +424,7 @@ void setup(void)
 {
     /* Start serial port at 9600 bps. */
     Serial.begin(9600);
-    Serial.println("\n" RTOS_RTUINOS_STARTUP_MSG);
+    Serial.println(F("\r" RTOS_RTUINOS_STARTUP_MSG));
 
     /* Initialize the digital pin as an output. The LED is used for most basic feedback about
        operability of code. */

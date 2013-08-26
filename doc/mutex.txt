@@ -1,0 +1,344 @@
+Semaphor, Mutex: Semaphor erfordert 8 Bit Zählvariable
+
+Mutex kann durch Bit adressiert werden, dann könnte es in bestehenden
+Event Mechanismus eingefügt werden. Wenn auf ein Mutex gewartet wird, gibt
+release einen (Semaphor n) Task frei.
+
+Wegen der Priorisierung muss die Warteliste nun sortiert sein.
+
+Unterschied zu Events: Es muss darüber Buch geführt werden. Wenn ein Event
+Bit gesetzt wird, muss zugeordneter Zähler dekrementiert werden. Bei
+reinen Mutex kann das dann offensichtlich über Bitmasken etwas optimaler
+gehandhabt werden. Evtl. also beide Features einführen.
+
+Freigabe Mutex/Semaphor: Alle Zähler bei gesetzten Bits inkrementieren.
+Das ist ein einfaches Or für Mutex (mit einem assert auf Nullbits zuvor).
+Dann alle Tasks durchgehen, ob sie auf ein Mutex warten. Wenn ja, Zähler
+wieder runter, Bit in des Tasks EventMask setzen. Doppelte Schleife: Über
+alle Semaphore in der Maske und jeweils über alle suspendierten Tasks. Bei
+Mutex kann Schleife über alle Semaphore wahrscheinlich entfallen, da durch
+Bitoperation alle auf einmal handhabbar sein sollten. Abschließend die
+Suspended-Liste ganz normal nach neuen Due-Tasks absuchen. Dieser Code
+kann wiederverwendet werden.
+
+Semaphore: Erfordern Anwendungsabhängige Initialisierung der Zähler. Mutexe
+könnten grundsätzlich auf 1 initialisiert werden.
+
+Semaphor/Mutex/Event in der EventMask wird nicht spezifiziert. Der
+Anwender bestimmt durch Auswahl der API Funktion, was er haben möchte. Man
+kann dasselbe Bit als Event setzen, oder als Mutex/Sem freigeben.
+
+Semaphor mit mehreren Zählern anfordern gelingt so nicht mehr. Die
+Suspended-Liste kann dann nicht mehr mit Bits arbeiten, sondern es müsste
+auch hier mit Zählern gearbeitet werden. Due, wenn Zähler auf Null
+angekommen ist. Die meisten Anwendungen werden aber nur jeweils eine
+Instanz anfordern, das ist akzeptabel. In anderen Fällen muss die
+Anwendung zwei Instanzen nach einander anfordern. Das ist wegen der
+Timeoutbehandlung und evtl. möglichen Kombination mit anderen
+Events/Mutexes absolut nicht dasselbe, aber in der Praxis auf jeden Fall
+ausreichend.
+
+Anfordern: Wenn Zähler größer Null, dekrementieren und return zum selben
+Task. Sonst an prioritätsabhängig richtiger Position in die
+Suspended-Liste einfügen und nach neuem aktiven Task sehen (bestehenden
+Code weiterverwenden). Hier kann nicht ohne weiteres eine Mischung von
+Events und Mutexen erfolgen. Wir fordern eine Menge an, wobei nun alle
+Elemente Mutexe sein sollten, wenn die Sache nicht zu kompliziert werden
+soll. Sonst wäre zwei Masken zu übergeben. Eine Eventmenge führt
+grundsätzlich zum Suspend und wird in der EventMask gesetzt. Für alle
+Mutex/sem in der Mutexmenge: Wenn Zähler größer Null, dann dekrementieren.
+Ansonsten Bit in der EventMask setzen und in Suspend-Liste einfügen.
+
+-----------------------------------------------------------------------
+Wiederaufnahme der Überlegungen am 30.5.2013
+
+Zwei Konzepte werden gesehen. In beiden soll das bestehende Ereignissystem
+wiederverwendet werden, so dass die verknüpfende Art auf Ereignisse zu
+warten (insb. ein Anwendungsereignis ODER ein Zeitereignis) unverändert
+erhalten bleibt. D.h. die feste, begrenzte Menge von Ereignissen (16, mit
+der Möglichkeit, auf 32 zu wechseln) bleibt erhalten und jedes Ereignis
+muss sich entscheiden, ob es ein Ereignis wie gehabt ist oder sich wie ein
+Mutex oder ein Semaphor verhält.
+
+Die Wahl isMutex, isSemaphor könnte über zwei weitere Bit-Masken
+erfolgen. Diese sollten statisch zur Compilezeit konfiguriert werden. So
+sind mit #if schon bestimmte Fehler zur Compile-Zeit erkennbar. Zugleich
+könnte "#if Maske!=0" benutzt werden, um benötigte Daten und Funktionen
+zielgerecht einzublenden.
+
+1. Konzept: Es beleibt beim setEvent und waitForEvent API
+
+setEvent bekommt die zusätzliche Bedeutung "Gib Mutex zurück" bzw.
+"Inkrementiere Semaphor". Für alle Bits der übergebenen Maske wird mit den
+Masken isMutex und isSemaphor verglichen. Wenn Mutex, dann Bearbeitung der
+Events als solche und wenn Semaphor, dann entsprechend.
+
+Mutex: Eine Bitmaske als Datenelement, vorbesetzt auf alles 1 (alle Mutexe
+zurückgegeben).
+
+Semaphor: Ein Feld von uint16_T (bzw. konfigurierbar als typeSem_T) als
+Datenelement, vorbesetzt mit 1, aber mit Hinweis und Möglichkeit, diese
+Vorbesetzung zur Laufzeit in setup() den Anwendungsbedürfnissen
+anzupassen.
+
+Es kann verlangt werden, dass alle Semaphore die Events 0,1,2 ... in
+lückenlos aufsteigender Reihenfolge belegen, damit einerseits die
+Bitposition gleich dem Feldindex ist, andererseits aber keine ungenutzten
+Feldelement entstehen. Dies kann Konvention sein, aber auch zur
+Compilezeit überprüft werden (mit #if oder GNU Compile-Zeit-assert) 
+
+setEvent:
+
+Normale Events in allen suspendierten Tasks setzen wie gehabt.
+
+Mutex: setEvent prüft per assert, dass ALLE Bits der Datenmaske Null sind
+(Bits, die mit Nicht-Mutexen korrespondieren ohnehin) und setzt sie dann
+entsprechend der Mutex-Maske auf Eins. Dann wird für jedes Bit folgendes
+getan:
+
+Die suspendierten Tasks werden in der Reihenfolge absteigender Priorität
+darauf abgesucht, ob sie auf das Mutex warten. Wenn ja, das Event
+derselben Bitposition setzen und das Bit in der Mutex-Datenmaske wieder
+zurücksetzen. Suche abbrechen und mit nächstem Mutex-Bit weitermachen.
+
+Nun mit Semaphor-Behandlung weitermachen.
+
+Semaphor: setEvent macht für jedes Bit folgendes:
+
+Das Feldelement mit entsprechendem Index wird inkrementiert. Die
+suspendierten Tasks werden dann in der Reihenfolge absteigender Priorität
+darauf abgesucht, ob sie auf das Semaphor warten. Wenn ja, das Event
+derselben Bitposition setzen und das Feldelement mit entsprechendem Index
+dekrementieren. Suche abbrechen und mit nächstem Semaphor-Bit
+weitermachen.
+
+Danach Vorgang mit der normalen Task-Auswahl beenden.
+
+
+waitForEvent:
+
+Die Task wird in die Liste der suspendierten eingehängt.
+
+Bei normalen Events wird einfach das Warte-Auf Bit gesetzt.
+
+Mutex: Hier ist die übergebene Maske mit der Mutex-Datenmaske zu
+vergleichen. Wo eine Eins gefunden wird, wird diese in der Datenmaske
+zurückgesetzt und in der Warte-Auf Maske und in der Event-geposted Maske
+gesetzt. Ansonsten nur in der Warte-Auf Maske setzen. Hierzu ist keine
+Schleife erforderlich, alle Operationen für alle Mutexe erfolgen parallel
+als Bitoperationen. Prioritäten-Suche/Entscheidung ist nicht erforderlich,
+weil das gesetzte Bit in der Datenmaske belegt, dass keine andere Task das
+Mutex verlangt hat. Weitermachen mit Semaphoren.
+
+Für alle isSemaphor Bits in der übergebenen Maske: 
+
+Wenn Feldelement entsprechenden Indexes größer Null, dann dekrementieren
+und Bit in Warte-Auf Maske und in der Event-geposted Maske setzen.
+Schleife ist erforderlich, aber keine Prioritäten-Suche bzw. Entscheidung.
+Wenn Feldelement Null, dann Bit nur in der Warte-Auf Maske setzen.
+
+Danach Vorgang mit der normalen Task-Auswahl beenden.
+
+
+Anmerkungen:
+
+Mutex ist verzichtbar, da Sonderfall des Semaphors. Andererseits der
+meistgenutzte Fall eines Semaphors und wegen Bitoperation besonders
+effizient umzusetzen. Wegen statischer Konfiguration der Event Art, ist
+die getrennte Umsetzung beider niemals nachteilig in der Laufzeit, der
+Nachteil liegt nur in der zusätzlichen Komplexität und schlechteren
+Lesbarkeit des Codes.
+
+Nachteilig ist bei diesem Konzept die Schleife, die für jedes Event seiner
+Art die Liste der Suspendierten durchgehen muss, um die Task höchster
+Priorität zu finden, die das Event konsumieren darf. Um diese Schleife zu
+realisieren, muss selbst für Mutexe, die an vielen Stellen alle auf einmal
+per Bitoperation implementiert werden können, eine Schleife mit Bit-Shift
+Steuerung vorgesehen werden.
+
+Es sollte möglich sein, die Konvention zu verlangen und zur Compilezeit zu
+überprüfen, dass Semaphore die Event Bits 0..n1 belegen, Mutexe n1+1...n2
+und normale Events n2+1 .. n_max. Dann könnte die Schleifenimplementierung
+Durchgänge über ungenutzte, immer Null gesetzte Bits vermeiden und bei den
+Semaphoren zusätzlich Datenplatzverschwendung für die Datenfelder
+vermieden werden, ohne eine teure Zuordnung von Datenfeld und Bitposition
+vorsehen zu müssen.
+
+Wenn die Liste der Suspendierten sortiert wäre, könnten die Mutexe und
+Semaphore, die konsumieren dürfen in einem Schleifendurchgang für alle
+Events gefunden werden. Bei jeder Task wird die Warte-Auf Maske mit der
+Maske der übergebenen verglichen. Bei gleichen Bits wird nur mit deren
+Bitpositionen bei dieser Task so verfahren, wie oben beschrieben.
+Zusätzlich werden diese Bits in der übergebene Maske gelöscht. Die
+Schleife wird abgebrochen, wenn übergebene Maske Null geworden ist. Wenn
+die Schleife beendet ist und in der übergebenen Maske noch Bits
+übrigbleiben, wird auf den Daten entsprechend gearbeitet (inkrementiert,
+wenn bei Semaphoren zu Beginn alle dekrementiert wurden). 
+
+Problem: Wiegt der Aufwand für das Sortiert-Halten der Liste der
+Laufzeitvorteil beim Bearbeiten der Events auf? Für die Komplexität des
+Codes und dessen Lesbarkeit dürfte das Sortiert-Halten sicher vorteilhaft
+sein. Es ist nur eine zusätzliche kleine, gut zu verstehende Schleife beim
+Einfügen in die Liste. Teilantwort: Da die Anwendung der Objekte nicht der
+Regelfall sein wird, kommt dies nur infrage, wenn der Code hierfür bei
+Bedarf zur Compilezeit zuschaltbar ist. Laufzeitnachteil: Immerhin bleibt
+er für hochpriore Tasks geringer als für niederpriore.
+
+In der sortierten Liste sollten alle Eventarten im Körper derselben
+Schleife verarbeitbar sein. Indem erst eine, dann die nächste Art
+abgearbeitet wird, jeweils auf der betrachteten Task operierend.
+Vorzeitiger Schleifenabbruch, wie oben skizziert, erfolgt dann natürlich
+nicht. Wahrscheinlich wird es nicht einmal ein if(semaphoresInUse) geben,
+sondern die Operation bedingungslos ausgeführt werden. Ob etwas passiert
+wird dann nur von ggf. gesetzten oder eben nicht gesetzten Bits in der
+übergebenen Maske abhängen. (Und bei Konfigurationsmaske Null wird der
+ganze Code-Block ausgeblendet.)
+
+Dieses Konzept erlaubt kein Inkrementieren bzw. Dekrementieren eines
+Semaphors um mehr als einen Zählerwert. Dann wäre die Suche nach der
+konsumierenden Task nicht mehr zweifelsfrei definiert und aufweniger. Wenn
+etwa eine Task nach drei Zählerwerten fragt und die niederpriore nach
+zwei und es werden zwei freigegeben, wer bekommt nun den Zuschlag?
+Wahrscheinlich die höherpriore zwei von den dreien und keine von beiden
+wird freigegeben ("dir"). Dann wäre der Grundgedanken des Konzepts, die
+Weiterbenutzung der bestehenden Eventbits für die gesamte
+Taskfreigabelogik hinfällig; ähnlich wie für die Spezialevents absolute
+und relative Time müsste eine Sonderimplementierung mit Zählern vorgesehen
+werden. Das obige Beispiel wäre im vorgelegten Konzept durch sequenzielles
+dreifaches bzw. zweifaches Verlangen desselben Semaphors zu realisieren.
+Das ist zwar nicht äquivalent, aber ähnlich, da die Taskprioritäten auch
+in diesem Falle mit hoher Wahrscheinlichkeit dafür sorgen würden, dass die
+höherpriore Task alle drei Zuschläge erhält, bevor die andere ihre zwei
+erhalten hat. (Das ist aber nicht sicher und weiterhin ist gar nicht
+sicher, dass die höherpriore Task alle drei Zuschläge erhält bevor die
+niederpriore den ersten ihrer zwei erhält. Die Priorität des Erzeugers geht
+hier stark mit ein.) Der Nachteil ist aber als gering einzuschätzen, da in
+der Praxis meistens Punkt-zu-Punkt Kommunikation benötigt wird und eher
+selten zwei verbrauchende Tasks um einen Erzeuger konkurrieren.
+
+
+2. Konzept: Explizite Objekte für Mutex und Semaphor
+
+Mutex und Semaphor sind anwendungseigene Objekte, die nach Bedarf erzeugt
+werden. Sie enthalten das Datenfeld (Boolean für Mutex, Zähler für
+Semaphor) und die Bitmaske des assoziierten RTOS Events. Hier gibt es
+keine Restriktion im Sinne: "Semaphore haben die Events 0,1,2.. zu
+benutzen."
+
+Die Verwendung der Objekte geschieht über neue API Funktionen. getMutex,
+getSemaphore entsprechen dem waitForEvent und returnMutex,
+releaseSemaphore dem setEvent. Sie arbeiten aber grundsätzlich nur auf das
+eine Objekt und der Gedanke, mehrere Wartebedingungen UND oder ODER zu
+verknüpfen, ist nicht realisierbar. Wohl kann die Zeitbedingung leicht
+über einen zweiten Funktionsparameter realisiert werden, mit dritten
+Parameter könnte noch zwischen absoluter und relativer Zeit unterschieden
+werden.
+
+Die Möglichkeit, diverse Mutexe gleichzeitig in einer Bitoperation zu
+verarbeiten, spielt bei diesem Konzept also keine Rolle. Wahrscheinlich
+wird daher die Unterscheidung zwischen Mutex und der Obermenge Semaphor
+keinen Vorteil bringen, wohl aber Code und Dokumentation unnötig
+komplizieren.
+
+Freigabe eines Semaphors: Die höchstpriore suspendierte Task, die das
+Eventbit in seiner Warte-Auf Maske gesetzt hat, wird gesucht. Das Eventbit
+steht als Maske zur Verfügung, es ist ein Member des Objekts (das der
+Funktion als Parameter übergeben wird). Gibt es eine Task, wird in ihr das
+entsprechende Event Bit gesetzt, sonst wird der Zähler im Objekt
+inkrementiert.
+
+Danach Vorgang mit der normalen Task-Auswahl beenden.
+
+Anforderung Semaphor: Task wird suspendiert. Wenn der Zähler im
+Semaphorobjekt größer Null ist, wird das Eventbit der Task sofort gesetzt
+und der Zähler dekrementiert. Das Warte-Auf Bit wird in jedem Fall gesetzt.
+
+Danach Vorgang mit der normalen Task-Auswahl beenden.
+
+Konzept zwei behandelt immer genau eine Task. Die Sortierung der Tasks in
+der Liste der Suspendierten nach absteigender Priorität, zahlt sich hier
+wahrscheinlich kaum aus, da die meisten Taskwechsel (die nicht
+semaphorbedingten) dadurch teurer werden.
+
+Konzept 2 kann fehlbedient werden, wenn setEvent mit Semaphor Bits in der
+übergebenen Maske aufgerufen wird. Dies ließe sich allerdings leicht mit
+einem assert abfangen. Und der Fehler löst nichts schlimmer aus; wer das
+System verstanden hat, könnte diese Möglichkeit sogar als ein Feature
+bewusst anwenden (Anwendungsfall ist aber unklar.)
+
+
+Bewertung der Konzepte
+
+Konzept 2 ist wesentlich einfacher in der Implementierung und einfacher in
+der Anwendung. (Schon allein deswegen, weil sich deutlich unterschiedliche
+Funktionalität hinter den daher nun etwas irreführenden API Namen
+setEvent, waitForEvent verbirgt.)
+
+Man könnte bei Konzept 1 das API durch Aliasnamen erweitern, etwa
+releaseMutex als Alias von setEvent. Dann könnte ein assert sogar
+überprüfen, dass nur Bits in der übergebenen Maske stehen, die wirklich zu
+Mutexen gehören. Die Kombination tatsächlich unterschiedlicher Events
+auszulösen, bliebe setEvent vorbehalten. Ob solche Aliase aber dem
+Verständnis des Systems zuträglich sind, ist fraglich. Hier geht es um die
+Frage, ob man Details des System verstecken will, oder durch gute
+Dokumentation ein möglichst weitgehendes Verständnis für die innenliegende
+Funktionalität erzeugen will (und damit voraussetzen).
+
+Die Nichtverfügbarkeit von Kombinationen von Events (auch
+unterschiedlichen Typs) als Freigabebedingung von Tasks ist in der Praxis
+zu verschmerzen; es wird nicht viele echte Anwendungsfälle dafür geben
+(Große Ausnahme: Timeout als zweite Bedingung). Die Aufgabe dieser
+Möglichkeit ist eher deswegen ein Nachteil, weil sie momentan ein
+wesentliches Erkennungsmerkmal - wenn nicht gar Alleinstellungsmerkmal -
+von RTuinOS ist. Durch Umsetzung von Konzept 1 würde dieses Merkmal sogar
+noch deutlich betont werden.
+
+Gegen Konzept 2 spricht außerdem, dass die Einführung expliziter Objekte
+die in anderen RTOS übliche Vorgehensweise ist, so dass dies etwas
+abgeschaut wirken könnte.
+
+Wenn das Konzept einer tiefergehenden Überprüfung standhält und die
+Komplexität der Implementierung handhabbar ist, sollte Konzept 1 trotz des
+deutlich höheren Aufwands und größeren Fehlschlagrisikos umgesetzt
+werden.
+
+
+Erste Hinweise zur Machbarkeit von Konzept 1
+
+Die Sortierung der Liste der Suspendierten kann problemlos als erstes
+implementiert werden. Alle Testfälle müssen danach unverändert laufen und
+temporärer Testcode könnte die jederzeitige Sortierung überprüfen.
+
+Problem: waitForEvent hat bislang bedingungslos suspendiert. Jetzt hängt
+es aber vom Zustand der Sync Objekte ab, ob es zur Suspendierung kommt
+oder nicht. Zu definieren ist zunächst, ob es bei Nicht-Suspendierung zum
+Wechsel Active->Due kommen soll bzw. nicht darf. Vorläufige Antwort: Es
+darf, aber besser wäre nicht. Wenn nicht, darf der zwangsläufige erste
+Schritt, die Suspendierung gar nicht erst ausgeführt werden. Wenn wohl,
+dann könnte er unverändert erfolgen, die Routine müsste aber wie setEvent
+bereits heute mit dem Aufruf checkForTaskActivation enden.
+
+Der Aufruf checkForTaskActivation sollte unverändert funktionieren, ist
+aber sub-optimal, da er alle Suspendierten auf Fälligkeit prüft. In neuen
+Kontext könnte aber nur die aufrufende, bisher aktive, soeben suspendierte
+Task für ein Fälligwerden infrage kommen. Der Code ist zu inperformant, um
+ihn bedingungslos zu verwenden.
+
+Beide Argumente zusammengelegt, kommt man zur Fallunterscheidung. Erst
+Sync Objekte behandeln, dabei festhalten, ob Suspendierung erforderlich.
+Ja, erforderlich, wenn wenigstens ein "normales" Event verlangt wird oder
+wenn wenigstens ein Sync Objekt nicht verfügbar ist. Wenn Suspendierung
+nicht erforderlich ist, dann Rücksprung (mit entsprechend gesetztem Return
+Code). Sonst weitermachen wie bisher, angefangen mit Suspendierung. Der
+erwähnte Return Code sollte immer die angeforderte Maske mit
+ausgeblendeten Timer-Bits sein, denn wenn wenigstens ein Bit nicht mit
+einem verfügbaren Sync Objekt korrespondierte, käme es nicht zum
+Rücksprung.
+
+Zu prüfen: Ist der bedingte Rücksprung mit den vorhanden "Code Patterns"
+umsetzbar? Kann der Return Code damit realisiert werden? (Oder kommt er
+immer aus der EventMsk?)
+
+Prüfen: Ist das direkte nehmen von verfügbaren Mutexen/Semaphoren in jedem
+Fall korrekt im Hinblick auf priorisierte Vergabe? Kann es sein, dass eine
+höherpriore, jetzt nicht aktive Task vorberechtigt ist?

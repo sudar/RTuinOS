@@ -1,117 +1,49 @@
 Dear Arduino Fans,
 
-I've made a small Real Time Operation System (RTOS) for Arduino, called
-RTuinOS.
+RTuinOS, a small Real Time Operation System (RTOS) for Arduino, is now
+released as 1.0.
 
-Meanwhile a number of test cases are running stable and I decided to
-publish it now. Instead of lots of explanation I put chapter "Introduction"
-of the manual here. Please find the complete installation (including the
-complete manual) attached to this thread. The manual should be your
-starting point of reading.
+Two technical changes have been made in comparison to the first release
+(December 2012, version 0.9,
+http://arduino.cc/forum/index.php?topic=138643.0): The event concept has
+been generalized. Events can now be broadcasted events, semaphores or
+mutexes. This permits to implement all the usual inter-task communication
+patterns. Please refer to the user guide and the diverse code samples for
+details.
+
+The second technical change is a complete revision of the makefile. It has
+been improved in many aspects and it now supports three operating systems;
+the RTuinOS samples (as well as your applications) can be build under
+Linux, Windows and Mac OS. Many thanks to Sudar Muthu
+(mailto:sudar@sudarmuthu.com, http://HardwareFun.com), who has made the
+port from Windows to the other systems.
+
+To us Arduino is a toy and we believe it's the same to many of you. To
+strengthen this idea we added one particular sample (tc14), which does not
+only prove the operability of RTuinOS but also implements a true
+application of the Arduino 2560 Mega board with the LCD shield. Different
+tasks measure the analog input voltage and compute other information and
+handle the button input. All of these tasks share the display to present
+their information. The code is not only a test case but also instructive
+and meant as a practical how-to-do guide. We hope this sample will spark
+your interest in running RTuinOS on your Arduino board!
+
+RTuinOS 1.0 is distributed as setup (a ZIP archive), which contains all
+source files and the complete documentation, also with source files.
+Building the samples can be started immediately after unzipping and
+setting a single environment variable (not necessary for those, who
+already run RTuinOS 0.9).
+
+Forum members can download the setup from the forum, but in the past this
+turned out to be unreliable. A second location for the download of the setup
+is https://github.com/PeterVranken/RTuinOS/blob/master/RTuinOS-1.0.2.zip.
+
+Furthermore, Sudar Muthu set up a GitHub repository meanwhile which hosts
+all the source files. This repository will become the principal location for
+future development of RTuinOS. Please visit https://github.com/sudar/RTuinOS.
 
 Thank you for your kind interest in RTuinOS; your feedback is welcome.
 
 With kind regards
+
 Peter Vranken
-
-
-Introduction
-
-Arduino (www.arduino.cc) is a popular open source and open hardware micro
-controller platform for various purposes, mainly located in leisure time
-projects. Arduino comes along with a simple to use integrated development
-environment, which contains the complete tool chain to write source code,
-to browse through samples and libraries, to compile and link the software
-and to upload it to the board and flash it. The RTuinOS project adds the
-programming paradigm of a real time operating system to the Arduino world.
-
-Real time operating systems, or RTOS, strongly simplify the implementation
-of technical applications which typically do things in a quite regular
-way, like checking inputs and setting outputs accordingly every (fixed)
-fraction of a second. For example, the temperature controller for a
-heating installation could be designed this way. Temperature sensors,
-which report the room temperatures are evaluated and the burner and maybe
-some valves are controlled to yield the desired target temperature.
-Furthermore, using a real time system the program could coincidentally and
-regularly update a display to provide feedback - at the same or any other
-rate. Regular, time based programming can be done without the need of CPU
-consuming waiting loops as used in the implementation of Arduino's library
-functions delay and delayMicroseconds. Real time operating systems
-characterize the professional use of micro controllers.
-
-RTuinOS is a small real time operating system (RTOS) for the Arduino
-environment. It is simple to use and fits well into the existing Arduino
-code environment. It adds the concept of pseudo-parallel execution threads
-to the sketches.
-
-The traditional Arduino sketch has two entry points; the function setup,
-which is the place to put the initialization code required to run the
-sketch and function loop, which is periodically called. The frequency of
-looping is not deterministic but depends on the execution time of the code
-inside the loop.
-
-Using RTuinOS, the two mentioned functions continue to exist and continue
-to have the same meaning. However, as part of the code initialization in
-setup you may define a number of tasks having individual properties. The
-most relevant property of a task is a C code function, which becomes the
-so called task function. Once entering the traditional Arduino loop, all
-of these task functions are executed in parallel to one another and to the
-repeated execution of function loop. We say, loop becomes the idle task of
-the RTOS.
-
-A characteristic of RTuinOS is that the behavior of a task is not fully
-predetermined at compile time. RTuinOS supports regular, time-controlled
-tasks as well as purely event controlled ones. Tasks can be preemptive or
-behave cooperatively. Task scheduling can be done using time slices and a
-round robin pattern. Moreover, many of these modes can be mixed. A task is
-not per se regular, its implementing code decides what happens and this
-can be decided context or situation dependent. This flexibility is
-achieved by the basic idea of having an event controlled scheduler, where
-typical RTOS use cases are supported by providing according events, e.g.
-absolute-point-in-time-reached. If the task's code decides to always wait
-for the same absolute-point-in-time-reached event, then it becomes a
-regular task. However, situation dependent the same task could decide to
-wait for an application sent event - and give up its regular behavior. In
-many RTOS implementations the basic characteristic of a task is determined
-at compile time, in RTuinOS this is done partly at compile time and partly
-at runtime.
-
-RTuinOS is provided as a single source code file which is compiled
-together with your other code, which now becomes an RTuinOS application.
-In the most simple case, if you do not define any task, your application
-will strongly resemble a traditional sketch: You implement your setup and
-your loop function; the former will be run once at the beginning and the
-latter repeatedly.
-
-RTuinOS on its own can't be compiled, there need to be an application.
-RTuinOS is organized as a package which combines the RTuinOS source file
-with some sample applications which are the test cases at the same time.
-The source code of each sample application is held in a separate folder,
-named tc<nn>. Any of these can be selected for compilation. You may add
-more folders, holding the source code of your RTuinOS applications. A
-starting point of your application folder can be a copy of any of the
-folders tc<nn>. The compilation always is the same. Run the makefile,
-where the name of the folder (which doesn't need to be tc<nn>) is an
-option on the command line. Refer to the manual for more.
-
-The most relevant document to read is the manual of RTuinOS, found as
-manual.pdf. The manual introduces the basic concept of RTuinOS and gives
-an overview of its features and limitations:
-
-Chapter 2 explains the basic principles of operation. Some core
-considerations of the implementation are highlighted, but the relevant
-documentation of the implementation is the code itself. It is commented
-using doxygen (www.doxygen.org) tags; the compiled doxygen documentation
-is part of this project. It contains only the documentation of the global
-objects of RTuinOS; to fully understand the implementation you will have
-to inspect the source code itself, please refer to [1], [2], [3].
-
-Chapter 3 lists and documents all elements of RTuinOS' API.
-
-Chapter 4 explains how to write a well-working RTuinOS-application. The
-chapter starts with a short recipe, which guarantees soon success. Here is
-where you may start reading if you are already familiar with the concept
-of an RTOS.
-
-The manual closes with chapter 5, which gives an overview of possible
-improvements and still missing and maybe later released features.

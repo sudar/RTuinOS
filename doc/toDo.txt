@@ -1,39 +1,42 @@
-Test case for AND combination of events but a timeout at the same time.
-Has been implemented in r233 but never been tested at that time.
-
-Implement get/setRoundRobin?
-
-Timer ISR: onTimerTic, nur jedes n-te Mal. Bei Standardeinstellung 1 kein
-Overhead, da Code komplett ausgeblendet bleibt. Manual
-#define PRESCALER.
-#if PRESCALER != 1
-    static uint8_t cnt = 0;
-#endif
-  Abgelehnt: Macht wenig Sinn, weil mehrfache Interrupts bewusst ohne
-Taskwechsel nur Performancefresser sind. Dann lieber die Hardware
-langsamer programmieren.
-
-EnterLeaveCriticalSection: Try without cli/sei but only TIMER2). Use tc07
-  Done: cli/sei is essential, test case fails otherwise
-
 Manual: 3.8, API, enter/leaveCS: sei/cli will disable delay, but not
 delayMicroseconds. e/lCS would be okay with both
 
-TC05: T0C0: Documentation and implementation differ. Timeout event is
-commented out while value is still set. The task cycle time is documented
-to be slow while it is set very fast. T1C0: cycle time is documented
-different to implementation. The triggered T0C1 has a very long timeout to
-wait for each trigger. Should become much sharper
-  All done
+R2:
 
-TC10: Document the observations
-  Done
+Manual: Serial.print blocks if buffer full. If a task writes more bytes
+than space in the buffer it blocks in CPU wait cycles and the CPU load is
+directly determinated by the Baud rate. If a regular task writes less than
+fits into the buffer it isn't blocked at all as the buffer will probably
+be flushed until its next activation. Now the CPU is independent of the
+Baud rate
 
-Mention the system load estimation in the manual
+Compile C files with avr-gcc. Already known issues: bool is undefined and
+_pActiveTask can't be dynamically initialized to be _pIdleTask.
+  July 7, 13: See SVN branch
+file:///M:/SVNMainRepository/Arduino/RTuinOS/branches/RTuinOS_compileWithGCC:
+Widely done but it's unclear, if it pays off and if it is advantageous.
+Findings:
+  bool can be replace by boolean. This is known by typedef in the Arduino
+environment. Ugly as it should be boolean_t for consistency reasons. But
+will we really introduce such a new typedef?
+  The test case files either need to be renamed into *.cpp or all
+references to Serial need to be replaced by printf, using the stdout
+module.
+  The ASSERT macro must no longer use Serial, but needs to use printf.
+This makes RTuinOS dependent on the module stdout. On the one hand it's
+elegant to hide the initialization of stdout in main, thus to have printf
+always available just like that, but on the other hand should a system like
+RTuinOS not deal with things like these. True RTuinOS application won't
+use stdio; this is just for demonstration, sample code and debugging. The
+trade off is undecided.
 
-Mention false task overrun recognitions in manual. The C comments
-reference it but it doesn't contain this issue yet. Furthermore, the API
-documentation of suspendTillTime and waitForEvent should mention this as a
-true problem appears if tiCycle is > 127: False task overrun recognitions
-lead to too soon activation. ANother location where to place a hint is the
-type-of-timer discussion in config.h
+Event macros in rtos.h: They should support up to 14 Mutexes if no
+application interrupt is defined. Use more #if to do.
+  Done in r413, but requires re-run of all test cases
+
+Manual, 4.6.1: Rewrite it. The mentioned function is a dispatcher for
+serial input to weak implemented handlers. Basically calleable but one has
+to consider the sharing of Serial. See HardwareSerial.cpp (What differs
+between robot and arduino? Which of the two do we use? Can we alter TAGS
+accordingly? 
+  Done in r415

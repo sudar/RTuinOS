@@ -21,12 +21,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-# Set the name of your document
-defaultDocName := manual
-
-# The actually compiled document can be altered by setting a variable on
+# Set the name of your document.
+#   The actually compiled document can be altered by setting a variable on
 # the command line of make.
-doc ?= manual
+doc ?= RTuinOS-1.0-UserGuide
 
 # General settings for the makefile.
 #$(info Makeprocessor in use is $(MAKE))
@@ -63,7 +61,7 @@ onePass:
 .PHONY: h help targets usage
 h help targets usage:
 	$(info Usage: make [-s] [doc=<latexMainFile>] [help] [onePass])
-	$(info where <latexMainFile> is the LaTeX source file name without extension. Default is $(defaultDocName).)
+	$(info where <latexMainFile> is the LaTeX source file name without extension. Default is $(doc).)
 	$(info Available targets are:)
 	$(info   - onePass: Run the LaTeX compiler just once, e.g. for fast syntax check)
 	$(info   - help: Print this help)

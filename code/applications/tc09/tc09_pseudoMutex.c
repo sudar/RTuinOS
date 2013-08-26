@@ -2,15 +2,15 @@
  * @file tc09_pseudoMutex.c
  * Test case 09 of RTuinOS. Using a global flag and enter/leaveCriticalSection a kind of
  * mutex is implemented, which is applied to control the alternating use of a shared
- * resource (Serial) by several tasks. The result is a kind of pseudo mutex (pseudo bacause
+ * resource (Serial) by several tasks. The result is a kind of pseudo mutex (pseudo because
  * some polling is required). True to-the-point waiting for a resource is not possible in
- * RTuinOS.
- *   Observations:
- *   The test succeeds if the Arduino console shows correct text output. The tasks, which
+ * RTuinOS.\n
+ *   Observations:\n
+ *   The test succeeds if the Arduino console shows correct text output. The task, which
  * gets the resource uses the shared resource (the global object Serial) to write one line
  * of text to the console. This is purposely done in several portions of output, which are
  * interrupted by task switches. A certain percentage of the task switches will also oocur
- * in the middle of a print command. The lines must nonetheless be always complete.
+ * in the middle of a print command. The lines must nonetheless be always complete.\n
  *   Although the pseudo-mutex has some deficiencies with respect to regarding task
  * priorities (see below), it must be apparent, that the task of higher priority gets the
  * resource more often than the others.
@@ -45,7 +45,7 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
 #include "rtos_assert.h"
 #include "tc09_applEvents.h"
@@ -98,7 +98,7 @@ static uint8_t _stackT0_C0[STACK_SIZE]
              , _stackT0_C1[STACK_SIZE];
 
 /** The mutex, which organizes the access to the global object Serial. */   
-static volatile bool _mutex = false;
+static volatile boolean _mutex = false;
 
 
 /*
@@ -148,7 +148,7 @@ static void getResource()
        priority, which gets the resource. */
     do
     {
-        bool copyOfMutex;
+        boolean copyOfMutex;
         
         /* The test and set operation needs to be atomic. */
         cli();
@@ -189,7 +189,7 @@ static void releaseResource()
     _mutex = false;
     
     /* Signal the availability of the resource to possibly waiting tasks. */
-    rtos_setEvent(EVT_RESOURCE_IS_AVAILABLE);
+    rtos_sendEvent(EVT_RESOURCE_IS_AVAILABLE);
     
 } /* End of releaseResource */
 
@@ -276,9 +276,9 @@ static void taskEntryC0(uint16_t initCondition)
        of the remaining tasks. Therefore, we chain the initial activation: one task
        initiates the next one. */
     if(idxTask == 0)
-        rtos_setEvent(EVT_START_TASK_T1_C0);
+        rtos_sendEvent(EVT_START_TASK_T1_C0);
     else if(idxTask == 1)
-        rtos_setEvent(EVT_START_TASK_T2_C0);
+        rtos_sendEvent(EVT_START_TASK_T2_C0);
     
     /* Here, the actual task code begins. The next statement will never return. */
     taskC0(idxTask);
@@ -424,11 +424,11 @@ void setup(void)
 void loop(void)
 {
     /* Idle is used only to start the first round robin task. */
-    rtos_setEvent(EVT_START_TASK_T0_C0);
+    rtos_sendEvent(EVT_START_TASK_T0_C0);
 
     /* Since we have a pseudo mutex only, which is implemented by polling (try and suspend
        until next try) there are minor gaps in time where all tasks are suspended. To not
-       run into the setEvent again, we place an empty loop here. Having a true mutex
+       run into the sendEvent again, we place an empty loop here. Having a true mutex
        implementation, we would place an ASSERT(false) instead. */
     while(true)
         ;

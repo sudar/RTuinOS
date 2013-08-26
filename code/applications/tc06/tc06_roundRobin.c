@@ -1,10 +1,17 @@
 /**
  * @file tc06_roundRobin.c
- *   Test case 06 of RTuinOS. Several tasks of same priority are defined. Task switches
- * are controlled by manually posted and time-slice-elapsed events and counted and reported
- * in the idle task.
+ *   Test case 06 of RTuinOS. Two round robin tasks of same priority are defined. Task
+ * switches are controlled by manually posted and time-slice-elapsed events and counted and
+ * reported in the idle task. The sample tests correct priority handling when activating
+ * resumed tasks and demonstrates how difficult to predict task timing becomes if round
+ * robin time slices are in use. Here we have a task which seems to be regular on the first
+ * glance but the round robin strategy introduces significant uncertainties. See comments
+ * below.\n
+ *   The test success is mainly checked by many assertions. The task overruns reported in
+ * the console output for task index 1 are unavoidable and no failure. (The function
+ * \a rtos_getTaskOverrunCounter is applicable only for simple, regular tasks.) 
  *
- * Copyright (C) 2012 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
+ * Copyright (C) 2012-2013 Peter Vranken (mailto:Peter_Vranken@Yahoo.de)
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -35,7 +42,7 @@
  * Include files
  */
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "rtos.h"
 #include "rtos_assert.h"
 
@@ -65,6 +72,7 @@
 static void task00_class00(uint16_t postedEventVec);
 static void task01_class00(uint16_t postedEventVec);
 static void task00_class01(uint16_t postedEventVec);
+static RTOS_TRUE_FCT void subRoutine(uint8_t);
  
  
 /*
@@ -75,9 +83,13 @@ static uint8_t _taskStack00_C0[STACK_SIZE_TASK00_C0]
              , _taskStack01_C0[STACK_SIZE_TASK01_C0]
              , _taskStack00_C1[STACK_SIZE_TASK00_C1];
 
-static volatile uint16_t noLoopsTask00_C0 = 0;
-static volatile uint16_t noLoopsTask01_C0 = 0;
-static volatile uint16_t noLoopsTask00_C1 = 0;
+static volatile uint16_t _noLoopsTask00_C0 = 0;
+static volatile uint16_t _noLoopsTask01_C0 = 0;
+static volatile uint16_t _noLoopsTask00_C1 = 0;
+ 
+static volatile uint16_t _task00_C0_cntWaitTimeout = 0;
+static volatile uint8_t _touchedBySubRoutine;
+
  
 /*
  * Function implementation
@@ -122,10 +134,7 @@ static void blink(uint8_t noFlashes)
  * is very limited, but still apparent the first time it is called.
  */ 
 
-static volatile uint8_t _touchedBySubRoutine; /* To discard removal of recursion by
-                                                 optimization. */
-static RTOS_TRUE_FCT void subRoutine(uint8_t);
-static void subRoutine(uint8_t nestedCalls)
+static RTOS_TRUE_FCT void subRoutine(uint8_t nestedCalls)
 {
     volatile uint8_t stackUsage[43];
     if(nestedCalls > 1)
@@ -176,21 +185,19 @@ void rtos_enableIRQTimerTic(void)
 
 
 /**
- * One of the low priority tasks in this test case.
+ * One of the low priority round robin tasks in this test case.
  *   @param initCondition
  * Which events made the task run the very first time?
  *   @remark
  * A task function must never return; this would cause a reset.
  */ 
 
-static uint16_t _task00_C0_cntWaitTimeout = 0;
-
 static void task00_class00(uint16_t initCondition)
 
 {
     for(;;)
     {
-        ++ noLoopsTask00_C0;
+        ++ _noLoopsTask00_C0;
 
         /* To see the stack reserve computation working we invoke a nested sub-routine
            after a while. */
@@ -201,22 +208,35 @@ static void task00_class00(uint16_t initCondition)
         if(millis() > 40000ul)
             subRoutine(3);
         
+        /* The next operation (Arduino delay function) takes the demanded world time in ms
+           (as opposed to CPU time) even if it is interrupted because of an elapsed round
+           robin counter.
+             This task has a round robin time slice of 10 tics (20 ms) only, so it should
+           surely be interrupted during execution of delay. The other round robin task has
+           a time slice of 4 ms. No other tasks demand the CPU significantly. Consequently,
+           the code in delay should not be interrupted for longer than about 4 ms. Coming
+           back here means to immediately do the next check if the demanded time has
+           elapsed. We expect thus to not prolongue the demanded time by more than about 4
+           ms. */
+        uint32_t ti0 = millis();
+        delay(600 /* ms */);
+        uint16_t dT = (uint16_t)(millis() - ti0);
+        ASSERT(dT >= 599)
+        ASSERT(dT < 609);
+
         /* Wait for an event from the idle task. The idle task is asynchrounous and its
            speed depends on the system load. The behavior is thus not perfectly
-           predictable. Let's have a look on the overrrun counter for this task. */
-        if(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_03 //| RTOS_EVT_DELAY_TIMER
+           predictable. Let's have a look on the overrrun counter for this task. It might
+           occasionally be incremented. */
+        if(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_03 | RTOS_EVT_DELAY_TIMER
                             , /* all */ false
-                            , /* timeout */ 40 /* about 80 ms */
+                            , /* timeout */ 1000 /* unit 2 ms */
                             )
            == RTOS_EVT_DELAY_TIMER
           )
         {
             ++ _task00_C0_cntWaitTimeout;
         }
-        
-        //rtos_delay(80);
-        /* This tasks cycles with about 500ms. */
-        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 0);
     }
 } /* End of task00_class00 */
 
@@ -225,7 +245,7 @@ static void task00_class00(uint16_t initCondition)
 
 
 /**
- * Second task of low priority in this test case.
+ * Second round robin task of low priority in this test case.
  *   @param initCondition
  * Which events made the task run the very first time?
  *   @remark
@@ -235,24 +255,52 @@ static void task00_class00(uint16_t initCondition)
 static void task01_class00(uint16_t initCondition)
 
 {
+    uint32_t tiCycle0 = millis();
     for(;;)
     {
         uint16_t u;
         
-        ++ noLoopsTask01_C0;
+        ++ _noLoopsTask01_C0;
 
-        /* For test purpose only: This task consumes the CPU for most of the cycle time. */
-        //delay(8 /*ms*/);
-        
-        /* Release high priority task for a single cycle. It should continue operation
+        /* The next operation (Arduino delay function) takes the demanded world time in ms
+           (as opposed to CPU time) even if it is interrupted because of an elapsed round
+           robin counter.
+             As this task has a round robin time slice of 4 ms, the delay operation will
+           surely be interrupted by the other task - which may consume the CPU for up to 20
+           ms. The delay operation may thus return after 24 ms. */
+        uint32_t ti0 = millis();
+        delay(8 /* ms */);
+        uint16_t dT = (uint16_t)(millis() - ti0);
+        ASSERT(dT >= 7);
+        ASSERT(dT <= 25);
+
+        /* Release the high priority task for a single cycle. It should continue operation
            before we leave the suspend function here. Check it. */
-        u = noLoopsTask00_C1;
-        rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_00);
-        ASSERT(u+1 == noLoopsTask00_C1)
-        ASSERT(noLoopsTask01_C0 == noLoopsTask00_C1)
+        ti0 = millis();
+        u = _noLoopsTask00_C1;
+        rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_00);
+        ASSERT(u+1 == _noLoopsTask00_C1)
+        ASSERT(_noLoopsTask01_C0 == _noLoopsTask00_C1)
+        dT = (uint16_t)(millis() - ti0);
+        ASSERT(dT <= 2);
         
-        /* This tasks cycles with about 10ms. */
-        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 5);
+        /* The body of this task takes up to about 26 ms (see before). If it suspends here,
+           the other round robin task will most often become active and consume the CPU the
+           next 20 ms. This tasks wants to cycle with 40 ms. So it'll become due while the
+           other round robin task is active. This task will become active only after the
+           time slice of the other task has elapsed. Exact cycle time is impossible for
+           this task.
+             It can even be worse if the other round robin task should be suspendend while
+           this task suspends itself till the next multiple of 40 ms: Occasionally, the
+           other task will resume just before this task and the activation of this task
+           will be delayed by the full time slice duration of the other round robin task.
+           Task overruns are unavoidable for this (ir-)regular task, but we can give an
+           upper boundary for the cycle time, which is tested by assertion. */
+        rtos_suspendTaskTillTime(/* deltaTimeTillRelease */ 20 /* unit 2 ms */);
+        uint32_t tiCycleEnd = millis();
+        dT = (uint16_t)(tiCycleEnd - tiCycle0);
+        tiCycle0 = tiCycleEnd;
+        ASSERT(dT <= 62);
     }
 } /* End of task01_class00 */
 
@@ -273,17 +321,25 @@ static void task00_class01(uint16_t initCondition)
 {
     ASSERT(initCondition == RTOS_EVT_EVENT_00)
     
-    /* This tasks cycles once it is awaked by the event. */
+    /* This tasks cycles once each time it is awaked by the event. The timeout condition
+       must be weak: The triggering task seems to have a cycle time 40 ms on the first
+       glance, but there's an uncertainty in the magnitude of the round robin time slice
+       duration of the second, concurring task. Although this leads to an upper boundary of
+       about 60 ms for the (irregular) cycle time of the triggering task, the uncertainty
+       here is even larger: The point in time of the trigger event relative to the begin of
+       a cycle does also vary in the magnitude of the other round robin's time slice. The
+       maximum distance in time of two trigger events can thus be accordingly larger in the
+       worsed case. */
     do
     {
         /* As long as we stay in the loop we didn't see a timeout. */
         
         /* Count the loops. */
-        ++ noLoopsTask00_C1;
+        ++ _noLoopsTask00_C1;
     }
     while(rtos_waitForEvent( /* eventMask */ RTOS_EVT_EVENT_00 | RTOS_EVT_DELAY_TIMER
                            , /* all */ false
-                           , /* timeout */ 50+5 /* about 100 ms */
+                           , /* timeout */ (62+20)/2 /* unit 2 ms */
                            )
           == RTOS_EVT_EVENT_00
          );
@@ -375,22 +431,27 @@ void loop(void)
     uint8_t idxStack;
     
     /* An event can be posted even if nobody is listening for it. */
-    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_04);
+    rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_04);
 
     /* This event will release task 0 of class 0. However we do not get here again fast
        enough to avoid all timeouts in that task. */
-    rtos_setEvent(/* eventVec */ RTOS_EVT_EVENT_03);
+    rtos_sendEvent(/* eventVec */ RTOS_EVT_EVENT_03);
+
+#define Serial_println(volatileN) {cli(); uint16_t n=(volatileN); sei(); Serial.println(n);}
 
     Serial.println("RTuinOS is idle");
-    Serial.print("noLoopsTask00_C0: "); Serial.println(noLoopsTask00_C0);
-    Serial.print("_task00_C0_cntWaitTimeout: "); Serial.println(_task00_C0_cntWaitTimeout);
-    Serial.print("noLoopsTask01_C0: "); Serial.println(noLoopsTask01_C0);
-    Serial.print("noLoopsTask00_C1: "); Serial.println(noLoopsTask00_C1);
+    Serial.print("noLoopsTask00_C0: "); Serial_println(_noLoopsTask00_C0);
+    Serial.print("_task00_C0_cntWaitTimeout: "); Serial_println(_task00_C0_cntWaitTimeout);
+    Serial.print("noLoopsTask01_C0: "); Serial_println(_noLoopsTask01_C0);
+    Serial.print("noLoopsTask00_C1: "); Serial_println(_noLoopsTask00_C1);
     
-    /* Look for the stack usage. */
+#undef Serial_println
+
+    /* Look for the stack usage and task overruns. (The task concept implemented here
+       brings such overruns for task 1.) */
     for(idxStack=0; idxStack<RTOS_NO_TASKS; ++idxStack)
     {
-        Serial.print("Stack reserve of task");
+        Serial.print("Stack reserve of task ");
         Serial.print(idxStack);
         Serial.print(": ");
         Serial.print(rtos_getStackReserve(idxStack));
